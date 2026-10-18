@@ -1,0 +1,5 @@
+# Banco de desenvolvimento local e arquivos auxiliares do SQLite.
+/dev.db
+/dev.db-journal
+/dev.db-wal
+/dev.db-shm

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := check
 
-.PHONY: fmt fmt-check build vet test check
+.PHONY: fmt fmt-check build vet test check dev-db
 
 fmt:
 	go fmt ./...
@@ -20,5 +20,8 @@ vet:
 
 test:
 	go test ./...
+
+dev-db:
+	KRIOS_DEV_DB_PATH="$(CURDIR)/dev.db" go test -run '^TestPrepareDevelopmentDatabase$$' -count=1 -v ./tests
 
 check: fmt-check build vet test

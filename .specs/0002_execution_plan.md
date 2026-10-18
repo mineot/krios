@@ -16,6 +16,12 @@ As pendências serão resolvidas conforme a entrega que depende delas for inicia
 - Cada entrega inclui exemplos de uso e verificações do comportamento que introduz. A entrega final consolida essa validação, sem adiar todos os testes para o fim.
 - As entregas representam marcos de desenvolvimento; não exigem publicação de uma versão a cada marco. Datas e estimativas serão definidas conforme o trabalho avançar.
 
+### Estratégia de validação
+
+Os testes automatizados com banco usarão inicialmente apenas SQLite3, com o driver `modernc.org/sqlite`. MySQL e PostgreSQL permanecem no escopo da biblioteca, mas seus cenários de integração serão executados manualmente pelo consumidor posteriormente. Onde uma entrega exige validação nos três bancos, a evidência será automatizada para SQLite e manual para os demais; a ausência dessa evidência deve permanecer registrada até a validação final em E09.
+
+Também serão construídos testes unitários para as regras da biblioteca e a geração de SQL de cada dialeto, sem exigir instâncias de MySQL ou PostgreSQL. Esses testes não substituem a execução manual contra os bancos reais. Os lembretes para essa cobertura estão ao final deste documento.
+
 ## 3. Visão geral das entregas
 
 | Entrega | Resultado                                       | Depende de | Requisitos principais              |
@@ -58,11 +64,21 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
   > **Concluído (2026-10-18):** [Makefile](../Makefile) com `fmt`, `fmt-check`, `build`, `vet`, `test` e `check`; [README.md](../README.md) com requisitos, comandos equivalentes sem Make, organização e estado atual da biblioteca. Licença preservada. `make check` passou com Go 1.26.8; ainda não há testes de funcionalidades. Em diretório temporário, foi verificado que a checagem rejeita formatação inválida sem modificar arquivos, que `make fmt` corrige o código e que o alvo padrão executa as verificações. A matriz Go 1.26/1.27 e os ambientes de banco permanecem em E01-P03.
 
-- [ ] **E01-P03 — Preparar a validação com os bancos.** Documentar como iniciar ambientes isolados de SQLite3, MySQL e PostgreSQL e como fornecer suas configurações aos testes. Configurar a execução automatizada das verificações básicas do projeto.
+- [ ] **E01-P03 — Preparar a validação com SQLite.** Preparar o driver dos testes, documentar o banco local e configurar a execução automatizada das verificações básicas do projeto com SQLite. Os ambientes de MySQL e PostgreSQL ficam para a validação manual posterior.
 
-  > **Pendências:** escolher os drivers e versões usados na validação (§6.2), conferir a compatibilidade dos drivers e suas dependências com Go 1.26 e definir a forma de disponibilizar os bancos no ambiente local e na integração contínua. Drivers de testes e exemplos não devem se tornar imports automáticos da biblioteca.
+  > **Decisões registradas:** usar `modernc.org/sqlite` nos testes automatizados com banco. Selecionar a versão estável mais recente disponível na preparação do ambiente e registrar a versão exata do driver e do SQLite incorporado. O banco de desenvolvimento será `dev.db`, na raiz, ignorado pelo Git junto a seus arquivos auxiliares. O arquivo será criado ao abrir o banco pelo driver. Drivers de testes e exemplos não devem se tornar imports automáticos da biblioteca.
 
-**Critério de conclusão:** o módulo compila, as verificações básicas são executáveis e os ambientes de banco necessários às próximas entregas estão documentados e disponíveis para validação.
+  > **Reprodutibilidade:** o SQLite utilizado é o incorporado pelo driver, não uma instalação independente do sistema. Conferir se a versão mais recente do driver incorpora a versão de SQLite desejada e é compatível com Go 1.26; registrar eventual diferença antes de escolher outra versão. Fixar a versão selecionada no módulo e atualizar deliberadamente, em vez de baixar uma versão diferente em cada execução.
+
+  > **Isolamento:** reservar `dev.db` para desenvolvimento local. Os testes automatizados devem usar bancos temporários próprios, sem depender dos dados existentes nem apagar o banco de desenvolvimento. A integração contínua usará SQLite e a matriz Go 1.26/1.27, sem servidores MySQL ou PostgreSQL nesta etapa.
+
+  > **Implementação local (2026-10-18):** `modernc.org/sqlite v1.60.1`, resolvido por `@latest`, fixado em `go.mod` e importado exclusivamente em [tests/sqlite_test.go](../tests/sqlite_test.go). SQLite incorporado: 3.53.4, confirmado em execução. `make dev-db` prepara o banco local sem reinicializar dados; testes normais usam bancos temporários e não acessam `dev.db`. `make check` passou com Go 1.26.8 e 1.27.2, sem CGO, e a inspeção das dependências confirmou ausência do driver na compilação normal. O exemplo executável foi movido para `cmd/krios`, mantendo o pacote público `krios` na raiz.
+
+  > **Integração contínua definida:** GitHub Actions em pushes e pull requests, com matriz Go 1.26.x/1.27.x e runner padrão Ubuntu. O [workflow](../.github/workflows/check.yml) executa somente em repositórios públicos, respeitando a condição de gratuidade; em privados, os jobs são ignorados. Cache persistente e publicação de artefatos estão desabilitados. Não foram alteradas configurações de cobrança ou visibilidade.
+
+  > **Pendências de conclusão:** conferir a primeira execução remota do workflow após enviar os arquivos ao GitHub; a execução local não comprova a execução hospedada. O SQLite upstream mais recente é 3.54.1, enquanto o driver selecionado incorpora 3.53.4: acompanhar uma atualização do driver ou registrar a aceitação dessa diferença antes de considerar atendida a exigência de usar a versão mais recente do banco. Fontes e instruções estão no [README](../README.md).
+
+**Critério de conclusão:** o módulo compila, as verificações básicas e os testes com SQLite podem ser executados localmente e na integração contínua, e o uso de `dev.db` está documentado. A validação manual de MySQL e PostgreSQL permanece registrada como trabalho posterior.
 
 ### E02 — Configurar e abrir o acesso aos bancos
 
@@ -98,7 +114,7 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 - [ ] **E03-P03 — Validar os limites da transação.** Demonstrar três inserts relacionados confirmados em conjunto e a reversão do grupo quando um deles falha. Cobrir operações fora do grupo, transações encerradas e o comportamento concorrente definido no contrato.
 
-**Critério de conclusão:** os testes demonstram confirmação e reversão do grupo nos três bancos, sem incluir indevidamente operações externas. As regras de erro e de concorrência estão documentadas.
+**Critério de conclusão:** a validação demonstra confirmação e reversão do grupo, sem incluir indevidamente operações externas, por testes automatizados em SQLite e execução manual posterior nos demais bancos. As regras de erro e de concorrência estão documentadas; evidências manuais ainda ausentes permanecem pendentes para E09.
 
 ### E04 — Definir entidades e mapear os resultados
 
@@ -194,7 +210,7 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 **Entrega:** biblioteca com o escopo inicial validado, documentação de consumo e uma versão distribuível.
 
-- [ ] **E09-P01 — Conferir todos os requisitos e critérios de atendimento.** Relacionar os treze critérios da seção 7 do planejamento aos exemplos e testes que os comprovam. Executar as verificações automatizadas e os cenários integrados nos três bancos, corrigindo divergências encontradas.
+- [ ] **E09-P01 — Conferir todos os requisitos e critérios de atendimento.** Relacionar os treze critérios da seção 7 do planejamento aos exemplos e testes que os comprovam. Executar as verificações automatizadas com SQLite e os testes unitários dos dialetos; reunir os resultados dos cenários manuais de MySQL e PostgreSQL realizados pelo consumidor, corrigindo divergências encontradas.
 
   > **Pendências:** fechar as decisões que ainda afetem o comportamento do escopo inicial. Uma funcionalidade exigida não pode ser considerada entregue apenas porque sua definição foi adiada; eventuais mudanças de escopo devem ser registradas no planejamento.
 
@@ -218,7 +234,7 @@ Ao concluir uma entrega, registrar abaixo sua referência de implementação e v
 
 | Entrega | Estado       | Evidências e observações |
 | ------- | ------------ | ------------------------ |
-| E01     | Em andamento | E01-P01 e E01-P02 concluídos; ver [decisões](E01-P01_decisions.md), [Makefile](../Makefile) e [README](../README.md). E01-P03 pendente. |
+| E01     | Em andamento | E01-P01 e E01-P02 concluídos. E01-P03 implementada e validada localmente; faltam primeira execução remota e resolução da diferença de versão do SQLite. Ver [Makefile](../Makefile), [testes](../tests/sqlite_test.go), [workflow](../.github/workflows/check.yml) e [README](../README.md). |
 | E02     | Não iniciada | —                        |
 | E03     | Não iniciada | —                        |
 | E04     | Não iniciada | —                        |
@@ -227,3 +243,10 @@ Ao concluir uma entrega, registrar abaixo sua referência de implementação e v
 | E07     | Não iniciada | —                        |
 | E08     | Não iniciada | —                        |
 | E09     | Não iniciada | —                        |
+
+## 6. Lembretes para validação posterior
+
+- [ ] Construir testes unitários das regras da biblioteca e da geração de SQL para SQLite, MySQL e PostgreSQL conforme as funcionalidades forem implementadas, incluindo parâmetros, filtros, escritas e capacidades não suportadas.
+- [ ] Preparar roteiros reproduzíveis para o consumidor testar manualmente MySQL e PostgreSQL, incluindo conexão, transações, consultas, escritas, SQL incorporado, migrações e recuperação de falhas.
+- [ ] Na preparação desses testes manuais, escolher os drivers e as versões dos bancos e registrar as combinações utilizadas e os resultados.
+- [ ] Antes de concluir E09, reunir as evidências manuais dos dois bancos e corrigir incompatibilidades. O sucesso dos testes com SQLite ou dos testes unitários não comprova sozinho o funcionamento em MySQL e PostgreSQL.
