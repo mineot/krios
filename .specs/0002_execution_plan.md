@@ -52,9 +52,11 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
   > **Decisão registrada (2026-10-18):** módulo `github.com/mineot/krios` (confirmado pelo remote), pacote `krios` público na raiz e `go 1.26.0` no `go.mod`. A pasta `internal/` com pacotes apenas documentais foi removida; subpacotes serão criados conforme a necessidade concreta da implementação. O mecanismo de mapeamento, incluindo eventual uso de reflexão, permanece para E04. Detalhes em [E01-P01_decisions.md](E01-P01_decisions.md).
 
-- [ ] **E01-P02 — Inicializar o módulo e as rotinas locais.** Criar `go.mod`, estrutura inicial, instruções de desenvolvimento e comandos para formatação, compilação, análise estática e testes. Preservar a licença e os documentos existentes.
+- [x] **E01-P02 — Inicializar o módulo e as rotinas locais.** Criar `go.mod`, estrutura inicial, instruções de desenvolvimento e comandos para formatação, compilação, análise estática e testes. Preservar a licença e os documentos existentes.
 
-  > **Pendências:** usar as escolhas registradas em E01-P01 antes de criar o módulo e seus imports.
+  > **Base utilizada:** reutilizados o `go.mod` e o pacote `krios` existentes, conforme E01-P01. Não foram criados pacotes adicionais nem implementadas funcionalidades previstas para outras entregas.
+
+  > **Concluído (2026-10-18):** [Makefile](../Makefile) com `fmt`, `fmt-check`, `build`, `vet`, `test` e `check`; [README.md](../README.md) com requisitos, comandos equivalentes sem Make, organização e estado atual da biblioteca. Licença preservada. `make check` passou com Go 1.26.8; ainda não há testes de funcionalidades. Em diretório temporário, foi verificado que a checagem rejeita formatação inválida sem modificar arquivos, que `make fmt` corrige o código e que o alvo padrão executa as verificações. A matriz Go 1.26/1.27 e os ambientes de banco permanecem em E01-P03.
 
 - [ ] **E01-P03 — Preparar a validação com os bancos.** Documentar como iniciar ambientes isolados de SQLite3, MySQL e PostgreSQL e como fornecer suas configurações aos testes. Configurar a execução automatizada das verificações básicas do projeto.
 
@@ -216,7 +218,7 @@ Ao concluir uma entrega, registrar abaixo sua referência de implementação e v
 
 | Entrega | Estado       | Evidências e observações |
 | ------- | ------------ | ------------------------ |
-| E01     | Em andamento | E01-P01 concluído; ver [.specs/E01-P01_decisions.md](E01-P01_decisions.md) |
+| E01     | Em andamento | E01-P01 e E01-P02 concluídos; ver [decisões](E01-P01_decisions.md), [Makefile](../Makefile) e [README](../README.md). E01-P03 pendente. |
 | E02     | Não iniciada | —                        |
 | E03     | Não iniciada | —                        |
 | E04     | Não iniciada | —                        |
