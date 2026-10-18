@@ -21,14 +21,14 @@ A biblioteca deve oferecer uma API pública consistente para SQLite3, MySQL e Po
 
 A primeira versão deve contemplar:
 
-- Configuração, abertura e encerramento de conexões.
-- Integração dos drivers de SQLite3, MySQL e PostgreSQL.
+- Configuração por `.env`, abertura e encerramento de conexões.
+- Uso de drivers compatíveis com `database/sql`, escolhidos e importados pelo consumidor para SQLite3, MySQL e PostgreSQL.
 - Dialetos específicos para os três bancos suportados.
 - Controle explícito de transações.
 - Migrações de avanço (`up`) e reversão (`down`).
-- Construção de consultas `SELECT`, `INSERT`, `UPDATE` e `DELETE`.
+- Construção encadeada de consultas `SELECT`, `INSERT`, `UPDATE` e `DELETE`, incluindo paginação.
 - Execução de SQL fornecido pelo consumidor da biblioteca.
-- Mapeamento automático entre resultados de consultas e structs Go.
+- Mapeamento de entidades, tabelas, junções e colunas, com acesso tipado aos valores, validação e formatação configuráveis.
 - Distribuição como módulo Go hospedado no GitHub.
 
 A adoção de esquemas preexistentes sem histórico de migrações do Krios não faz parte do escopo inicial.
@@ -39,7 +39,7 @@ A adoção de esquemas preexistentes sem histórico de migrações do Krios não
 
 A biblioteca deve ser desenvolvida em Go e utilizar o pacote padrão `database/sql` como base para acesso aos bancos de dados e controle de transações.
 
-Os drivers específicos dos bancos devem ser integrados pela biblioteca. O consumidor deve selecionar o banco na configuração, sem precisar importar ou registrar manualmente o driver correspondente.
+O consumidor deve escolher e importar o driver que deseja utilizar, compatível com `database/sql` e com um dos bancos suportados, e informar sua seleção na configuração. O Krios não deve importar os drivers automaticamente. O contrato de registro e identificação dos drivers será definido na especificação de acesso a dados.
 
 ### 4.2. Dialetos SQL
 
@@ -64,7 +64,9 @@ O caminho definitivo do módulo e a política de versionamento serão definidos 
 
 ### RF-01 — Configurar a conexão
 
-O consumidor deve informar o banco de dados utilizado e os parâmetros de conexão correspondentes.
+Antes de abrir o acesso ao banco e executar operações que dependam dele, o consumidor deve preparar a configuração da conexão.
+
+O fluxo de configuração deve permitir usar arquivos `.env`, tendo como referência a experiência de configuração desejada pelo consumidor em AdonisJS e Laravel. Devem ser configuráveis por esse meio o banco, o driver, os parâmetros de conexão, a porta quando aplicável e o tempo máximo de espera pela conexão.
 
 | Banco      | Parâmetros obrigatórios                       |
 | ---------- | --------------------------------------------- |
@@ -72,7 +74,7 @@ O consumidor deve informar o banco de dados utilizado e os parâmetros de conex�
 | MySQL      | Host, usuário, senha e nome do banco de dados |
 | PostgreSQL | Host, usuário, senha e nome do banco de dados |
 
-Parâmetros adicionais, como porta e opções de conexão, serão definidos na especificação de configuração.
+A responsabilidade pela leitura do `.env`, os nomes das variáveis, as unidades de tempo, os valores padrão, a precedência entre fontes de configuração e as validações serão definidos na especificação de configuração.
 
 ### RF-02 — Gerenciar o ciclo de vida da conexão
 
@@ -83,7 +85,7 @@ A API pública deve disponibilizar:
 
 Se qualquer etapa de `Open` falhar, a biblioteca deve liberar os recursos criados e retornar erro. A verificação de conectividade deve aceitar cancelamento e prazo limite. Seu sucesso confirma o acesso naquele momento, mas não garante a disponibilidade futura do banco nem a existência do esquema esperado.
 
-As assinaturas e o tratamento de erros dessas operações serão definidos na especificação da API.
+O cancelamento ou o esgotamento do tempo de espera deve ser comunicado como erro retornado por `Open`, para tratamento pelo consumidor. O mecanismo para solicitar cancelamento, as assinaturas e os tipos de erro serão definidos na especificação da API.
 
 ### RF-03 — Controlar transações
 
@@ -101,6 +103,10 @@ Confirmar com Commit ou reverter com Rollback no objeto de transação
 
 Apenas operações executadas por meio do objeto de transação devem participar dela. Iniciar uma transação não deve alterar o comportamento de operações executadas pela instância principal da biblioteca, inclusive quando ocorrerem de forma concorrente.
 
+O consumidor deve poder executar operações sem abrir explicitamente uma transação, inclusive consultas `SELECT`. Quando precisar confirmar ou desfazer um conjunto de operações como uma unidade, deve associá-las à mesma transação.
+
+Por exemplo, três inserts em tabelas relacionadas devem ser confirmados somente após o sucesso de todos. Se um deles falhar, as alterações ainda não confirmadas desse grupo devem ser revertidas. Operações executadas fora do grupo ou já confirmadas não participam dessa reversão. A responsabilidade por iniciar o rollback após uma falha e a política de execução simultânea dentro do grupo permanecem pendentes.
+
 Após `Commit` ou `Rollback`, novas operações na transação devem retornar erro.
 
 As assinaturas do objeto de transação, o comportamento de chamadas concorrentes no mesmo objeto e o tratamento de falhas na confirmação ou reversão serão definidos em uma especificação própria.
@@ -113,7 +119,11 @@ Esses arquivos devem ser compatíveis com o banco configurado. O consumidor pode
 
 A incorporação desses arquivos ao executável, por meio de `embed`, é responsabilidade do consumidor. A biblioteca deve disponibilizar uma forma de receber e carregar esses recursos.
 
-Convenções de nomes, organização dos arquivos e associação entre arquivos e versões serão definidas na especificação de migrações.
+Os arquivos devem seguir o padrão de nomes `0001_create_table.up.sql` e `0001_create_table.down.sql`, com prefixo numérico, descrição e indicação da direção. O consumidor deve informar no `.env` a associação dos arquivos às versões do esquema.
+
+A numeração no nome foi proposta como convenção de organização; ela não deve ser presumida como fonte definitiva da versão ou da ordem de execução. O formato da associação no `.env`, a ordem dentro de cada versão, a validação dos pares `up`/`down` e o tratamento de divergências entre nomes e configuração permanecem pendentes.
+
+A incorporação ocorre durante a compilação, por meio de `go:embed`. A configuração pode referenciar arquivos já incorporados, mas não adiciona novos arquivos ao executável em tempo de execução. Essa distinção segue o funcionamento do [pacote `embed`](https://pkg.go.dev/embed).
 
 ### RF-05 — Executar e controlar migrações
 
@@ -139,6 +149,10 @@ A execução deve comparar a versão atual do banco com a versão desejada:
 
 A estrutura da tabela, o registro do estado na versão `0`, a delimitação do esquema gerenciado, os objetos considerados na verificação inicial, a ordem de execução e o tratamento de falhas serão definidos na especificação de migrações.
 
+A intenção é executar migrações em transações, revertendo as alterações do grupo em caso de falha e retornando um erro ao consumidor. Essa garantia depende do suporte transacional do banco e dos comandos executados. No MySQL, operações de definição de estrutura podem causar confirmação implícita e não ser desfeitas pelo rollback da aplicação, conforme a [documentação do MySQL](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html).
+
+O alcance de cada transação, o registro de falhas e a recuperação de migrações parcialmente aplicadas devem ser definidos antes da implementação. Não se deve prometer rollback integral para comandos que não o suportem.
+
 ### RF-06 — Construir consultas de seleção
 
 A biblioteca deve oferecer um construtor de consultas `SELECT`, permitindo representar:
@@ -152,14 +166,21 @@ A biblioteca deve oferecer um construtor de consultas `SELECT`, permitindo repre
 - Ordenação (`ORDER BY`).
 - Agrupamento (`GROUP BY`).
 - Limite de resultados (`LIMIT`).
+- Eliminação de duplicatas (`DISTINCT`).
+- Paginação por limite e deslocamento (`offset`), com total de resultados calculado pela biblioteca e estatísticas de paginação.
 
 O construtor deve utilizar o dialeto do banco configurado para gerar o SQL correspondente.
+
+A construção deve partir de uma entidade mapeada e permitir encadear seleção de campos, filtros, ordenação e agrupamento. Sem seleção explícita de campos, devem ser selecionadas todas as colunas mapeadas, na ordem definida no mapeamento. A estrutura usada para guardar essa ordem ainda será definida.
+
+Os nomes conceituais propostos incluem `Select`, `Only`, `Where`, `OrderBy`, `GroupBy`, `Distinct`, `Limit`, `Page`, `Count`, `Sum`, `Max` e `Min`. `Page(limit, offset)` deve produzir um resultado de paginação, proposto como `krios.Paginate`. Os campos desse resultado e o cálculo do total em consultas agrupadas ou com `DISTINCT` permanecem pendentes.
 
 O exemplo abaixo expressa os recursos desejados e não representa uma assinatura definitiva da API Go:
 
 ```text
 SELECT
-  destino: coleção de structs fornecida por ponteiro
+  entidade: definição de tabela, junções e colunas
+  resultado: representação de registros a definir no RF-09
   campos: id, name e funções de agregação, conforme a consulta
   origem: tabela
   junções: lista de junções
@@ -167,6 +188,7 @@ SELECT
   ordenação: lista de campos e direções
   agrupamento: lista de campos
   limite: quantidade máxima de resultados
+  paginação: limite, deslocamento, total e estatísticas
 ```
 
 ### RF-07 — Construir operações de escrita
@@ -175,9 +197,11 @@ A biblioteca deve oferecer construtores para `INSERT`, `UPDATE` e `DELETE`.
 
 No escopo inicial:
 
-- `INSERT` deve receber uma struct representando uma linha.
-- `UPDATE` deve receber os campos a alterar e os filtros, podendo atingir várias linhas.
-- `DELETE` deve receber filtros, podendo atingir várias linhas.
+- `INSERT` deve receber valores associados aos nomes dos campos, representando uma linha.
+- `UPDATE` deve receber valores associados aos nomes dos campos e exigir filtros com `Where`, podendo atingir várias linhas.
+- `DELETE` deve exigir filtros com `Where`, podendo atingir várias linhas.
+
+Os construtores devem partir da entidade mapeada e permitir encadeamento. A operação conceitual `SetValues` deve atribuir os valores para inserção e atualização. Seu formato em Go e a manutenção da entrada por struct, prevista anteriormente, permanecem pendentes. Operações de `UPDATE` ou `DELETE` sem `Where` devem ser rejeitadas antes da execução.
 
 Operações de escrita devem retornar informações sobre sua execução, incluindo a quantidade de linhas afetadas quando disponível.
 
@@ -195,200 +219,131 @@ Os arquivos devem conter SQL compatível com o banco configurado, sem tradução
 
 A execução deve permitir fornecer valores de parâmetros separadamente do texto SQL, utilizando os marcadores aceitos pelo driver configurado. Consultas de leitura devem permitir mapear seus resultados conforme o RF-09.
 
-### RF-09 — Mapear resultados para structs
+Deve ser possível definir um objeto que identifique um arquivo SQL incorporado e permita executá-lo. O nome do arquivo apenas identifica um recurso já incorporado pelo consumidor; aplica-se a distinção entre compilação e configuração descrita no RF-04.
 
-O mapeamento dos resultados deve ser automático, utilizando structs Go como representação dos dados.
+A preferência é disponibilizar resultados compatíveis com `database/sql`. Os contratos de execução de escrita, consulta com retorno de linhas, mapeamento dos resultados e associação a transações permanecem pendentes; um método conceitual `Exec` ainda não resolve todos esses contratos.
 
-Para consultas `SELECT`, a API deve permitir informar um destino por ponteiro e obter uma coleção de resultados, representada por um slice de structs.
+### RF-09 — Mapear entidades, colunas e resultados
 
-As regras de correspondência entre colunas e campos, uso de tags, valores nulos e conversão de tipos serão definidas em uma especificação própria.
+O consumidor deve poder descrever o mapeamento por meio de uma entidade, proposta como `krios.Entity`, contendo:
+
+- Tabela de origem, com esquema e alias opcionais.
+- Junções, cada uma identificando uma tabela e um ou mais critérios de associação.
+- Colunas identificáveis por nome, com referências opcionais a esquema, tabela e alias. Na referência da coluna, somente seu nome é obrigatório.
+- Função de validação por coluna, fornecida pelo consumidor, com indicação de validade e erro.
+- Função de formatação por coluna, fornecida pelo consumidor, com retorno de texto e erro para apresentação do valor.
+
+O acesso aos valores das colunas deve oferecer operações tipadas de leitura e atribuição, como texto e data/hora, além da leitura do valor formatado. Os nomes conceituais incluem `Column`, `GetString`, `SetString`, `GetTime`, `SetTime` e `GetFormatted`; as assinaturas definitivas serão especificadas posteriormente.
+
+A proposta ainda não define onde os valores de cada registro são armazenados, como selecionar uma linha entre múltiplos resultados ou como representar `NULL`. Também permanece pendente se esse modelo substituirá ou complementará o requisito anterior de mapeamento automático para structs do consumidor, incluindo slices recebidos por ponteiro.
+
+A estrutura que preservará a ordem das colunas, a correspondência com campos Go, as conversões de tipos, o momento de execução da validação e da formatação e os destinos de resultados de escrita serão definidos na especificação de mapeamento.
 
 ## 6. Definições pendentes
 
-As próximas especificações devem detalhar:
+As respostas do consumidor foram incorporadas às seções anteriores. Esta seção reúne somente questões ainda não resolvidas. Os nomes de tipos e métodos propostos expressam a intenção da API, sem constituir assinaturas definitivas. Sugestões apresentadas durante a revisão não são decisões aprovadas automaticamente.
 
-| Tema               | Definições necessárias                                                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| API pública        | Tipos exportados, assinaturas, erros, cancelamento, prazos limite e exemplos válidos em Go                                            |
-| Configuração       | Parâmetros adicionais, valores padrão e validações                                                                                    |
-| Drivers e dialetos | Seleção dos drivers e diferenças entre os bancos suportados                                                                           |
-| Transações         | Assinaturas do objeto de transação, concorrência no mesmo objeto e falhas em `Commit` ou `Rollback`                                   |
-| Migrações          | Convenções dos arquivos, histórico de versões, registro da versão `0`, esquema gerenciado, verificação inicial e tratamento de falhas |
-| Consultas          | Composição de expressões, parâmetros, funções e operadores                                                                            |
-| Escritas           | Campos omitidos e valores explícitos, informações de execução e suporte ao retorno de campos por banco                                |
-| Mapeamento         | Tags, tipos, valores nulos e destinos de resultados de escritas de uma ou de múltiplas linhas                                         |
-| Distribuição       | Caminho do módulo, publicação, versionamento e guia de consumo                                                                        |
+### 6.1. API pública e configuração
 
-### Definições
+- Quem deve carregar o `.env`: o Krios ou a aplicação consumidora? Como os dados carregados serão entregues à biblioteca?
+- Quais serão os nomes das variáveis, os campos obrigatórios, as portas padrão, as unidades e os valores padrão de tempo de espera?
+- Como resolver a precedência entre o arquivo, variáveis de ambiente e eventual configuração fornecida em código? O que fazer quando o arquivo estiver ausente ou contiver valores inválidos?
+- Como o consumidor solicita cancelamento antecipado de `Open`? Como esse mecanismo interage com o tempo de espera configurado?
+- Quais serão os tipos exportados, as assinaturas e os erros distinguíveis pelo consumidor, incluindo cancelamento e prazo esgotado?
 
-**API pública**
-Tipos, métodos, assinaturas e erros disponíveis ao consumidor.
-Como passar cancelamento e prazo limite para `Open`?
+### 6.2. Drivers e dialetos
 
-**Configuração**
-Opções adicionais, valores padrão e validações.
-Qual será a porta padrão de cada banco? Como informar opções de conexão?
+- Como identificar na configuração o driver importado pelo consumidor e o banco correspondente? Como validar incompatibilidades ou ausência de registro?
+- Qual será a interface dos dialetos e como cada dialeto será selecionado ou associado ao driver?
+- Quais drivers e versões dos bancos serão usados para validar o suporte? Quais capacidades serão garantidas por banco, especialmente retorno de campos e transações em migrações?
 
-#### Respostas
+A responsabilidade de escolher e importar o driver já está definida como sendo do consumidor. O que permanece pendente é o contrato de integração e a estratégia dos dialetos.
 
-- Antes de qualquer coisa feita no projeto o usuario deve montar a conexão, fazer a configuração
-- Eu quero usar arquivos .env, vamos nos basear na forma como o AdonisJS e laravel fazem essa questão
-- Usando esse arquivo, vamos informar tudo, porta, driver, etc
-- Tbem vamos informar o tempo de espera para o banco
-- A resposta do cancelamento deve retornar um erro que o usuario deve tratar no momento de chamar o Open
+### 6.3. Transações
 
----
+- Como associar uma entidade, um construtor ou um arquivo SQL ao objeto de transação retornado por `Begin`?
+- Operações na mesma transação devem ser sequenciais, serializadas pela biblioteca ou poderão ser solicitadas simultaneamente? Qual será o comportamento nesses casos?
+- Após falha em uma operação do grupo, quem solicita o rollback: o consumidor ou um mecanismo da biblioteca? Como impedir a confirmação de um grupo que deveria ter sido revertido?
+- Como comunicar e tratar falhas em `Commit` ou `Rollback`, inclusive quando não for possível confirmar o estado final das alterações?
 
-**Transações**
-Detalhes do objeto de transação, concorrência e falhas.
-O que acontece se duas operações usarem a mesma transação simultaneamente?
+A intenção já definida é confirmar ou reverter em conjunto operações da mesma transação, preservando a independência das operações executadas fora dela.
 
-#### Resposta:
+### 6.4. Migrações
 
-- A ideia é agrupar transações quando necessário, nem sempre uma transação precisa ser aberta, para Selects por exemplo
-- Vamos supor que eu quero executar 3 inserts ao mesmo tempo, em tabelas relacionadas, se uma delas falhar todas as transações, ja feitas devem ser desfeitas
-- Em todo caso, cada ação é indepentende, se eu fizer 3 inserts, cada um ocorre independente, porem se um falhar os anteriores devem ser desfeitos
+- Qual será o formato no `.env` para a versão desejada e para a associação de arquivos a cada versão?
+- Qual será o papel do prefixo numérico dos arquivos diante dessa associação? Como tratar divergências, arquivos ausentes ou duplicados e pares `up`/`down` incompletos?
+- Em qual ordem os arquivos de uma versão serão executados no avanço e na reversão?
+- A transação abrangerá um arquivo, uma versão ou todo o percurso até a versão desejada?
+- Como agir quando o banco ou os comandos não permitirem rollback integral? Como registrar falha, impedir que uma aplicação parcial seja considerada concluída e permitir recuperação?
+- Qual será a estrutura da tabela `migrations`, incluindo histórico, datas e registro da versão `0`?
+- Como delimitar o esquema gerenciado e quais objetos serão considerados na verificação de um banco sem histórico?
+- Como a biblioteca receberá os recursos incorporados pelo consumidor e localizará os arquivos configurados?
 
----
+O padrão de nomes, a associação de arquivos a versões pelo `.env`, a execução explícita e a intenção de rollback em caso de falha já foram registrados nos RF-04 e RF-05. A garantia efetiva de reversão depende das limitações descritas nesses requisitos.
 
-**Migrações**
-Nomes dos arquivos, histórico, identificação do esquema e recuperação de falhas.
-Como nomear os arquivos `up` e `down`? O que registrar se uma migração falhar?
+### 6.5. Consultas e paginação
 
-#### Resposta
+- Quais serão as assinaturas e quais métodos apenas constroem a consulta ou efetivamente a executam? Como obter os resultados e erros?
+- Condições passadas juntas a `Where` serão combinadas com `AND`? Como expressar grupos lógicos aninhados?
+- Como diferenciar referências a colunas e valores de parâmetros, especialmente nas comparações de `JOIN`?
+- Quais tipos de junção, operadores, funções e regras de busca textual serão suportados?
+- Quais campos e estatísticas estarão presentes em `krios.Paginate`? Como validar limite e deslocamento e calcular o total com filtros, agrupamentos e `DISTINCT`?
 
-- Os nomes devem seguir esse padrão, 0001_create_table.up.sql, 0001_create_table.down.sql, recomendamos separar a versão pela numeração, não afeta a execução;
-- No arquivo .env, o usuario deve dizer informar as vesões, quais arquivos estão na versão 1, 2, etc
-- Se uma migração falhar, devemos executar a migração dentro de uma transação, em caso de falha, fazemos rollback em tudo e retornamos um erro que o usuario deve tratar
+O encadeamento, a seleção de todas as colunas mapeadas por padrão, sua ordem definida no mapeamento e os recursos listados no RF-06 já fazem parte do escopo.
 
----
+### 6.6. Escritas
 
-**Mapeamento**
-Correspondência entre colunas SQL e campos Go.
-Como mapear `created_at` para `CreatedAt`? Como representar `NULL`?
+- Qual será o formato de `SetValues` em Go? A entrada por struct continuará disponível além da atribuição por nome de campo?
+- Como distinguir campo omitido, valor zero, `false` e `NULL`? Como representar explicitamente a intenção de gravar cada um deles?
+- O que será considerado um `Where` válido para autorizar `UPDATE` e `DELETE`, inclusive diante de um grupo de condições vazio?
+- Quais informações serão retornadas pela execução e como indicar que a quantidade de linhas afetadas não está disponível?
+- Como solicitar campos gerados ou alterados, quais bancos oferecerão esse retorno e quais destinos receberão resultados de uma ou de múltiplas linhas?
 
-#### Resposta
+A exigência de `Where` em atualizações e exclusões e o retorno de campos apenas quando solicitado e suportado já estão definidos no RF-07.
 
-Teremos um struct que criaremos para mapeamento de tabelas, ele será algo assim:
+### 6.7. Mapeamento, validação e formatação
 
-```go
-var tableMap = krios.Entity{
-  name: krios.Table{schema: "schema", table: "tableName", alias: "alias"}, // schema e alias são opcionais
-  joins: []krios.Join{
-    {
-      table: krios.Table{schema: "schema", table: "tableName", alias: "alias"},
-      on: krios.EQ("table1.id", "table2.id"), // pode ter varios critérios
-    },
-  }
-  columns: map[string]krios.TableColumn{
-    {
-      name: krios.TableColumnName{ schema: "schema", table: "tableName", column: "columnName", alias: "alias" }, // apenas o nome da coluna é obrigatorio
-      validation: func (value any) (bool, error) // essa função vai permitir validar se o campo esta de acordo a alguns criterios, se não deve teronar um erro, mas tudo isso é por conta do usuario
-      formatter: func (value any) (string, error) // permite formatar o dado antes de apresentar
-    },
-  }
-}
-```
+- Como representar a definição da entidade e os valores de cada registro? Como acessar um registro específico entre vários resultados?
+- O modelo de entidades substituirá ou complementará o mapeamento automático para structs do consumidor? Caso esse suporte permaneça, quais serão as regras de tags, correspondência de campos e preenchimento de slices por ponteiro?
+- Como representar `NULL`, diferenciar coluna não selecionada de valor nulo e tratar conversões incompatíveis nos acessos tipados?
+- Qual estrutura preservará a ordem das colunas e permitirá sua busca por nome? Um `map` isolado não garante ordem de iteração, conforme a [especificação de Go](https://go.dev/ref/spec#For_statements).
+- Quando a validação será executada: na atribuição, antes da escrita ou também na leitura? Como comunicar valor inválido e erro da função de validação?
+- Quando a formatação será executada e como seu resultado se relacionará com o valor original utilizado nas operações de banco?
 
-cada `krios.TableColumn` vai ter um get e set para cada tipo, ficando por responsabilidade do usuario informar o que ele quer, exemplo:
+As entidades, junções, metadados das colunas, funções fornecidas pelo consumidor e operações tipadas já estão definidos como capacidades no RF-09.
 
-```go
-tableMap.Column("name").getString()
-tableMap.Column("name").setString(valor)
-tableMap.Column("create_at").getTime()
-tableMap.Column("create_at").setTime(valor)
-tableMap.Column("create_at").getFormated()
-```
+### 6.8. SQL incorporado
 
----
+- Qual será o tipo público que referencia o arquivo e como ele receberá os recursos incorporados e os parâmetros?
+- Como distinguir execução de escrita e consulta que devolve linhas? Quais tipos de `database/sql` serão expostos e quem encerrará os recursos de leitura?
+- Como combinar os resultados nativos com o mapeamento do RF-09 e executar essas operações na transação selecionada?
 
-**Escritas**
-Representação dos dados alterados e informações retornadas.
-Como diferenciar “não alterar esse campo” de “atribuir zero a esse campo”?
+O consumidor continua responsável pela incorporação dos arquivos durante a compilação. O nome fornecido na configuração apenas seleciona um recurso já incorporado.
 
-**Consultas**
-Forma de montar filtros, expressões, funções e parâmetros.
-Como representar `ativo = true AND (nome = ... OR email = ...)`?
+### 6.9. Distribuição
 
-#### Resposta
+- Qual será o caminho definitivo do módulo?
+- Qual será a política de versionamento e de estabilidade da API pública?
+- Qual será o procedimento de publicação e quais exemplos de instalação e importação serão fornecidos?
 
-Modifiquei um pouco o escopo, vamos fazer assim, usando o exemplo do `tableMap` acima:
-
-```go
-tableMap.Select().Only("name", "email") // caso contrário traz tudo, na order que foi definida
-tableMap.Select().OrderBy(krios.ASC("name"), krios.DESC("email"))
-tableMap.Select().GroupBy("name", "email")
-tableMap.Select().Distinct()
-tableMap.Select().Limit(10)
-tableMap.Select().Page(limit, offset) // neste caso deve retornar krios.Paginate com as devidas estatisticas, inclusive um total que deve usar recursos proprios (Count())
-tableMap.Seldct().Count()
-tableMap.Select().Sum("age") // o mesmo vale para max, min e outros
-tableMap.Insert().setValues(
-  "name": "Joaquim",
-  "email": "VW4t0@example.com",
-  "create_At": time.Now(),
-) // o mesmo vai valer para o update (que deve obrigar informar um Where())
-tableMap.Delete().Where(
-  krios.EQ("name", "Joaquim"),
-  krios.Or(
-    krios.EQ("email", "VW4t0@example.com"),
-    krios.EQ("email", "VW4t0@example.com"),
-  ),
-) // isso vale para o select (só que no caso do delete é obrigatório)
-```
-
-Obs: tudo deve ser encadeado, deve permitir isso: `tableMap.Select().Only("name", "email").Where(krios.EQ("name", "Joaquim")).GroupBy(..)`, se for possivel claro
-
-Porem vamos permitir o cara mapear queries embeded, então:
-
-```go
-var tableMap = krios.EmbededTable{
-  name: "fileName", // aqui não sei se é possivel, mas o go deve adicionar esse arquivo no binarios, assim com os da migrations (que são definidos no arquivo env)
-}
-```
-
-```go
-tableMap.Exec() // o resultado é padrão da database/sql do go
-```
-
-Não coloquei aqui como vamos fazer para atribuir uma transação, peço a sugestão da IA
-
----
-
-**Distribuição**
-Caminho do módulo, publicação e versões.
-Qual será o caminho de importação e como publicar uma nova versão?
-
-#### Resposta
-
-- Não faço ideia, preciso de orientação da IA
-- Qual o padrão da comunidade go?
-- Baseado em meu repositorio, como poderiamos fazer?
-
----
-
-**Drivers e dialetos**
-Drivers utilizados e tratamento das diferenças entre bancos.
-Quais recursos terão suporte em cada banco?
-
-#### Resposta
-
-- Vamos trocar a estratégia, o usuario deve informar e importar a lib que ele quer usar
-- Sobre o dialeto, eu não sei bem como fazer, peço sugestão da IA
+O consumidor solicitou orientação sobre esses pontos; ainda não há uma escolha definitiva registrada.
 
 ## 7. Critérios de atendimento
 
 O escopo descrito neste documento será atendido quando for possível:
 
 1. Importar a biblioteca em outro projeto Go pelo caminho do módulo publicado no GitHub.
-2. Configurar e utilizar cada um dos três bancos suportados sem registrar drivers manualmente.
-3. Abrir o acesso com verificação de conectividade, cancelamento e prazo limite, liberar recursos em caso de falha e encerrar o acesso pela API pública.
-4. Executar operações por meio de um objeto de transação e confirmar ou reverter seus efeitos, mantendo operações da instância principal independentes e rejeitando novas operações na transação encerrada.
-5. Utilizar a biblioteca sem configurar migrações e, ao executá-las, exigir uma versão desejada explícita, avançar ou reverter até ela e permitir retornar à versão `0` por meio de arquivos SQL incorporados pelo consumidor.
-6. Construir operações de leitura e escrita utilizando o dialeto correspondente ao banco configurado, incluindo atualizações e exclusões de múltiplas linhas e informações sobre linhas afetadas quando disponíveis.
-7. Executar SQL personalizado compatível com o banco a partir de recursos incorporados, recebendo parâmetros separadamente e permitindo mapear os resultados de leitura.
-8. Mapear resultados para structs, incluindo coleções em consultas de seleção.
-9. Inicializar migrações sem histórico somente na ausência de objetos de aplicação no esquema gerenciado e rejeitar esquemas preexistentes sem histórico antes de executar migrações.
-10. Solicitar explicitamente o retorno de campos gerados ou alterados em escritas, conforme o suporte documentado por banco, e rejeitar solicitações não suportadas antes de executar a escrita.
+2. Configurar o acesso por `.env`, incluindo driver, parâmetros de conexão e tempo de espera, e utilizar cada banco suportado com um driver escolhido e importado pelo consumidor.
+3. Abrir o acesso com verificação de conectividade, cancelamento e prazo limite, receber erro em caso de cancelamento ou prazo esgotado, liberar recursos em falhas e encerrar o acesso pela API pública.
+4. Executar operações por meio de um objeto de transação, confirmar ou reverter o grupo, manter operações externas independentes e rejeitar novas operações na transação encerrada.
+5. Utilizar a biblioteca sem configurar migrações e, ao executá-las, exigir uma versão desejada explícita, receber a associação de arquivos às versões pelo `.env` e avançar ou reverter até a versão desejada, inclusive `0`, usando arquivos incorporados pelo consumidor.
+6. Construir operações de leitura e escrita por encadeamento a partir de entidades mapeadas, utilizando o dialeto correspondente ao banco configurado.
+7. Selecionar campos, filtrar, ordenar, agrupar, agregar, eliminar duplicatas e paginar consultas com total e estatísticas, preservando a ordem definida das colunas quando não houver seleção explícita.
+8. Fornecer valores por nome de campo para inserções e atualizações, permitir atualizações e exclusões de múltiplas linhas e rejeitar `UPDATE` e `DELETE` sem `Where` antes da execução.
+9. Executar SQL personalizado compatível com o banco a partir de recursos incorporados, recebendo parâmetros separadamente e disponibilizando os resultados conforme os contratos de consulta, execução e mapeamento a definir.
+10. Definir entidades, tabelas, junções e colunas, oferecer acesso tipado aos valores e aplicar validação e formatação fornecidas pelo consumidor conforme os contratos a definir.
+11. Inicializar migrações sem histórico somente na ausência de objetos de aplicação no esquema gerenciado e rejeitar esquemas preexistentes sem histórico antes de executar migrações.
+12. Retornar erro quando uma migração falhar e reverter as alterações quando houver suporte transacional, tratando aplicações parciais conforme a política de recuperação a definir.
+13. Retornar informações sobre linhas afetadas quando disponíveis, permitir a solicitação explícita de campos gerados ou alterados em escritas e rejeitar solicitações não suportadas antes da execução.
 
-Esses critérios orientam as especificações seguintes; sua validação depende da definição dos contratos pendentes.
+Esses critérios orientam as especificações seguintes; sua validação depende da definição dos contratos pendentes na seção 6.
