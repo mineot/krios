@@ -38,11 +38,19 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 **Entrega:** módulo compilável, organização inicial documentada e rotina de verificação reproduzível.
 
-- [ ] **E01-P01 — Definir a base técnica mínima.** Registrar o caminho do módulo, a versão mínima de Go e a organização inicial das responsabilidades: configuração, conexão, execução, transações, dialetos, entidades, consultas e migrações. A divisão em pacotes deve acompanhar essas responsabilidades sem antecipar toda a API.
+- [x] **E01-P01 — Definir a base técnica mínima.** Registrar o caminho do módulo, a versão mínima de Go e a organização inicial das responsabilidades: configuração, conexão, execução, transações, dialetos, entidades, consultas e migrações. A divisão em pacotes deve acompanhar essas responsabilidades sem antecipar toda a API.
 
   > **Decisão registrada:** adotar Go 1.26 como versão mínima, declarando `go 1.26.0` no `go.mod`. Para desenvolvimento, utilizar a atualização mais recente da linha Go 1.27. Os testes automatizados devem executar nas atualizações mais recentes das linhas 1.26 e 1.27, mantendo o código compatível com a versão mínima declarada. Esta base foi escolhida em outubro de 2026 para equilibrar suporte e compatibilidade; não é uma exigência específica de `krios.Config` ou de SQL incorporado.
 
-  > **Pendências:** definir o caminho do módulo (§6.9) e os limites entre tipos públicos e implementação interna (§6.1). Conferir em E01-P03 se os drivers e dependências escolhidos são compatíveis com a versão mínima definida. A política completa de publicação pode permanecer para E09.
+  > **Escopo concluído nesta etapa:** caminho do módulo (§6.9), pacote público de entrada e divisão inicial entre API pública e implementação interna (§6.1), conforme o registro de decisões abaixo. Campos, métodos e assinaturas continuam nas entregas correspondentes.
+
+  > **Organização definida:** usar `github.com/mineot/krios` como caminho do módulo e `krios` como pacote público na raiz. Organizar as responsabilidades em arquivos separados e expor apenas os tipos e operações necessários ao consumidor: configuração, abertura e encerramento, transações, entidades, construtores, resultados e configuração/execução de migrações. Manter validação interna, montagem de SQL, adaptação de dialetos e controle de execução como detalhes internos. Manter ou criar subpacotes internos somente quando houver uma separação concreta que os justifique. Essa divisão não define antecipadamente as assinaturas nem decide se haverá extensões públicas de dialetos.
+
+  > **Adiado para as entregas correspondentes:** seleção de drivers, ambientes de teste e compatibilidade com Go 1.26 em E01-P03; campos de `krios.Config`, assinaturas de `Open`/`Close`, cancelamento e erros em E02-P01; execução e transações em E03; entidades e resultados em E04; expressões e interfaces de dialetos em E05-P01; valores e retornos de escrita em E06-P01; contrato de SQL incorporado em E07-P01; representação das migrações e recuperação em E08. Cada decisão deve ser resolvida antes da implementação que depende dela.
+
+  > **Adiado para E09-P03:** número da primeira versão, política de compatibilidade da API e procedimento de publicação. Essas decisões não bloqueiam a definição da base técnica nem a inicialização do módulo.
+
+  > **Decisão registrada (2026-10-18):** módulo `github.com/mineot/krios` (confirmado pelo remote), pacote `krios` público na raiz e `go 1.26.0` no `go.mod`. A pasta `internal/` com pacotes apenas documentais foi removida; subpacotes serão criados conforme a necessidade concreta da implementação. O mecanismo de mapeamento, incluindo eventual uso de reflexão, permanece para E04. Detalhes em [E01-P01_decisions.md](E01-P01_decisions.md).
 
 - [ ] **E01-P02 — Inicializar o módulo e as rotinas locais.** Criar `go.mod`, estrutura inicial, instruções de desenvolvimento e comandos para formatação, compilação, análise estática e testes. Preservar a licença e os documentos existentes.
 
@@ -50,7 +58,7 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 - [ ] **E01-P03 — Preparar a validação com os bancos.** Documentar como iniciar ambientes isolados de SQLite3, MySQL e PostgreSQL e como fornecer suas configurações aos testes. Configurar a execução automatizada das verificações básicas do projeto.
 
-  > **Pendências:** escolher os drivers e versões usados na validação (§6.2), além da forma de disponibilizar os bancos no ambiente local e na integração contínua. Drivers de testes e exemplos não devem se tornar imports automáticos da biblioteca.
+  > **Pendências:** escolher os drivers e versões usados na validação (§6.2), conferir a compatibilidade dos drivers e suas dependências com Go 1.26 e definir a forma de disponibilizar os bancos no ambiente local e na integração contínua. Drivers de testes e exemplos não devem se tornar imports automáticos da biblioteca.
 
 **Critério de conclusão:** o módulo compila, as verificações básicas são executáveis e os ambientes de banco necessários às próximas entregas estão documentados e disponíveis para validação.
 
@@ -208,7 +216,7 @@ Ao concluir uma entrega, registrar abaixo sua referência de implementação e v
 
 | Entrega | Estado       | Evidências e observações |
 | ------- | ------------ | ------------------------ |
-| E01     | Não iniciada | —                        |
+| E01     | Em andamento | E01-P01 concluído; ver [.specs/E01-P01_decisions.md](E01-P01_decisions.md) |
 | E02     | Não iniciada | —                        |
 | E03     | Não iniciada | —                        |
 | E04     | Não iniciada | —                        |

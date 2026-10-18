@@ -58,7 +58,7 @@ A documentação deve explicar:
 - Como importar e utilizar a API pública.
 - Como publicar e consumir versões do módulo.
 
-O caminho definitivo do módulo e a política de versionamento serão definidos em uma especificação própria.
+O caminho do módulo é `github.com/mineot/krios`, conforme registrado em [E01-P01_decisions.md](E01-P01_decisions.md). A política de versionamento será definida na entrega E09.
 
 ## 5. Requisitos funcionais
 
@@ -324,11 +324,10 @@ O consumidor continua responsável pela incorporação dos arquivos durante a co
 
 ### 6.9. Distribuição
 
-- Qual será o caminho definitivo do módulo?
 - Qual será a política de versionamento e de estabilidade da API pública?
 - Qual será o procedimento de publicação e quais exemplos de instalação e importação serão fornecidos?
 
-O consumidor solicitou orientação sobre esses pontos; ainda não há uma escolha definitiva registrada.
+O caminho do módulo já foi definido como `github.com/mineot/krios` em [E01-P01_decisions.md](E01-P01_decisions.md). As decisões restantes de distribuição serão tratadas em E09-P03.
 
 ## 7. Critérios de atendimento
 
