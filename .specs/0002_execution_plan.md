@@ -64,11 +64,11 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
   > **Concluído (2026-10-18):** [Makefile](../Makefile) com `fmt`, `fmt-check`, `build`, `vet`, `test` e `check`; [README.md](../README.md) com requisitos, comandos equivalentes sem Make, organização e estado atual da biblioteca. Licença preservada. `make check` passou com Go 1.26.8; ainda não há testes de funcionalidades. Em diretório temporário, foi verificado que a checagem rejeita formatação inválida sem modificar arquivos, que `make fmt` corrige o código e que o alvo padrão executa as verificações. A matriz Go 1.26/1.27 e os ambientes de banco permanecem em E01-P03.
 
-- [ ] **E01-P03 — Preparar a validação com SQLite.** Preparar o driver dos testes, documentar o banco local e configurar a execução automatizada das verificações básicas do projeto com SQLite. Os ambientes de MySQL e PostgreSQL ficam para a validação manual posterior.
+- [x] **E01-P03 — Preparar a validação com SQLite.** Preparar o driver dos testes, documentar o banco local e configurar a execução automatizada das verificações básicas do projeto com SQLite. Os ambientes de MySQL e PostgreSQL ficam para a validação manual posterior.
 
   > **Decisões registradas:** usar `modernc.org/sqlite` nos testes automatizados com banco. Selecionar a versão estável mais recente disponível na preparação do ambiente e registrar a versão exata do driver e do SQLite incorporado. O banco de desenvolvimento será `dev.db`, na raiz, ignorado pelo Git junto a seus arquivos auxiliares. O arquivo será criado ao abrir o banco pelo driver. Drivers de testes e exemplos não devem se tornar imports automáticos da biblioteca.
 
-  > **Reprodutibilidade:** o SQLite utilizado é o incorporado pelo driver, não uma instalação independente do sistema. Conferir se a versão mais recente do driver incorpora a versão de SQLite desejada e é compatível com Go 1.26; registrar eventual diferença antes de escolher outra versão. Fixar a versão selecionada no módulo e atualizar deliberadamente, em vez de baixar uma versão diferente em cada execução.
+  > **Reprodutibilidade:** o SQLite utilizado é o incorporado pelo driver, não uma instalação independente do sistema. Usar a versão de SQLite incorporada pela versão estável selecionada de `modernc.org/sqlite`, mesmo que seja diferente da versão upstream mais recente, conforme aceitação do consumidor em 18/10/2026. Conferir a compatibilidade das atualizações com Go 1.26. Fixar a versão selecionada no módulo e atualizar deliberadamente, em vez de baixar uma versão diferente em cada execução.
 
   > **Isolamento:** reservar `dev.db` para desenvolvimento local. Os testes automatizados devem usar bancos temporários próprios, sem depender dos dados existentes nem apagar o banco de desenvolvimento. A integração contínua usará SQLite e a matriz Go 1.26/1.27, sem servidores MySQL ou PostgreSQL nesta etapa.
 
@@ -76,7 +76,7 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
   > **Integração contínua definida:** GitHub Actions em pushes e pull requests, com matriz Go 1.26.x/1.27.x e runner padrão Ubuntu. O [workflow](../.github/workflows/check.yml) executa somente em repositórios públicos, respeitando a condição de gratuidade; em privados, os jobs são ignorados. Cache persistente e publicação de artefatos estão desabilitados. Não foram alteradas configurações de cobrança ou visibilidade.
 
-  > **Pendências de conclusão:** conferir a primeira execução remota do workflow após enviar os arquivos ao GitHub; a execução local não comprova a execução hospedada. O SQLite upstream mais recente é 3.54.1, enquanto o driver selecionado incorpora 3.53.4: acompanhar uma atualização do driver ou registrar a aceitação dessa diferença antes de considerar atendida a exigência de usar a versão mais recente do banco. Fontes e instruções estão no [README](../README.md).
+  > **Concluído (2026-10-18):** o consumidor confirmou que realizou o push e que os checks do GitHub Actions passaram nas linhas Go 1.26 e 1.27. Também aceitou o SQLite 3.53.4 incorporado pelo driver selecionado, encerrando a pendência de versão. A evidência da execução remota é o relato do consumidor; não foi realizada nova consulta ao GitHub nesta atualização. Não restam pendências desta tarefa.
 
 **Critério de conclusão:** o módulo compila, as verificações básicas e os testes com SQLite podem ser executados localmente e na integração contínua, e o uso de `dev.db` está documentado. A validação manual de MySQL e PostgreSQL permanece registrada como trabalho posterior.
 
@@ -234,7 +234,7 @@ Ao concluir uma entrega, registrar abaixo sua referência de implementação e v
 
 | Entrega | Estado       | Evidências e observações |
 | ------- | ------------ | ------------------------ |
-| E01     | Em andamento | E01-P01 e E01-P02 concluídos. E01-P03 implementada e validada localmente; faltam primeira execução remota e resolução da diferença de versão do SQLite. Ver [Makefile](../Makefile), [testes](../tests/sqlite_test.go), [workflow](../.github/workflows/check.yml) e [README](../README.md). |
+| E01     | Concluída | E01-P01, E01-P02 e E01-P03 concluídos. Checks remotos Go 1.26/1.27 confirmados pelo consumidor e versão incorporada do SQLite aceita em 18/10/2026. Ver [Makefile](../Makefile), [testes](../tests/sqlite_test.go), [workflow](../.github/workflows/check.yml) e [README](../README.md). |
 | E02     | Não iniciada | —                        |
 | E03     | Não iniciada | —                        |
 | E04     | Não iniciada | —                        |

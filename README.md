@@ -48,7 +48,7 @@ Novos arquivos e pacotes serão criados conforme a implementação exigir. Os dr
 
 ## SQLite local e testes
 
-Os testes usam `modernc.org/sqlite v1.60.1`, resolvido por `@latest` em 18/10/2026 e fixado no módulo. O driver incorpora SQLite **3.53.4**, confirmado por `SELECT sqlite_version()`. Essa é a versão fornecida pelo driver selecionado; não é o SQLite upstream mais recente, **3.54.1**, conforme o [histórico oficial](https://sqlite.org/changes.html). Acompanhar a atualização do driver para incorporar essa versão, sem substituir silenciosamente a dependência escolhida.
+Os testes usam `modernc.org/sqlite v1.60.1`, resolvido por `@latest` em 18/10/2026 e fixado no módulo. O driver incorpora SQLite **3.53.4**, confirmado por `SELECT sqlite_version()`. O uso dessa versão foi aceito pelo consumidor em 18/10/2026. A política é acompanhar a versão estável do driver, usando o SQLite incorporado por ela, sem exigir coincidência com a versão upstream mais recente. As atualizações da dependência devem ser deliberadas e validadas.
 
 Para preparar o banco local:
 
@@ -68,7 +68,7 @@ O GitHub Actions executa `make check` em pushes e pull requests, nas atualizaç�
 
 Para respeitar a condição de gratuidade, os jobs executam **somente quando o repositório é público**. Em repositórios privados, são ignorados: a franquia gratuita e a eventual cobrança dependem da conta. Não há alteração automática de visibilidade ou faturamento. Consulte a [política de cobrança do GitHub Actions](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
 
-O workflow será executado no GitHub depois que os arquivos forem enviados ao repositório; sua primeira execução remota ainda precisa ser conferida. O ambiente remoto não acessa o `dev.db` do seu computador.
+Em 18/10/2026, o consumidor confirmou o sucesso dos checks remotos nas linhas Go 1.26 e 1.27 após enviar os arquivos ao GitHub. O ambiente remoto não acessa o `dev.db` do seu computador.
 
 MySQL e PostgreSQL serão testados manualmente pelo consumidor posteriormente; testes unitários também cobrirão as regras e a geração de SQL dos dialetos.
 

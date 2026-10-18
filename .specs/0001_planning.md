@@ -257,12 +257,11 @@ As respostas do consumidor foram incorporadas às seções anteriores. Esta seç
 
 - Como identificar na configuração o driver importado pelo consumidor e o banco correspondente? Como validar incompatibilidades ou ausência de registro?
 - Qual será a interface dos dialetos e como cada dialeto será selecionado ou associado ao driver?
-- O driver `modernc.org/sqlite v1.60.1`, resolvido por `@latest` em 18/10/2026 e validado com Go 1.26.8 e 1.27.2, incorpora SQLite 3.53.4. Como atender à exigência de banco mais recente enquanto o SQLite upstream está em 3.54.1: aguardar atualização do driver ou aceitar explicitamente a versão incorporada? As evidências estão em E01-P03 e no README.
 - Quais drivers e versões de MySQL e PostgreSQL serão usados na validação manual posterior? Quais capacidades serão garantidas por banco, especialmente retorno de campos e transações em migrações?
 
 A responsabilidade de escolher e importar o driver já está definida como sendo do consumidor. O que permanece pendente é o contrato de integração e a estratégia dos dialetos.
 
-Para a validação do projeto, foi escolhido `modernc.org/sqlite` nos testes automatizados com banco. MySQL e PostgreSQL serão validados manualmente pelo consumidor posteriormente, e testes unitários cobrirão as regras e a geração de SQL dos dialetos. O plano de execução registra a preparação do SQLite, o uso local de `dev.db` e os lembretes para as validações restantes.
+Para a validação do projeto, foi escolhido `modernc.org/sqlite` nos testes automatizados com banco. Em 18/10/2026, o consumidor aceitou o SQLite 3.53.4 incorporado pelo driver v1.60.1. A política é usar o SQLite fornecido pela versão estável selecionada do driver, sem exigir coincidência com a versão upstream mais recente; atualizações devem ser deliberadas e validadas. MySQL e PostgreSQL serão validados manualmente pelo consumidor posteriormente, e testes unitários cobrirão as regras e a geração de SQL dos dialetos. O plano de execução registra a preparação do SQLite, o uso local de `dev.db` e os lembretes para as validações restantes.
 
 ### 6.3. Transações
 
