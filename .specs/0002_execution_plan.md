@@ -40,7 +40,9 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 - [ ] **E01-P01 — Definir a base técnica mínima.** Registrar o caminho do módulo, a versão mínima de Go e a organização inicial das responsabilidades: configuração, conexão, execução, transações, dialetos, entidades, consultas e migrações. A divisão em pacotes deve acompanhar essas responsabilidades sem antecipar toda a API.
 
-  > **Pendências:** definir o caminho do módulo (§6.9), a versão mínima de Go e os limites entre tipos públicos e implementação interna (§6.1). A política completa de publicação pode permanecer para E09.
+  > **Decisão registrada:** adotar Go 1.26 como versão mínima, declarando `go 1.26.0` no `go.mod`. Para desenvolvimento, utilizar a atualização mais recente da linha Go 1.27. Os testes automatizados devem executar nas atualizações mais recentes das linhas 1.26 e 1.27, mantendo o código compatível com a versão mínima declarada. Esta base foi escolhida em outubro de 2026 para equilibrar suporte e compatibilidade; não é uma exigência específica de `krios.Config` ou de SQL incorporado.
+
+  > **Pendências:** definir o caminho do módulo (§6.9) e os limites entre tipos públicos e implementação interna (§6.1). Conferir em E01-P03 se os drivers e dependências escolhidos são compatíveis com a versão mínima definida. A política completa de publicação pode permanecer para E09.
 
 - [ ] **E01-P02 — Inicializar o módulo e as rotinas locais.** Criar `go.mod`, estrutura inicial, instruções de desenvolvimento e comandos para formatação, compilação, análise estática e testes. Preservar a licença e os documentos existentes.
 
@@ -54,13 +56,13 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 ### E02 — Configurar e abrir o acesso aos bancos
 
-**Entrega:** consumidor configura o banco por `.env`, importa seu driver e consegue abrir e encerrar o acesso.
+**Entrega:** consumidor configura o banco por `krios.Config`, sem arquivo externo de configuração, importa seu driver e consegue abrir e encerrar o acesso.
 
-- [ ] **E02-P01 — Especificar a configuração e o ciclo de vida.** Definir os campos de configuração, a integração com `.env`, as assinaturas de `Open` e `Close`, o cancelamento e os erros relevantes. Produzir um exemplo mínimo de uso antes de implementar o contrato.
+- [ ] **E02-P01 — Especificar a configuração e o ciclo de vida.** Definir os campos e tipos da struct pública `krios.Config`, sua passagem à biblioteca, as assinaturas de `Open` e `Close`, o cancelamento e os erros relevantes. Produzir um exemplo mínimo de uso antes de implementar o contrato.
 
-  > **Pendências:** resolver leitura e precedência do `.env`, nomes das variáveis, padrões, validações, unidades de tempo, cancelamento e erros (§6.1). Definir como identificar o driver importado e sua relação com o banco (§6.2).
+  > **Pendências:** definir organização e tipos dos campos de `krios.Config`, valores omitidos e explícitos, padrões, validações, unidades de tempo, cancelamento e erros (§6.1). Definir como identificar o driver importado e sua relação com o banco (§6.2).
 
-- [ ] **E02-P02 — Implementar o fluxo de configuração.** Ler ou receber a configuração conforme o contrato escolhido, validar os dados de cada banco e disponibilizar um exemplo de `.env` sem credenciais reais. Manter a configuração de migrações opcional.
+- [ ] **E02-P02 — Implementar o fluxo de configuração.** Receber `krios.Config` preenchida pelo consumidor, aplicar os padrões, validar os dados de cada banco e disponibilizar um exemplo de configuração em Go com valores ilustrativos, sem credenciais reais. Manter a configuração de migrações opcional.
 
   > **Pendências:** aplicar E02-P01. Reservar a integração da configuração de versões e arquivos de migração para E08; ela não deve impedir o uso de conexões nesta entrega.
 
@@ -68,9 +70,9 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
   > **Pendências:** definir o comportamento de chamadas repetidas a `Close` e de operações após o encerramento, junto ao contrato de ciclo de vida (§6.1).
 
-- [ ] **E02-P04 — Validar o ciclo de vida nos três bancos.** Cobrir configuração válida e inválida, driver indisponível, falha de conexão, cancelamento, prazo esgotado e encerramento. Demonstrar que abrir o banco não exige configurar nem executar migrações.
+- [ ] **E02-P04 — Validar o ciclo de vida nos três bancos.** Cobrir configuração válida e inválida, driver indisponível, falha de conexão, cancelamento, prazo esgotado e encerramento. Demonstrar que abrir o banco não exige configurar nem executar migrações e que a configuração em código funciona sem arquivos externos ou variáveis de ambiente obrigatórias.
 
-**Critério de conclusão:** exemplos de consumidores com drivers explicitamente importados funcionam em SQLite3, MySQL e PostgreSQL; falhas de abertura são retornadas e não deixam recursos associados à tentativa abertos.
+**Critério de conclusão:** exemplos de consumidores com `krios.Config` definida em código e drivers explicitamente importados funcionam em SQLite3, MySQL e PostgreSQL, sem arquivos externos de configuração; falhas de abertura são retornadas e não deixam recursos associados à tentativa abertos.
 
 ### E03 — Criar a execução básica e as transações
 
@@ -162,9 +164,9 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 **Entrega:** consumidor configura versões e arquivos e executa avanço ou reversão de forma explícita, com histórico e tratamento de falhas.
 
-- [ ] **E08-P01 — Especificar versões, arquivos e histórico.** Definir a associação no `.env`, a ordem de execução, os pares `up`/`down`, a estrutura de `migrations`, o estado `0` e a identificação do esquema gerenciado.
+- [ ] **E08-P01 — Especificar versões, arquivos e histórico.** Definir em `krios.Config` a versão desejada e a associação dos arquivos às versões, a ordem de execução, os pares `up`/`down`, a estrutura de `migrations`, o estado `0` e a identificação do esquema gerenciado.
 
-  > **Pendências:** resolver formato da configuração, relação com os prefixos numéricos, arquivos ausentes ou duplicados, histórico e objetos considerados na verificação inicial (§6.4). O prefixo não deve ser tratado como regra de execução sem essa decisão.
+  > **Pendências:** resolver os campos de migração em `krios.Config`, a referência aos recursos incorporados, a distinção entre versão ausente e versão `0`, a relação com os prefixos numéricos, arquivos ausentes ou duplicados, histórico e objetos considerados na verificação inicial (§6.4). O prefixo não deve ser tratado como regra de execução sem essa decisão.
 
 - [ ] **E08-P02 — Implementar a preparação das migrações.** Receber os recursos incorporados, validar as associações, comparar versão atual e desejada e montar a sequência de avanço ou reversão. Rejeitar ausência da versão desejada e esquemas preexistentes sem histórico antes de executar migrações.
 
@@ -186,13 +188,13 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
   > **Pendências:** fechar as decisões que ainda afetem o comportamento do escopo inicial. Uma funcionalidade exigida não pode ser considerada entregue apenas porque sua definição foi adiada; eventuais mudanças de escopo devem ser registradas no planejamento.
 
-- [ ] **E09-P02 — Finalizar os exemplos e a documentação.** Documentar instalação, importação de drivers, `.env`, abertura, entidades, consultas, escritas, transações, SQL incorporado, migrações, erros e limitações por banco. Conferir que os exemplos correspondem à API implementada.
+- [ ] **E09-P02 — Finalizar os exemplos e a documentação.** Documentar instalação, importação de drivers, preenchimento de `krios.Config`, abertura, entidades, consultas, escritas, transações, SQL incorporado, migrações, erros e limitações por banco. Conferir que os exemplos correspondem à API implementada.
 
 - [ ] **E09-P03 — Definir e preparar a primeira versão.** Registrar a política de versionamento e estabilidade da API, revisar o caminho do módulo, preparar notas da versão e documentar o procedimento de publicação.
 
   > **Pendências:** definir a versão inicial, a política de compatibilidade e o processo de publicação (§6.9). A escolha do caminho feita em E01 deve permanecer consistente com os imports e a localização do repositório.
 
-- [ ] **E09-P04 — Publicar e validar o consumo externo.** No momento da entrega, executar o procedimento de publicação definido e instalar a versão em um projeto consumidor separado. Verificar imports, dependências e um exemplo funcional de acesso ao banco.
+- [ ] **E09-P04 — Publicar e validar o consumo externo.** No momento da entrega, executar o procedimento de publicação definido e instalar a versão em um projeto consumidor separado. Verificar imports, dependências e um exemplo funcional de acesso ao banco com `krios.Config` definida em código, sem distribuir arquivos externos de configuração.
 
   > **Pendências:** concluir E09-P03 e dispor do acesso necessário ao repositório de publicação. Este documento planeja essa ação futura; sua criação não publica código nem versões.
 

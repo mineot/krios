@@ -21,7 +21,7 @@ A biblioteca deve oferecer uma API pública consistente para SQLite3, MySQL e Po
 
 A primeira versão deve contemplar:
 
-- Configuração por `.env`, abertura e encerramento de conexões.
+- Configuração pela struct `krios.Config`, abertura e encerramento de conexões.
 - Uso de drivers compatíveis com `database/sql`, escolhidos e importados pelo consumidor para SQLite3, MySQL e PostgreSQL.
 - Dialetos específicos para os três bancos suportados.
 - Controle explícito de transações.
@@ -66,7 +66,9 @@ O caminho definitivo do módulo e a política de versionamento serão definidos 
 
 Antes de abrir o acesso ao banco e executar operações que dependam dele, o consumidor deve preparar a configuração da conexão.
 
-O fluxo de configuração deve permitir usar arquivos `.env`, tendo como referência a experiência de configuração desejada pelo consumidor em AdonisJS e Laravel. Devem ser configuráveis por esse meio o banco, o driver, os parâmetros de conexão, a porta quando aplicável e o tempo máximo de espera pela conexão.
+O Krios deve disponibilizar a struct pública `krios.Config`, preenchida pelo consumidor em código e fornecida à biblioteca para inicializar o acesso. Ela deve centralizar o banco, o driver, os parâmetros de conexão, a porta quando aplicável, o tempo máximo de espera pela conexão e a configuração opcional de migrações.
+
+O consumidor deve poder definir esses valores no código da aplicação e distribuí-la como executável sem arquivos externos de configuração. O Krios deve receber os valores por `krios.Config`, sem exigir leitura de arquivos ou variáveis de ambiente. Se a aplicação optar por outras fontes de valores, cabe a ela preencher a struct antes de entregá-la à biblioteca. Valores definidos diretamente no código acompanham a compilação; alterá-los no código exige gerar um novo executável.
 
 | Banco      | Parâmetros obrigatórios                       |
 | ---------- | --------------------------------------------- |
@@ -74,7 +76,7 @@ O fluxo de configuração deve permitir usar arquivos `.env`, tendo como referê
 | MySQL      | Host, usuário, senha e nome do banco de dados |
 | PostgreSQL | Host, usuário, senha e nome do banco de dados |
 
-A responsabilidade pela leitura do `.env`, os nomes das variáveis, as unidades de tempo, os valores padrão, a precedência entre fontes de configuração e as validações serão definidos na especificação de configuração.
+Os nomes e tipos dos campos de `krios.Config`, sua organização, as unidades de tempo, os valores padrão, a distinção entre valores omitidos e explícitos e as validações serão definidos na especificação de configuração.
 
 ### RF-02 — Gerenciar o ciclo de vida da conexão
 
@@ -119,9 +121,9 @@ Esses arquivos devem ser compatíveis com o banco configurado. O consumidor pode
 
 A incorporação desses arquivos ao executável, por meio de `embed`, é responsabilidade do consumidor. A biblioteca deve disponibilizar uma forma de receber e carregar esses recursos.
 
-Os arquivos devem seguir o padrão de nomes `0001_create_table.up.sql` e `0001_create_table.down.sql`, com prefixo numérico, descrição e indicação da direção. O consumidor deve informar no `.env` a associação dos arquivos às versões do esquema.
+Os arquivos devem seguir o padrão de nomes `0001_create_table.up.sql` e `0001_create_table.down.sql`, com prefixo numérico, descrição e indicação da direção. O consumidor deve informar em `krios.Config` a associação dos arquivos às versões do esquema.
 
-A numeração no nome foi proposta como convenção de organização; ela não deve ser presumida como fonte definitiva da versão ou da ordem de execução. O formato da associação no `.env`, a ordem dentro de cada versão, a validação dos pares `up`/`down` e o tratamento de divergências entre nomes e configuração permanecem pendentes.
+A numeração no nome foi proposta como convenção de organização; ela não deve ser presumida como fonte definitiva da versão ou da ordem de execução. O formato da associação em `krios.Config`, a ordem dentro de cada versão, a validação dos pares `up`/`down` e o tratamento de divergências entre nomes e configuração permanecem pendentes.
 
 A incorporação ocorre durante a compilação, por meio de `go:embed`. A configuração pode referenciar arquivos já incorporados, mas não adiciona novos arquivos ao executável em tempo de execução. Essa distinção segue o funcionamento do [pacote `embed`](https://pkg.go.dev/embed).
 
@@ -129,7 +131,7 @@ A incorporação ocorre durante a compilação, por meio de `go:embed`. A config
 
 A configuração de migrações é opcional para o uso da biblioteca. O consumidor deve decidir quando executar as migrações, chamando `RunMigrations()`.
 
-Ao chamar `RunMigrations()`, o consumidor deve ter informado explicitamente a versão desejada do esquema na configuração e os recursos de migração necessários. A ausência da versão desejada deve produzir erro antes de executar migrações e não deve ser interpretada como uma solicitação de reversão.
+Ao chamar `RunMigrations()`, o consumidor deve ter informado explicitamente a versão desejada do esquema em `krios.Config` e fornecido os recursos de migração necessários conforme o contrato de configuração. A ausência da versão desejada deve produzir erro antes de executar migrações e não deve ser interpretada como uma solicitação de reversão.
 
 A versão `0` representa o estado anterior à primeira migração. Informar explicitamente essa versão deve solicitar a reversão de todas as migrações aplicadas.
 
@@ -245,9 +247,9 @@ As respostas do consumidor foram incorporadas às seções anteriores. Esta seç
 
 ### 6.1. API pública e configuração
 
-- Quem deve carregar o `.env`: o Krios ou a aplicação consumidora? Como os dados carregados serão entregues à biblioteca?
-- Quais serão os nomes das variáveis, os campos obrigatórios, as portas padrão, as unidades e os valores padrão de tempo de espera?
-- Como resolver a precedência entre o arquivo, variáveis de ambiente e eventual configuração fornecida em código? O que fazer quando o arquivo estiver ausente ou contiver valores inválidos?
+- Quais serão os campos e tipos de `krios.Config`, incluindo a organização das opções específicas de cada banco e das migrações?
+- Quais campos serão obrigatórios e quais serão as portas padrão, as unidades e os valores padrão de tempo de espera?
+- Como distinguir valores omitidos de valores explicitamente definidos, aplicar os padrões e retornar erros de configuração inválida?
 - Como o consumidor solicita cancelamento antecipado de `Open`? Como esse mecanismo interage com o tempo de espera configurado?
 - Quais serão os tipos exportados, as assinaturas e os erros distinguíveis pelo consumidor, incluindo cancelamento e prazo esgotado?
 
@@ -270,16 +272,16 @@ A intenção já definida é confirmar ou reverter em conjunto operações da me
 
 ### 6.4. Migrações
 
-- Qual será o formato no `.env` para a versão desejada e para a associação de arquivos a cada versão?
+- Como representar em `krios.Config` a versão desejada e a associação de arquivos a cada versão, distinguindo versão ausente de versão `0`?
 - Qual será o papel do prefixo numérico dos arquivos diante dessa associação? Como tratar divergências, arquivos ausentes ou duplicados e pares `up`/`down` incompletos?
 - Em qual ordem os arquivos de uma versão serão executados no avanço e na reversão?
 - A transação abrangerá um arquivo, uma versão ou todo o percurso até a versão desejada?
 - Como agir quando o banco ou os comandos não permitirem rollback integral? Como registrar falha, impedir que uma aplicação parcial seja considerada concluída e permitir recuperação?
 - Qual será a estrutura da tabela `migrations`, incluindo histórico, datas e registro da versão `0`?
 - Como delimitar o esquema gerenciado e quais objetos serão considerados na verificação de um banco sem histórico?
-- Como a biblioteca receberá os recursos incorporados pelo consumidor e localizará os arquivos configurados?
+- Como `krios.Config` receberá ou referenciará os recursos incorporados pelo consumidor e como a biblioteca localizará os arquivos configurados?
 
-O padrão de nomes, a associação de arquivos a versões pelo `.env`, a execução explícita e a intenção de rollback em caso de falha já foram registrados nos RF-04 e RF-05. A garantia efetiva de reversão depende das limitações descritas nesses requisitos.
+O padrão de nomes, a associação de arquivos a versões por `krios.Config`, a execução explícita e a intenção de rollback em caso de falha já foram registrados nos RF-04 e RF-05. A garantia efetiva de reversão depende das limitações descritas nesses requisitos.
 
 ### 6.5. Consultas e paginação
 
@@ -333,10 +335,10 @@ O consumidor solicitou orientação sobre esses pontos; ainda não há uma escol
 O escopo descrito neste documento será atendido quando for possível:
 
 1. Importar a biblioteca em outro projeto Go pelo caminho do módulo publicado no GitHub.
-2. Configurar o acesso por `.env`, incluindo driver, parâmetros de conexão e tempo de espera, e utilizar cada banco suportado com um driver escolhido e importado pelo consumidor.
+2. Configurar o acesso por `krios.Config`, sem exigir arquivos externos de configuração, incluindo driver, parâmetros de conexão e tempo de espera, e utilizar cada banco suportado com um driver escolhido e importado pelo consumidor.
 3. Abrir o acesso com verificação de conectividade, cancelamento e prazo limite, receber erro em caso de cancelamento ou prazo esgotado, liberar recursos em falhas e encerrar o acesso pela API pública.
 4. Executar operações por meio de um objeto de transação, confirmar ou reverter o grupo, manter operações externas independentes e rejeitar novas operações na transação encerrada.
-5. Utilizar a biblioteca sem configurar migrações e, ao executá-las, exigir uma versão desejada explícita, receber a associação de arquivos às versões pelo `.env` e avançar ou reverter até a versão desejada, inclusive `0`, usando arquivos incorporados pelo consumidor.
+5. Utilizar a biblioteca sem configurar migrações e, ao executá-las, exigir uma versão desejada explícita, receber a associação de arquivos às versões por `krios.Config` e avançar ou reverter até a versão desejada, inclusive `0`, usando arquivos incorporados pelo consumidor.
 6. Construir operações de leitura e escrita por encadeamento a partir de entidades mapeadas, utilizando o dialeto correspondente ao banco configurado.
 7. Selecionar campos, filtrar, ordenar, agrupar, agregar, eliminar duplicatas e paginar consultas com total e estatísticas, preservando a ordem definida das colunas quando não houver seleção explícita.
 8. Fornecer valores por nome de campo para inserções e atualizações, permitir atualizações e exclusões de múltiplas linhas e rejeitar `UPDATE` e `DELETE` sem `Where` antes da execução.
