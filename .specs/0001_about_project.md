@@ -129,13 +129,13 @@ Na ausência de histórico de migrações, a inicialização automática somente
 
 A execução deve comparar a versão atual do banco com a versão desejada:
 
-| Condição                         | Comportamento esperado                                                 |
-| -------------------------------- | ---------------------------------------------------------------------- |
+| Condição                                            | Comportamento esperado                                                      |
+| --------------------------------------------------- | --------------------------------------------------------------------------- |
 | Não há histórico e não existem objetos de aplicação | Considerar a versão atual como `0` e aplicar as regras de comparação abaixo |
-| Não há histórico e existem objetos de aplicação | Retornar erro sem executar migrações |
-| Versão atual inferior à desejada | Executar `up` até alcançar a versão desejada                           |
-| Versão atual superior à desejada | Executar `down` até alcançar a versão desejada                         |
-| Versão atual igual à desejada    | Não executar migrações                                                 |
+| Não há histórico e existem objetos de aplicação     | Retornar erro sem executar migrações                                        |
+| Versão atual inferior à desejada                    | Executar `up` até alcançar a versão desejada                                |
+| Versão atual superior à desejada                    | Executar `down` até alcançar a versão desejada                              |
+| Versão atual igual à desejada                       | Não executar migrações                                                      |
 
 A estrutura da tabela, o registro do estado na versão `0`, a delimitação do esquema gerenciado, os objetos considerados na verificação inicial, a ordem de execução e o tratamento de falhas serão definidos na especificação de migrações.
 
@@ -207,17 +207,174 @@ As regras de correspondência entre colunas e campos, uso de tags, valores nulos
 
 As próximas especificações devem detalhar:
 
-| Tema               | Definições necessárias                                                               |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| API pública        | Tipos exportados, assinaturas, erros, cancelamento, prazos limite e exemplos válidos em Go |
-| Configuração       | Parâmetros adicionais, valores padrão e validações                                   |
-| Drivers e dialetos | Seleção dos drivers e diferenças entre os bancos suportados                          |
-| Transações         | Assinaturas do objeto de transação, concorrência no mesmo objeto e falhas em `Commit` ou `Rollback` |
+| Tema               | Definições necessárias                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| API pública        | Tipos exportados, assinaturas, erros, cancelamento, prazos limite e exemplos válidos em Go                                            |
+| Configuração       | Parâmetros adicionais, valores padrão e validações                                                                                    |
+| Drivers e dialetos | Seleção dos drivers e diferenças entre os bancos suportados                                                                           |
+| Transações         | Assinaturas do objeto de transação, concorrência no mesmo objeto e falhas em `Commit` ou `Rollback`                                   |
 | Migrações          | Convenções dos arquivos, histórico de versões, registro da versão `0`, esquema gerenciado, verificação inicial e tratamento de falhas |
-| Consultas          | Composição de expressões, parâmetros, funções e operadores                           |
-| Escritas           | Campos omitidos e valores explícitos, informações de execução e suporte ao retorno de campos por banco |
-| Mapeamento         | Tags, tipos, valores nulos e destinos de resultados de escritas de uma ou de múltiplas linhas |
-| Distribuição       | Caminho do módulo, publicação, versionamento e guia de consumo                       |
+| Consultas          | Composição de expressões, parâmetros, funções e operadores                                                                            |
+| Escritas           | Campos omitidos e valores explícitos, informações de execução e suporte ao retorno de campos por banco                                |
+| Mapeamento         | Tags, tipos, valores nulos e destinos de resultados de escritas de uma ou de múltiplas linhas                                         |
+| Distribuição       | Caminho do módulo, publicação, versionamento e guia de consumo                                                                        |
+
+### Definições
+
+**API pública**
+Tipos, métodos, assinaturas e erros disponíveis ao consumidor.
+Como passar cancelamento e prazo limite para `Open`?
+
+**Configuração**
+Opções adicionais, valores padrão e validações.
+Qual será a porta padrão de cada banco? Como informar opções de conexão?
+
+#### Respostas
+
+- Antes de qualquer coisa feita no projeto o usuario deve montar a conexão, fazer a configuração
+- Eu quero usar arquivos .env, vamos nos basear na forma como o AdonisJS e laravel fazem essa questão
+- Usando esse arquivo, vamos informar tudo, porta, driver, etc
+- Tbem vamos informar o tempo de espera para o banco
+- A resposta do cancelamento deve retornar um erro que o usuario deve tratar no momento de chamar o Open
+
+---
+
+**Transações**
+Detalhes do objeto de transação, concorrência e falhas.
+O que acontece se duas operações usarem a mesma transação simultaneamente?
+
+#### Resposta:
+
+- A ideia é agrupar transações quando necessário, nem sempre uma transação precisa ser aberta, para Selects por exemplo
+- Vamos supor que eu quero executar 3 inserts ao mesmo tempo, em tabelas relacionadas, se uma delas falhar todas as transações, ja feitas devem ser desfeitas
+- Em todo caso, cada ação é indepentende, se eu fizer 3 inserts, cada um ocorre independente, porem se um falhar os anteriores devem ser desfeitos
+
+---
+
+**Migrações**
+Nomes dos arquivos, histórico, identificação do esquema e recuperação de falhas.
+Como nomear os arquivos `up` e `down`? O que registrar se uma migração falhar?
+
+#### Resposta
+
+- Os nomes devem seguir esse padrão, 0001_create_table.up.sql, 0001_create_table.down.sql, recomendamos separar a versão pela numeração, não afeta a execução;
+- No arquivo .env, o usuario deve dizer informar as vesões, quais arquivos estão na versão 1, 2, etc
+- Se uma migração falhar, devemos executar a migração dentro de uma transação, em caso de falha, fazemos rollback em tudo e retornamos um erro que o usuario deve tratar
+
+---
+
+**Mapeamento**
+Correspondência entre colunas SQL e campos Go.
+Como mapear `created_at` para `CreatedAt`? Como representar `NULL`?
+
+#### Resposta
+
+Teremos um struct que criaremos para mapeamento de tabelas, ele será algo assim:
+
+```go
+var tableMap = krios.Entity{
+  name: krios.Table{schema: "schema", table: "tableName", alias: "alias"}, // schema e alias são opcionais
+  joins: []krios.Join{
+    {
+      table: krios.Table{schema: "schema", table: "tableName", alias: "alias"},
+      on: krios.EQ("table1.id", "table2.id"), // pode ter varios critérios
+    },
+  }
+  columns: map[string]krios.TableColumn{
+    {
+      name: krios.TableColumnName{ schema: "schema", table: "tableName", column: "columnName", alias: "alias" }, // apenas o nome da coluna é obrigatorio
+      validation: func (value any) (bool, error) // essa função vai permitir validar se o campo esta de acordo a alguns criterios, se não deve teronar um erro, mas tudo isso é por conta do usuario
+      formatter: func (value any) (string, error) // permite formatar o dado antes de apresentar
+    },
+  }
+}
+```
+
+cada `krios.TableColumn` vai ter um get e set para cada tipo, ficando por responsabilidade do usuario informar o que ele quer, exemplo:
+
+```go
+tableMap.Column("name").getString()
+tableMap.Column("name").setString(valor)
+tableMap.Column("create_at").getTime()
+tableMap.Column("create_at").setTime(valor)
+tableMap.Column("create_at").getFormated()
+```
+
+---
+
+**Escritas**
+Representação dos dados alterados e informações retornadas.
+Como diferenciar “não alterar esse campo” de “atribuir zero a esse campo”?
+
+**Consultas**
+Forma de montar filtros, expressões, funções e parâmetros.
+Como representar `ativo = true AND (nome = ... OR email = ...)`?
+
+#### Resposta
+
+Modifiquei um pouco o escopo, vamos fazer assim, usando o exemplo do `tableMap` acima:
+
+```go
+tableMap.Select().Only("name", "email") // caso contrário traz tudo, na order que foi definida
+tableMap.Select().OrderBy(krios.ASC("name"), krios.DESC("email"))
+tableMap.Select().GroupBy("name", "email")
+tableMap.Select().Distinct()
+tableMap.Select().Limit(10)
+tableMap.Select().Page(limit, offset) // neste caso deve retornar krios.Paginate com as devidas estatisticas, inclusive um total que deve usar recursos proprios (Count())
+tableMap.Seldct().Count()
+tableMap.Select().Sum("age") // o mesmo vale para max, min e outros
+tableMap.Insert().setValues(
+  "name": "Joaquim",
+  "email": "VW4t0@example.com",
+  "create_At": time.Now(),
+) // o mesmo vai valer para o update (que deve obrigar informar um Where())
+tableMap.Delete().Where(
+  krios.EQ("name", "Joaquim"),
+  krios.Or(
+    krios.EQ("email", "VW4t0@example.com"),
+    krios.EQ("email", "VW4t0@example.com"),
+  ),
+) // isso vale para o select (só que no caso do delete é obrigatório)
+```
+
+Obs: tudo deve ser encadeado, deve permitir isso: `tableMap.Select().Only("name", "email").Where(krios.EQ("name", "Joaquim")).GroupBy(..)`, se for possivel claro
+
+Porem vamos permitir o cara mapear queries embeded, então:
+
+```go
+var tableMap = krios.EmbededTable{
+  name: "fileName", // aqui não sei se é possivel, mas o go deve adicionar esse arquivo no binarios, assim com os da migrations (que são definidos no arquivo env)
+}
+```
+
+```go
+tableMap.Exec() // o resultado é padrão da database/sql do go
+```
+
+Não coloquei aqui como vamos fazer para atribuir uma transação, peço a sugestão da IA
+
+---
+
+**Distribuição**
+Caminho do módulo, publicação e versões.
+Qual será o caminho de importação e como publicar uma nova versão?
+
+#### Resposta
+
+- Não faço ideia, preciso de orientação da IA
+- Qual o padrão da comunidade go?
+- Baseado em meu repositorio, como poderiamos fazer?
+
+---
+
+**Drivers e dialetos**
+Drivers utilizados e tratamento das diferenças entre bancos.
+Quais recursos terão suporte em cada banco?
+
+#### Resposta
+
+- Vamos trocar a estratégia, o usuario deve informar e importar a lib que ele quer usar
+- Sobre o dialeto, eu não sei bem como fazer, peço sugestão da IA
 
 ## 7. Critérios de atendimento
 
