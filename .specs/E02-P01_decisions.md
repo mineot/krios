@@ -4,7 +4,7 @@ Data original: 2026-10-18. Revisão vigente: 2026-10-19, M01–M06.
 
 ## 1. Escopo e organização
 
-O pacote público é `krios`, na raiz de `github.com/mineot/krios`. A fachada pública está em `krios.go`. A implementação está em `internal/core`: configuração em `config.go`, erros em `errors.go`, ciclo de vida em `db.go` e DSN em `dsn.go`. Os testes internos acompanham a implementação; a fachada utiliza aliases e delegação, mantendo o mesmo import. Ver [E01-P01](E01-P01_decisions.md).
+O pacote público é `krios`, na raiz de `github.com/mineot/krios`. A fachada pública está em `krios.go`. A implementação está sob `internal/`: configuração em `internal/config`, erros em `internal/errs`, ciclo de vida em `internal/access` e DSN em `internal/config`. Os testes internos acompanham a implementação; a fachada utiliza aliases e delegação, mantendo o mesmo import. Ver [E01-P01](E01-P01_decisions.md).
 
 Dialetos permanecem em E05-P01; migrações em E08. `MigrationsConfig` é uma reserva vazia e não implementa execução de migrações.
 
@@ -60,7 +60,7 @@ Operações bloqueantes exigem cooperação do driver: o Krios não interrompe p
 
 ## 5. Exemplos e validação
 
-Os nomes de testes internos abaixo são relativos a `internal/core/`; os caminhos de integração começam com `tests/`.
+Os nomes de testes internos abaixo são relativos a `internal/`; os caminhos de integração começam com `tests/`.
 
 Exemplos executáveis com import externo e banco temporário estão em [tests/examples_test.go](../tests/examples_test.go). O consumidor preenche a configuração em código; não há exigência de arquivo externo ou variável de ambiente.
 
@@ -80,7 +80,7 @@ Exemplos executáveis com import externo e banco temporário estão em [tests/ex
 | Revisão de organização, 18/10 | Arquivo único adotado provisoriamente; substituído pela divisão por responsabilidade em M05                                                                               |
 | E02-P03, 18/10                | `Open`, `Close` idempotente e `ErrClosed` implementados                                                                                                                   |
 | M01–M04, 19/10                | Correção do DSN MySQL, portas até 65535, orçamento anterior à preparação e testes de limpeza                                                                              |
-| M05, 19/10                    | Remoção de configuração retida sem uso e organização por responsabilidade; posteriormente movida para `internal/core`, com fachada pública na raiz a pedido do consumidor |
+| M05, 19/10                    | Remoção de configuração retida sem uso e organização por responsabilidade; posteriormente movida para `internal/`, com fachada pública na raiz a pedido do consumidor |
 
 ### Adendo — E02-P03 (2026-10-18)
 

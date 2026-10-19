@@ -74,7 +74,7 @@ Foi criada uma interface interna `executor` satisfeita por `*DB` e `*Tx`, com re
 
 Manter `Result` com as assinaturas atuais `(int64, bool)`. Documentar que `false` significa informação indisponível e que o erro nativo desse acesso não é exposto. Testar zero válido, valor disponível e erro do driver. Uma mudança pública para `(int64, error)` fica fora desta correção por não ser necessária aos achados.
 
-Organização revisada a pedido do consumidor após M06: `krios.go` na raiz mantém documentação e fachada pública (aliases e `Open`); implementação e testes internos ficam no pacote `internal/core`, com `config.go`, `errors.go`, `db.go`, `dsn.go`, `execution.go`, `rows.go`, `result.go` e `tx.go` para suas responsabilidades. Arquivos pequenos podem ser combinados quando não houver benefício de leitura. Não criar subpacotes vazios.
+Organização revisada a pedido do consumidor após M06: `krios.go` na raiz mantém documentação e fachada pública (aliases e `Open`); implementação e testes internos ficam sob `internal/`, distribuídos em pacotes por responsabilidade (`internal/config`, `internal/errs`, `internal/entity`, `internal/access`, `internal/transaction`, `internal/execute`, `internal/scan` e `internal/result`). Arquivos pequenos podem ser combinados quando não houver benefício de leitura. Não criar subpacotes vazios.
 
 ## 4. Entregas de melhoria
 
@@ -149,9 +149,9 @@ Na especificação de E04 foi adotado o mapeamento por reflexão sobre structs (
 | Entrega | Estado               | Evidência                                                                                                                                                                                                          |
 | ------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | M01     | Concluída localmente | Contratos vigentes em E02/E03, organização em E01, progresso e pendências reconciliados em 0001/0002.                                                                                                              |
-| M02     | Concluída localmente | [rows_test.go](../internal/core/rows_test.go): regressões falharam antes da correção; erros, recursos e Result validados após a correção.                                                                          |
-| M03     | Concluída localmente | [tx_test.go](../internal/core/tx_test.go), [execution_test.go](../internal/core/execution_test.go) e integração SQLite: limpeza, estado terminal, erro duplo, cancelamento e concorrência.                         |
-| M04     | Concluída localmente | [dsn_test.go](../internal/core/dsn_test.go), [db_test.go](../internal/core/db_test.go): escapes, portas, orçamento incluindo preparação e liberação no ping.                                                       |
+| M02     | Concluída localmente | [rows_test.go](../internal/scan/rows_test.go): regressões falharam antes da correção; erros, recursos e Result validados após a correção.                                                                          |
+| M03     | Concluída localmente | [tx_test.go](../internal/transaction/tx_test.go), [execution_test.go](../internal/access/execution_test.go) e integração SQLite: limpeza, estado terminal, erro duplo, cancelamento e concorrência.                         |
+| M04     | Concluída localmente | [dsn_test.go](../internal/config/dsn_test.go), [db_test.go](../internal/access/db_test.go): escapes, portas, orçamento incluindo preparação e liberação no ping.                                                       |
 | M05     | Concluída localmente | Correções testadas antes da divisão em arquivos; suíte preservada depois. `go list -deps ./...` confirmou drivers ausentes da compilação normal.                                                                   |
 | M06     | Concluída localmente | [Exemplos](../tests/examples_test.go), check/race locais em Go 1.26.8 e 1.27.1, [workflow](../.github/workflows/check.yml) e [roteiro E09](E09_manual_validation.md). Execução remota e integração real pendentes. |
 
@@ -159,7 +159,7 @@ Ao concluir cada entrega, registrar a revisão/commit, os testes executados, a v
 
 ## 7. Evidências da execução de M01–M06
 
-Revisão local de 2026-10-19, antes de commit/publicação. Após M06, a pedido do consumidor, implementação e testes internos foram movidos para `internal/core`; os nomes simples de arquivos nas evidências abaixo referem-se a esse diretório. A fachada pública e o import do consumidor foram preservados. Os caminhos abaixo identificam a implementação e seus testes; não foi criada uma versão publicada.
+Revisão local de 2026-10-19, antes de commit/publicação. Após M06, a pedido do consumidor, implementação e testes internos foram movidos para `internal/`; os links abaixo apontam para os arquivos nos novos pacotes. A fachada pública e o import do consumidor foram preservados. Os caminhos abaixo identificam a implementação e seus testes; não foi criada uma versão publicada.
 
 | Verificação                                 | Go 1.26.8 | Go 1.27.1                                    |
 | ------------------------------------------- | --------- | -------------------------------------------- |

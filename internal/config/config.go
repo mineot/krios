@@ -1,8 +1,12 @@
-package core
+// Package config defines the database configuration, validates it and builds
+// the driver-specific data source names.
+package config
 
 import (
 	"fmt"
 	"time"
+
+	"github.com/mineot/krios/internal/errs"
 )
 
 const (
@@ -84,48 +88,50 @@ type Config struct {
 	Migrations *MigrationsConfig
 }
 
-func (cfg Config) validate() error {
+// Validate reports whether the configuration is complete and consistent.
+// Failures wrap ErrInvalidConfig.
+func (cfg Config) Validate() error {
 	switch cfg.Type {
 	case DBTypeSQLite, DBTypeMySQL, DBTypePostgres:
 	default:
-		return fmt.Errorf("%w: unsupported database type %q", ErrInvalidConfig, cfg.Type)
+		return fmt.Errorf("%w: unsupported database type %q", errs.ErrInvalidConfig, cfg.Type)
 	}
 
 	if cfg.Driver == "" {
-		return fmt.Errorf("%w: driver name is required", ErrInvalidConfig)
+		return fmt.Errorf("%w: driver name is required", errs.ErrInvalidConfig)
 	}
 
 	switch cfg.Type {
 	case DBTypeSQLite:
 		if cfg.SQLite == nil {
-			return fmt.Errorf("%w: SQLite configuration is required for type %q", ErrInvalidConfig, cfg.Type)
+			return fmt.Errorf("%w: SQLite configuration is required for type %q", errs.ErrInvalidConfig, cfg.Type)
 		}
 	case DBTypeMySQL:
 		if cfg.MySQL == nil {
-			return fmt.Errorf("%w: MySQL configuration is required for type %q", ErrInvalidConfig, cfg.Type)
+			return fmt.Errorf("%w: MySQL configuration is required for type %q", errs.ErrInvalidConfig, cfg.Type)
 		}
 	case DBTypePostgres:
 		if cfg.Postgres == nil {
-			return fmt.Errorf("%w: PostgreSQL configuration is required for type %q", ErrInvalidConfig, cfg.Type)
+			return fmt.Errorf("%w: PostgreSQL configuration is required for type %q", errs.ErrInvalidConfig, cfg.Type)
 		}
 	}
 
 	if cfg.SQLite != nil && cfg.Type != DBTypeSQLite {
-		return fmt.Errorf("%w: SQLite configuration set for type %q", ErrInvalidConfig, cfg.Type)
+		return fmt.Errorf("%w: SQLite configuration set for type %q", errs.ErrInvalidConfig, cfg.Type)
 	}
 
 	if cfg.MySQL != nil && cfg.Type != DBTypeMySQL {
-		return fmt.Errorf("%w: MySQL configuration set for type %q", ErrInvalidConfig, cfg.Type)
+		return fmt.Errorf("%w: MySQL configuration set for type %q", errs.ErrInvalidConfig, cfg.Type)
 	}
 
 	if cfg.Postgres != nil && cfg.Type != DBTypePostgres {
-		return fmt.Errorf("%w: PostgreSQL configuration set for type %q", ErrInvalidConfig, cfg.Type)
+		return fmt.Errorf("%w: PostgreSQL configuration set for type %q", errs.ErrInvalidConfig, cfg.Type)
 	}
 
 	switch cfg.Type {
 	case DBTypeSQLite:
 		if cfg.SQLite.DBPath == "" {
-			return fmt.Errorf("%w: SQLite DBPath is required", ErrInvalidConfig)
+			return fmt.Errorf("%w: SQLite DBPath is required", errs.ErrInvalidConfig)
 		}
 	case DBTypeMySQL:
 		if err := validateConnection("MySQL", cfg.MySQL.Host, cfg.MySQL.User, cfg.MySQL.Password, cfg.MySQL.DBName, cfg.MySQL.Port); err != nil {
@@ -138,7 +144,7 @@ func (cfg Config) validate() error {
 	}
 
 	if cfg.Timeout < 0 {
-		return fmt.Errorf("%w: timeout must not be negative", ErrInvalidConfig)
+		return fmt.Errorf("%w: timeout must not be negative", errs.ErrInvalidConfig)
 	}
 
 	return nil
@@ -147,20 +153,22 @@ func (cfg Config) validate() error {
 func validateConnection(engine, host, user, password, database string, port int) error {
 	switch {
 	case host == "":
-		return fmt.Errorf("%w: %s host is required", ErrInvalidConfig, engine)
+		return fmt.Errorf("%w: %s host is required", errs.ErrInvalidConfig, engine)
 	case user == "":
-		return fmt.Errorf("%w: %s user is required", ErrInvalidConfig, engine)
+		return fmt.Errorf("%w: %s user is required", errs.ErrInvalidConfig, engine)
 	case password == "":
-		return fmt.Errorf("%w: %s password is required", ErrInvalidConfig, engine)
+		return fmt.Errorf("%w: %s password is required", errs.ErrInvalidConfig, engine)
 	case database == "":
-		return fmt.Errorf("%w: %s database name is required", ErrInvalidConfig, engine)
+		return fmt.Errorf("%w: %s database name is required", errs.ErrInvalidConfig, engine)
 	case port < 0 || port > 65535:
-		return fmt.Errorf("%w: %s port must be between 0 and 65535", ErrInvalidConfig, engine)
+		return fmt.Errorf("%w: %s port must be between 0 and 65535", errs.ErrInvalidConfig, engine)
 	}
 	return nil
 }
 
-func (cfg Config) timeout() time.Duration {
+// EffectiveTimeout returns the effective time budget, applying the default
+// when the configured value is zero.
+func (cfg Config) EffectiveTimeout() time.Duration {
 	if cfg.Timeout == 0 {
 		return defaultTimeout
 	}

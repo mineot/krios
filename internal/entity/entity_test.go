@@ -1,9 +1,11 @@
-package core
+package entity
 
 import (
 	"errors"
 	"sync/atomic"
 	"testing"
+
+	"github.com/mineot/krios/internal/errs"
 )
 
 type metadataUser struct {
@@ -190,8 +192,8 @@ func TestEntityOfInvalidStructs(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ent, err := tc.call()
-			if !errors.Is(err, ErrInvalidEntity) {
-				t.Fatalf("EntityOf() = %v, want ErrInvalidEntity", err)
+			if !errors.Is(err, errs.ErrInvalidEntity) {
+				t.Fatalf("EntityOf() = %v, want errs.ErrInvalidEntity", err)
 			}
 			if ent != nil {
 				t.Errorf("EntityOf() = %v, want nil descriptor", ent)
@@ -210,8 +212,8 @@ func TestEntityOfRejectsNonStructs(t *testing.T) {
 		{"slice", func() (*Entity, error) { return EntityOf[[]byte]() }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := tc.call(); !errors.Is(err, ErrInvalidEntity) {
-				t.Fatalf("EntityOf() = %v, want ErrInvalidEntity", err)
+			if _, err := tc.call(); !errors.Is(err, errs.ErrInvalidEntity) {
+				t.Fatalf("EntityOf() = %v, want errs.ErrInvalidEntity", err)
 			}
 		})
 	}

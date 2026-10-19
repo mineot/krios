@@ -1,4 +1,6 @@
-package core
+// Package entity derives table and column descriptors from Go struct types by
+// reflection and provides per-field validation and formatting.
+package entity
 
 import (
 	"fmt"
@@ -6,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"unicode"
+
+	"github.com/mineot/krios/internal/errs"
 )
 
 // Entity is the descriptor derived by reflection from a Go struct type. It
@@ -44,16 +48,19 @@ var entityCache sync.Map // reflect.Type -> *entityResult
 // EntityOf derives the entity descriptor for T, which may be a struct type or
 // a pointer to a struct type. The result is cached per type. Invalid structs
 // (unsupported fields, duplicate columns, bad tags or TableName) return an
-// error matching ErrInvalidEntity.
+// error matching errs.ErrInvalidEntity.
 func EntityOf[T any]() (*Entity, error) {
-	return entityOfType(reflect.TypeOf((*T)(nil)).Elem())
+	return OfType(reflect.TypeOf((*T)(nil)).Elem())
 }
 
-func entityOfType(t reflect.Type) (*Entity, error) {
+// OfType derives the entity descriptor for t, which may be a struct type or a
+// pointer to one. It backs EntityOf for callers that hold a reflect.Type, such
+// as the mapping layer.
+func OfType(t reflect.Type) (*Entity, error) {
 	t = indirectType(t)
 
 	if t == nil || t.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("%w: %s is not a struct type", ErrInvalidEntity, typeName(t))
+		return nil, fmt.Errorf("%w: %s is not a struct type", errs.ErrInvalidEntity, TypeName(t))
 	}
 
 	if cached, ok := entityCache.Load(t); ok {
@@ -77,7 +84,8 @@ func indirectType(t reflect.Type) reflect.Type {
 	return t
 }
 
-func typeName(t reflect.Type) string {
+// TypeName returns a printable name for t, safe for nil types.
+func TypeName(t reflect.Type) string {
 	if t == nil {
 		return "<nil>"
 	}
@@ -218,7 +226,7 @@ func deriveTableName(t reflect.Type) (string, error) {
 }
 
 func invalidEntity(t reflect.Type, format string, args ...any) error {
-	return fmt.Errorf("%w: %s: %s", ErrInvalidEntity, typeName(t), fmt.Sprintf(format, args...))
+	return fmt.Errorf("%w: %s: %s", errs.ErrInvalidEntity, TypeName(t), fmt.Sprintf(format, args...))
 }
 
 // snakeCase converts an exported field or type name to snake_case, splitting
@@ -266,9 +274,20 @@ func (e *Entity) PrimaryKeys() []string {
 	return append([]string(nil), e.primaryKeys...)
 }
 
-// fieldIndex resolves a result set column name to the mapped field position,
+// FieldIndexes returns the struct field index of every mapped column, in
+// declaration order, for use by the mapping layer. The returned slice is a
+// copy.
+func (e *Entity) FieldIndexes() []int {
+	indexes := make([]int, len(e.fields))
+	for i := range e.fields {
+		indexes[i] = e.fields[i].index
+	}
+	return indexes
+}
+
+// FieldIndex resolves a result set column name to the mapped field position,
 // trying an exact match first and then a case-insensitive one.
-func (e *Entity) fieldIndex(column string) (int, bool) {
+func (e *Entity) FieldIndex(column string) (int, bool) {
 	if idx, ok := e.byColumn[column]; ok {
 		return idx, true
 	}

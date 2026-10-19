@@ -1,4 +1,4 @@
-package core
+package config
 
 import (
 	"errors"
@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/mineot/krios/internal/errs"
 )
 
 func TestConnectionPortRange(t *testing.T) {
@@ -18,9 +20,9 @@ func TestConnectionPortRange(t *testing.T) {
 			} else {
 				cfg.Postgres.Port = port
 			}
-			err := cfg.validate()
+			err := cfg.Validate()
 			invalid := port < 0 || port > 65535
-			if errors.Is(err, ErrInvalidConfig) != invalid {
+			if errors.Is(err, errs.ErrInvalidConfig) != invalid {
 				t.Errorf("type=%s port=%d invalid=%v", cfg.Type, port, invalid)
 			}
 		}
@@ -35,7 +37,7 @@ func TestMySQLDSN(t *testing.T) {
 			cfg.MySQL.Port = port
 			cfg.MySQL.Password = "test:@/% password"
 			cfg.MySQL.DBName = "test% name"
-			dsn := buildDSN(cfg)
+			dsn := BuildDSN(cfg)
 			prefix := cfg.MySQL.User + ":" + cfg.MySQL.Password + "@tcp("
 			if !strings.HasPrefix(dsn, prefix) {
 				t.Fatal("credentials were changed")
@@ -70,7 +72,7 @@ func TestPostgresDSN(t *testing.T) {
 			p.User = "test user@"
 			p.Password = "test:@/% password"
 			p.DBName = "test% name?#"
-			u, err := url.Parse(buildDSN(cfg))
+			u, err := url.Parse(BuildDSN(cfg))
 			if err != nil {
 				t.Fatal("invalid URL")
 			}

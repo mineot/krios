@@ -4,7 +4,7 @@ Data original: 2026-10-19. Revisão vigente: M01–M06, na mesma data; revisão 
 
 ## 1. Objetivo
 
-Definir a execução compartilhada por `DB`, `Tx` e futuros construtores/arquivos SQL. A revisão corrige propagação de erros e estado terminal, mantendo as assinaturas públicas. Implementação em `internal/core`, nos arquivos `execution.go`, `rows.go`, `result.go`, `db.go` e `tx.go`. A fachada `krios.go` na raiz expõe aliases e delega `Open`; o consumidor mantém o import público original.
+Definir a execução compartilhada por `DB`, `Tx` e futuros construtores/arquivos SQL. A revisão corrige propagação de erros e estado terminal, mantendo as assinaturas públicas. Implementação sob `internal/`, nos arquivos `internal/execute/execution.go`, `internal/scan/rows.go`, `internal/result/result.go`, `internal/access/db.go` e `internal/transaction/tx.go`. A fachada `krios.go` na raiz expõe aliases e delega `Open`; o consumidor mantém o import público original.
 
 ## 2. Decisões resolvidas
 
@@ -110,7 +110,7 @@ Código que usava `ErrNoRows` para detectar encerramento deve usar `ErrClosed`/`
 
 ## 5. Evidências
 
-Os nomes de testes internos abaixo são relativos a `internal/core/`; integração e exemplos continuam em `tests/`.
+Os nomes de testes internos abaixo são relativos a `internal/`; integração e exemplos continuam em `tests/`.
 
 - `rows_test.go`: ausência de linhas, erros pendentes e de driver, conversão, propriedade e erro após fechamento, disponibilidade de Result.
 - `tx_test.go` e `driver_test.go`: finalização que falha, limpeza cancelada, erro duplo, término por contexto, resultados abertos e finalizações concorrentes; erro tardio bloqueia `Commit` (§3.4.6), `sql.ErrNoRows` não bloqueia e erro tardio originado no `DB` não afeta nada.

@@ -1,9 +1,11 @@
-package core
+package config
 
 import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/mineot/krios/internal/errs"
 )
 
 func validSQLite() Config {
@@ -44,7 +46,7 @@ func TestConfigValidateAcceptsValidConfigurations(t *testing.T) {
 	t.Parallel()
 
 	for _, cfg := range []Config{validSQLite(), validMySQL(), validPostgres()} {
-		if err := cfg.validate(); err != nil {
+		if err := cfg.Validate(); err != nil {
 			t.Errorf("validate(%q) = %v, want nil", cfg.Type, err)
 		}
 	}
@@ -166,8 +168,8 @@ func TestConfigValidateRejectsInvalidConfigurations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if err := tt.cfg().validate(); !errors.Is(err, ErrInvalidConfig) {
-				t.Fatalf("validate() = %v, want error wrapping ErrInvalidConfig", err)
+			if err := tt.cfg().Validate(); !errors.Is(err, errs.ErrInvalidConfig) {
+				t.Fatalf("validate() = %v, want error wrapping errs.ErrInvalidConfig", err)
 			}
 		})
 	}
@@ -177,7 +179,7 @@ func TestConfigAppliesDefaults(t *testing.T) {
 	t.Parallel()
 
 	sqlite := validSQLite()
-	if got := sqlite.timeout(); got != 10*time.Second {
+	if got := sqlite.EffectiveTimeout(); got != 10*time.Second {
 		t.Errorf("timeout() = %v, want 10s", got)
 	}
 
@@ -202,7 +204,7 @@ func TestConfigKeepsExplicitValues(t *testing.T) {
 	if got := mysql.MySQL.port(); got != 3307 {
 		t.Errorf("MySQL port() = %d, want 3307", got)
 	}
-	if got := mysql.timeout(); got != 2*time.Second {
+	if got := mysql.EffectiveTimeout(); got != 2*time.Second {
 		t.Errorf("timeout() = %v, want 2s", got)
 	}
 }
@@ -214,22 +216,8 @@ func TestConfigMigrationsAreOptional(t *testing.T) {
 	if cfg.Migrations != nil {
 		t.Fatalf("Migrations = %v, want nil", cfg.Migrations)
 	}
-	if err := cfg.validate(); err != nil {
+	if err := cfg.Validate(); err != nil {
 		t.Errorf("validate() with nil Migrations = %v, want nil", err)
-	}
-}
-
-func TestDBEnsureOpenReportsClosed(t *testing.T) {
-	t.Parallel()
-
-	open := &DB{}
-	if err := open.ensureOpen(); err != nil {
-		t.Errorf("ensureOpen() before Close = %v, want nil", err)
-	}
-
-	closed := &DB{closed: true}
-	if err := closed.ensureOpen(); !errors.Is(err, ErrClosed) {
-		t.Errorf("ensureOpen() after Close = %v, want ErrClosed", err)
 	}
 }
 

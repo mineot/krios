@@ -1,10 +1,13 @@
-package core
+package scan
 
 import (
 	"database/sql"
 	"errors"
 	"fmt"
 	"reflect"
+
+	"github.com/mineot/krios/internal/entity"
+	"github.com/mineot/krios/internal/errs"
 )
 
 var sqlScannerType = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
@@ -28,7 +31,7 @@ func implementsScanner(t reflect.Type) bool {
 // Structs implementing sql.Scanner and structs without exported fields keep
 // positional semantics: they are common value types (sql.Null*, time.Time) and
 // have no entity to derive.
-func entityDest(dest any) (ent *Entity, ok bool, err error) {
+func entityDest(dest any) (ent *entity.Entity, ok bool, err error) {
 	if dest == nil {
 		return nil, false, nil
 	}
@@ -46,10 +49,10 @@ func entityDest(dest any) (ent *Entity, ok bool, err error) {
 	}
 
 	if v.IsNil() {
-		return nil, true, fmt.Errorf("%w: destination is a nil pointer to %s", ErrInvalidEntity, typeName(t))
+		return nil, true, fmt.Errorf("%w: destination is a nil pointer to %s", errs.ErrInvalidEntity, entity.TypeName(t))
 	}
 
-	ent, err = entityOfType(t)
+	ent, err = entity.OfType(t)
 	return ent, true, err
 }
 
@@ -70,12 +73,13 @@ func hasExportedFields(t reflect.Type) bool {
 // unchanged; other failures are contextualized with the table while wrapping
 // the cause, and that contextualized error is recorded on the owning
 // transaction so a blocked Commit reports the same error the consumer saw.
-func (rw Row) scanEntity(ent *Entity, dest any) error {
+func (rw Row) scanEntity(ent *entity.Entity, dest any) error {
 	elem := reflect.ValueOf(dest).Elem()
-	dests := make([]any, len(ent.fields))
+	indexes := ent.FieldIndexes()
+	dests := make([]any, len(indexes))
 
-	for i := range ent.fields {
-		dests[i] = elem.Field(ent.fields[i].index).Addr().Interface()
+	for i := range indexes {
+		dests[i] = elem.Field(indexes[i]).Addr().Interface()
 	}
 
 	err := rw.r.Scan(dests...)
@@ -89,7 +93,7 @@ func (rw Row) scanEntity(ent *Entity, dest any) error {
 		return err
 	}
 
-	mappedErr := fmt.Errorf("krios: map %s: %w", ent.table, normalizeTxError(err))
+	mappedErr := fmt.Errorf("krios: map %s: %w", ent.Table(), errs.NormalizeTxError(err))
 	rw.record(mappedErr)
 
 	return mappedErr
@@ -98,7 +102,7 @@ func (rw Row) scanEntity(ent *Entity, dest any) error {
 // allDest validates the destination of Rows.All, returning the settable slice
 // value and its struct element type.
 func allDest(dest any) (reflect.Value, reflect.Type, error) {
-	invalid := fmt.Errorf("%w: destination must be a non-nil pointer to a slice of structs", ErrInvalidEntity)
+	invalid := fmt.Errorf("%w: destination must be a non-nil pointer to a slice of structs", errs.ErrInvalidEntity)
 
 	if dest == nil {
 		return reflect.Value{}, nil, invalid
@@ -137,7 +141,7 @@ func (rw *Rows) All(dest any) error {
 		return err
 	}
 
-	ent, err := entityOfType(elemType)
+	ent, err := entity.OfType(elemType)
 
 	if err != nil {
 		return err
@@ -149,10 +153,11 @@ func (rw *Rows) All(dest any) error {
 		return err
 	}
 
+	fieldIndexes := ent.FieldIndexes()
 	fields := make([]int, len(columns))
 
 	for i, column := range columns {
-		if idx, ok := ent.fieldIndex(column); ok {
+		if idx, ok := ent.FieldIndex(column); ok {
 			fields[i] = idx
 		} else {
 			fields[i] = -1
@@ -171,11 +176,11 @@ func (rw *Rows) All(dest any) error {
 				continue
 			}
 
-			dests[i] = elem.Elem().Field(ent.fields[fields[i]].index).Addr().Interface()
+			dests[i] = elem.Elem().Field(fieldIndexes[fields[i]]).Addr().Interface()
 		}
 
 		if err := rw.r.Scan(dests...); err != nil {
-			mappedErr := fmt.Errorf("krios: map %s: %w", ent.table, err)
+			mappedErr := fmt.Errorf("krios: map %s: %w", ent.Table(), err)
 			rw.record(mappedErr)
 			_ = rw.Close()
 

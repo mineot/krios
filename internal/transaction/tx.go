@@ -1,4 +1,4 @@
-package core
+package transaction
 
 import (
 	"context"
@@ -6,13 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/mineot/krios/internal/errs"
+	"github.com/mineot/krios/internal/execute"
+	"github.com/mineot/krios/internal/result"
+	"github.com/mineot/krios/internal/scan"
 )
 
 // Tx represents an explicit transaction. Execution and finalization calls are
 // serialized, without guaranteeing order between goroutines. This does not
 // serialize consumption of returned Row/Rows: consume or close results before
 // the next operation and wait for consumers before finalizing the transaction.
-// Operations after finalization return ErrTxDone. The first failure observed —
+// Operations after finalization return errs.ErrTxDone. The first failure observed —
 // an immediate ExecContext/QueryContext error or a late read failure from
 // Row.Scan or Rows iteration — is remembered and blocks Commit (see Commit).
 type Tx struct {
@@ -22,50 +27,54 @@ type Tx struct {
 	err  error // first statement or late read failure; blocks Commit (see Commit)
 }
 
+// New wraps a native *sql.Tx. It is used by the connection layer after
+// beginning a transaction.
+func New(tx *sql.Tx) *Tx {
+	return &Tx{tx: tx}
+}
+
 // ExecContext executes a query without returning rows on this transaction.
 // The first error is remembered and blocks Commit (see Commit).
-func (tx *Tx) ExecContext(ctx context.Context, query string, args ...any) (Result, error) {
+func (tx *Tx) ExecContext(ctx context.Context, query string, args ...any) (result.Result, error) {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
 	if tx.done {
-		return nil, ErrTxDone
+		return nil, errs.ErrTxDone
 	}
 
-	res, err := execWith(ctx, tx.tx, "tx exec", query, args...)
+	res, err := execute.ExecWith(ctx, tx.tx, "tx exec", query, args...)
 	return res, tx.recordError(err)
 }
 
 // QueryContext executes a query that returns rows on this transaction.
 // The first error is remembered and blocks Commit (see Commit).
-func (tx *Tx) QueryContext(ctx context.Context, query string, args ...any) (*Rows, error) {
+func (tx *Tx) QueryContext(ctx context.Context, query string, args ...any) (*scan.Rows, error) {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
 	if tx.done {
-		return nil, ErrTxDone
+		return nil, errs.ErrTxDone
 	}
 
-	r, err := queryWith(ctx, tx.tx, "tx query", query, args...)
-	if r != nil {
-		r.tx = tx
-	}
+	r, err := execute.QueryWith(ctx, tx.tx, "tx query", query, args...)
+	scan.BindRows(r, tx.recordLate)
 	return r, tx.recordError(err)
 }
 
 // QueryRowContext executes a query that is expected to return at most one row
 // on this transaction.
-func (tx *Tx) QueryRowContext(ctx context.Context, query string, args ...any) Row {
+func (tx *Tx) QueryRowContext(ctx context.Context, query string, args ...any) scan.Row {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
 	if tx.done {
-		return Row{err: ErrTxDone}
+		return scan.ErrorRow(errs.ErrTxDone)
 	}
 
-	row := queryRowWith(ctx, tx.tx, query, args...)
-	row.tx = tx
-	if row.r != nil && errors.Is(row.r.Err(), sql.ErrTxDone) {
+	row := execute.QueryRowWith(ctx, tx.tx, query, args...)
+	scan.BindRow(&row, tx.recordLate)
+	if errors.Is(scan.NativeRowError(row), sql.ErrTxDone) {
 		tx.done = true
 	}
 	return row
@@ -89,7 +98,7 @@ func (tx *Tx) Commit(ctx context.Context) error {
 	defer tx.mu.Unlock()
 
 	if tx.done {
-		return ErrTxDone
+		return errs.ErrTxDone
 	}
 
 	if tx.err != nil {
@@ -98,7 +107,7 @@ func (tx *Tx) Commit(ctx context.Context) error {
 		tx.done = true
 
 		if rbErr := tx.tx.Rollback(); rbErr != nil {
-			return fmt.Errorf("krios: tx commit blocked by previous error: %w (rollback failed: %w)", err, normalizeTxError(rbErr))
+			return fmt.Errorf("krios: tx commit blocked by previous error: %w (rollback failed: %w)", err, errs.NormalizeTxError(rbErr))
 		}
 
 		return fmt.Errorf("krios: tx commit blocked by previous error: %w", err)
@@ -109,22 +118,22 @@ func (tx *Tx) Commit(ctx context.Context) error {
 	}
 
 	tx.done = true
-	return normalizeTxError(tx.tx.Commit())
+	return errs.NormalizeTxError(tx.tx.Commit())
 }
 
 // Rollback attempts cleanup even if ctx is canceled or expired. The context
 // is retained for API compatibility; it cannot interrupt native rollback.
-// After the native attempt, all subsequent calls return ErrTxDone.
+// After the native attempt, all subsequent calls return errs.ErrTxDone.
 func (tx *Tx) Rollback(_ context.Context) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
 	if tx.done {
-		return ErrTxDone
+		return errs.ErrTxDone
 	}
 
 	tx.done = true
-	return normalizeTxError(tx.tx.Rollback())
+	return errs.NormalizeTxError(tx.tx.Rollback())
 }
 
 // recordError is called with tx.mu held. Native terminal errors are state
@@ -135,7 +144,7 @@ func (tx *Tx) recordError(err error) error {
 	} else if err != nil && tx.err == nil {
 		tx.err = err
 	}
-	return normalizeTxError(err)
+	return errs.NormalizeTxError(err)
 }
 
 // recordLate memorizes a late read failure observed on a result produced by

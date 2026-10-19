@@ -1,4 +1,6 @@
-package core
+// Package errs holds the sentinel errors shared by the Krios packages and the
+// normalization of native transaction errors.
+package errs
 
 import (
 	"database/sql"
@@ -45,7 +47,9 @@ var (
 	ErrFormat = errors.New("krios: field formatting failed")
 )
 
-func normalizeTxError(err error) error {
+// NormalizeTxError maps the native sql.ErrTxDone to ErrTxDone, preserving the
+// original cause for errors.Is/errors.As. Other errors pass through unchanged.
+func NormalizeTxError(err error) error {
 	if errors.Is(err, sql.ErrTxDone) {
 		return fmt.Errorf("%w: %w", ErrTxDone, err)
 	}

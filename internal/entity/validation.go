@@ -1,8 +1,10 @@
-package core
+package entity
 
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/mineot/krios/internal/errs"
 )
 
 // Validator is implemented by field types that validate their own value.
@@ -98,12 +100,12 @@ func (e *Entity) sliceValue(records any) (reflect.Value, error) {
 }
 
 func (e *Entity) invalidRecord(want string) error {
-	return fmt.Errorf("%w: %s requires a %s of type %s", ErrInvalidEntity, e.table, want, typeName(e.typ))
+	return fmt.Errorf("%w: %s requires a %s of type %s", errs.ErrInvalidEntity, e.table, want, TypeName(e.typ))
 }
 
 // Validate checks every mapped field of record that implements Validator,
 // in declaration order. record must be T or *T of the entity's type. It returns
-// the first failure wrapped with ErrValidation, the table and the column; nil
+// the first failure wrapped with errs.ErrValidation, the table and the column; nil
 // fields are skipped.
 func (e *Entity) Validate(record any) error {
 	v, err := e.recordValue(record)
@@ -117,7 +119,7 @@ func (e *Entity) Validate(record any) error {
 
 // ValidateAll validates each element of records ([]T or *[]T) in order,
 // stopping at the first invalid record. It returns the first failure wrapped
-// with ErrValidation, the table and the column.
+// with errs.ErrValidation, the table and the column.
 func (e *Entity) ValidateAll(records any) error {
 	slice, err := e.sliceValue(records)
 
@@ -155,7 +157,7 @@ func (e *Entity) validateValue(v reflect.Value) error {
 		}
 
 		if err := validator.Validate(); err != nil {
-			return fmt.Errorf("%w: %s: column %q: %w", ErrValidation, e.table, f.name, err)
+			return fmt.Errorf("%w: %s: column %q: %w", errs.ErrValidation, e.table, f.name, err)
 		}
 	}
 
@@ -184,7 +186,7 @@ func (e *Entity) Format(record any) (map[string]string, error) {
 				text, err := formatter.Format()
 
 				if err != nil {
-					return nil, fmt.Errorf("%w: %s: column %q: %w", ErrFormat, e.table, f.name, err)
+					return nil, fmt.Errorf("%w: %s: column %q: %w", errs.ErrFormat, e.table, f.name, err)
 				}
 
 				formatted[f.name] = text

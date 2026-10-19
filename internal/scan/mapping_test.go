@@ -1,4 +1,4 @@
-package core
+package scan_test
 
 import (
 	"context"
@@ -10,6 +10,11 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/mineot/krios/internal/access"
+	"github.com/mineot/krios/internal/errs"
+	"github.com/mineot/krios/internal/scan"
+	"github.com/mineot/krios/internal/testutil"
 )
 
 type mapUser struct {
@@ -50,9 +55,9 @@ func (r *tableRows) Next(dest []driver.Value) error {
 	return io.EOF
 }
 
-func openMapped(t *testing.T, native driver.Rows) *DB {
+func openMapped(t *testing.T, native driver.Rows) *access.DB {
 	t.Helper()
-	return openDriver(t, &testDriver{query: func() (driver.Rows, error) { return native, nil }})
+	return openDriver(t, &testutil.Driver{Query: func() (driver.Rows, error) { return native, nil }})
 }
 
 func TestRowScanStructFillsFields(t *testing.T) {
@@ -85,7 +90,7 @@ func TestRowScanStructNullAndConversion(t *testing.T) {
 		name    string
 		columns []string
 		values  [][]driver.Value
-		scan    func(Row) error
+		scan    func(scan.Row) error
 		wantErr bool
 		check   func(*testing.T)
 	}{
@@ -93,7 +98,7 @@ func TestRowScanStructNullAndConversion(t *testing.T) {
 			name:    "null into pointer",
 			columns: []string{"id", "name", "bio"},
 			values:  [][]driver.Value{{int64(1), "alice", nil}},
-			scan: func(row Row) error {
+			scan: func(row scan.Row) error {
 				var user mapUser
 				return row.Scan(&user)
 			},
@@ -103,7 +108,7 @@ func TestRowScanStructNullAndConversion(t *testing.T) {
 			name:    "null into non-nullable",
 			columns: []string{"id", "name", "bio"},
 			values:  [][]driver.Value{{int64(1), "alice", nil}},
-			scan: func(row Row) error {
+			scan: func(row scan.Row) error {
 				var required mapRequired
 				return row.Scan(&required)
 			},
@@ -113,7 +118,7 @@ func TestRowScanStructNullAndConversion(t *testing.T) {
 			name:    "incompatible type",
 			columns: []string{"id", "name", "bio"},
 			values:  [][]driver.Value{{"not an integer", "alice", "bio"}},
-			scan: func(row Row) error {
+			scan: func(row scan.Row) error {
 				var user mapUser
 				return row.Scan(&user)
 			},
@@ -123,7 +128,7 @@ func TestRowScanStructNullAndConversion(t *testing.T) {
 			name:    "column count mismatch",
 			columns: []string{"value"},
 			values:  [][]driver.Value{{int64(1)}},
-			scan: func(row Row) error {
+			scan: func(row scan.Row) error {
 				var user mapUser
 				return row.Scan(&user)
 			},
@@ -153,16 +158,16 @@ func TestRowScanDestinationClassification(t *testing.T) {
 	t.Run("nil struct pointer", func(t *testing.T) {
 		db := openMapped(t, &tableRows{columns: []string{"id"}})
 		var user *mapUser
-		if err := db.QueryRowContext(context.Background(), "read").Scan(user); !errors.Is(err, ErrInvalidEntity) {
-			t.Fatalf("Scan() = %v, want ErrInvalidEntity", err)
+		if err := db.QueryRowContext(context.Background(), "read").Scan(user); !errors.Is(err, errs.ErrInvalidEntity) {
+			t.Fatalf("Scan() = %v, want errs.ErrInvalidEntity", err)
 		}
 	})
 
 	t.Run("unnamed struct is not an entity", func(t *testing.T) {
 		db := openMapped(t, &tableRows{columns: []string{"value"}, values: [][]driver.Value{{int64(1)}}})
 		var dest struct{ Value int }
-		if err := db.QueryRowContext(context.Background(), "read").Scan(&dest); !errors.Is(err, ErrInvalidEntity) {
-			t.Fatalf("Scan() = %v, want ErrInvalidEntity", err)
+		if err := db.QueryRowContext(context.Background(), "read").Scan(&dest); !errors.Is(err, errs.ErrInvalidEntity) {
+			t.Fatalf("Scan() = %v, want errs.ErrInvalidEntity", err)
 		}
 	})
 
@@ -298,8 +303,8 @@ func TestRowsAllRejectsInvalidDestinations(t *testing.T) {
 				t.Fatalf("QueryContext() = %v", err)
 			}
 			defer rows.Close()
-			if err := rows.All(tc.dest); !errors.Is(err, ErrInvalidEntity) {
-				t.Fatalf("All() = %v, want ErrInvalidEntity", err)
+			if err := rows.All(tc.dest); !errors.Is(err, errs.ErrInvalidEntity) {
+				t.Fatalf("All() = %v, want errs.ErrInvalidEntity", err)
 			}
 		})
 	}
@@ -350,7 +355,7 @@ func TestRowsAllEmptyResultReplacesDestination(t *testing.T) {
 }
 
 func TestRowsAllPropagatesIterationError(t *testing.T) {
-	cause := &readFailure{}
+	cause := &testutil.ReadFailure{}
 	db := openMapped(t, &tableRows{columns: []string{"id"}, nextErr: cause})
 
 	rows, err := db.QueryContext(context.Background(), "read")
@@ -440,8 +445,8 @@ func TestRowsAllKeepsRecordsIndependent(t *testing.T) {
 
 func TestMappedReadFailuresBlockCommit(t *testing.T) {
 	t.Run("all iteration failure", func(t *testing.T) {
-		d := &testDriver{query: func() (driver.Rows, error) {
-			return &tableRows{columns: []string{"id"}, nextErr: &readFailure{}}, nil
+		d := &testutil.Driver{Query: func() (driver.Rows, error) {
+			return &tableRows{columns: []string{"id"}, nextErr: &testutil.ReadFailure{}}, nil
 		}}
 		tx := beginDriver(t, openDriver(t, d), context.Background())
 
@@ -454,7 +459,7 @@ func TestMappedReadFailuresBlockCommit(t *testing.T) {
 		if allErr == nil {
 			t.Fatal("All() = nil, want read failure")
 		}
-		var typed *readFailure
+		var typed *testutil.ReadFailure
 		if !errors.As(allErr, &typed) {
 			t.Fatalf("All() = %v, want read failure", allErr)
 		}
@@ -463,14 +468,14 @@ func TestMappedReadFailuresBlockCommit(t *testing.T) {
 		if !errors.As(commitErr, &typed) {
 			t.Fatalf("Commit = %v, want blocked commit preserving the read failure", commitErr)
 		}
-		if d.commits.Load() != 0 || d.rollbacks.Load() != 1 {
+		if d.Commits.Load() != 0 || d.Rollbacks.Load() != 1 {
 			t.Fatal("wrong native finalization")
 		}
 		assertTxDone(t, tx)
 	})
 
 	t.Run("row conversion failure", func(t *testing.T) {
-		d := &testDriver{query: func() (driver.Rows, error) {
+		d := &testutil.Driver{Query: func() (driver.Rows, error) {
 			return &tableRows{
 				columns: []string{"id", "name", "bio"},
 				values:  [][]driver.Value{{"not an integer", "alice", "bio"}},
@@ -486,9 +491,21 @@ func TestMappedReadFailuresBlockCommit(t *testing.T) {
 		if err := tx.Commit(context.Background()); err == nil {
 			t.Fatal("Commit = nil, want blocked commit")
 		}
-		if d.commits.Load() != 0 || d.rollbacks.Load() != 1 {
+		if d.Commits.Load() != 0 || d.Rollbacks.Load() != 1 {
 			t.Fatal("wrong native finalization")
 		}
 		assertTxDone(t, tx)
 	})
+}
+
+func equalStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }

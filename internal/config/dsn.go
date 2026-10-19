@@ -1,4 +1,4 @@
-package core
+package config
 
 import (
 	"fmt"
@@ -7,8 +7,9 @@ import (
 	"strconv"
 )
 
-// buildDSN returns the driver-specific data source name.
-func buildDSN(cfg Config) string {
+// BuildDSN returns the driver-specific data source name. The driver named in
+// Config.Driver must accept the format produced for Config.Type.
+func BuildDSN(cfg Config) string {
 	switch cfg.Type {
 	case DBTypeSQLite:
 		return cfg.SQLite.DBPath

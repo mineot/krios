@@ -1,4 +1,5 @@
-package core
+// Package result exposes driver result information in a driver-agnostic way.
+package result
 
 import (
 	"database/sql"
@@ -42,7 +43,9 @@ func (ra resultAdapter) LastInsertId() (int64, bool) {
 	return id, true
 }
 
-func wrapResult(r sql.Result) Result {
+// Wrap adapts a native sql.Result to Result. A nil result reports unavailable
+// information.
+func Wrap(r sql.Result) Result {
 	if r == nil {
 		return resultAdapter{}
 	}

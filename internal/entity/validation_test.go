@@ -1,10 +1,18 @@
-package core
+package entity
 
 import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/mineot/krios/internal/errs"
 )
+
+// mismatchUser is a struct of a different type than the entity under test,
+// used to exercise the invalid-destination paths.
+type mismatchUser struct {
+	ID int64
+}
 
 type validationUser struct {
 	ID    int64  `krios:"id"`
@@ -68,8 +76,8 @@ func TestEntityValidate(t *testing.T) {
 	invalidEmail := valid
 	invalidEmail.Email = "nope"
 	err = ent.Validate(invalidEmail)
-	if !errors.Is(err, ErrValidation) {
-		t.Fatalf("Validate() = %v, want ErrValidation", err)
+	if !errors.Is(err, errs.ErrValidation) {
+		t.Fatalf("Validate() = %v, want errs.ErrValidation", err)
 	}
 	if !strings.Contains(err.Error(), `column "email"`) || !strings.Contains(err.Error(), "validation_user") {
 		t.Errorf("Validate() = %v, want table and column context", err)
@@ -100,8 +108,8 @@ func TestEntityValidateDetectsPointerReceiver(t *testing.T) {
 	}
 
 	record := validationUser{Email: "a@b", Bio: newText("")}
-	if err := ent.Validate(record); !errors.Is(err, ErrValidation) {
-		t.Fatalf("Validate() = %v, want ErrValidation for empty *text", err)
+	if err := ent.Validate(record); !errors.Is(err, errs.ErrValidation) {
+		t.Fatalf("Validate() = %v, want errs.ErrValidation for empty *text", err)
 	}
 }
 
@@ -142,8 +150,8 @@ func TestEntityValidateAll(t *testing.T) {
 		{Email: "a@b"},
 		{Email: "nope"},
 	}
-	if err := ent.ValidateAll(invalid); !errors.Is(err, ErrValidation) {
-		t.Fatalf("ValidateAll() = %v, want ErrValidation", err)
+	if err := ent.ValidateAll(invalid); !errors.Is(err, errs.ErrValidation) {
+		t.Fatalf("ValidateAll() = %v, want errs.ErrValidation", err)
 	}
 }
 
@@ -158,15 +166,15 @@ func TestEntityValidateInvalidDestinations(t *testing.T) {
 		call func() error
 	}{
 		{"nil validate", func() error { return ent.Validate(nil) }},
-		{"wrong type", func() error { return ent.Validate(mapUser{}) }},
+		{"wrong type", func() error { return ent.Validate(mismatchUser{}) }},
 		{"nil pointer", func() error { var u *validationUser; return ent.Validate(u) }},
 		{"nil slice", func() error { return ent.ValidateAll(nil) }},
-		{"slice of wrong type", func() error { return ent.ValidateAll([]mapUser{}) }},
+		{"slice of wrong type", func() error { return ent.ValidateAll([]mismatchUser{}) }},
 		{"pointer to value", func() error { return ent.ValidateAll(&validationUser{}) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := tc.call(); !errors.Is(err, ErrInvalidEntity) {
-				t.Fatalf("call() = %v, want ErrInvalidEntity", err)
+			if err := tc.call(); !errors.Is(err, errs.ErrInvalidEntity) {
+				t.Fatalf("call() = %v, want errs.ErrInvalidEntity", err)
 			}
 		})
 	}
@@ -223,8 +231,8 @@ func TestEntityFormatError(t *testing.T) {
 	}
 
 	_, err = ent.Format(formattingErrUser{Value: "x"})
-	if !errors.Is(err, ErrFormat) {
-		t.Fatalf("Format() = %v, want ErrFormat", err)
+	if !errors.Is(err, errs.ErrFormat) {
+		t.Fatalf("Format() = %v, want errs.ErrFormat", err)
 	}
 	if !strings.Contains(err.Error(), `column "value"`) || !strings.Contains(err.Error(), "formatting_err_user") {
 		t.Errorf("Format() = %v, want table and column context", err)
@@ -240,8 +248,8 @@ func TestEntityFormatInvalidDestination(t *testing.T) {
 		t.Fatalf("EntityOf() = %v", err)
 	}
 
-	if _, err := ent.Format("nope"); !errors.Is(err, ErrInvalidEntity) {
-		t.Fatalf("Format() = %v, want ErrInvalidEntity", err)
+	if _, err := ent.Format("nope"); !errors.Is(err, errs.ErrInvalidEntity) {
+		t.Fatalf("Format() = %v, want errs.ErrInvalidEntity", err)
 	}
 }
 

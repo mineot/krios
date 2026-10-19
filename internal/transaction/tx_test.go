@@ -1,4 +1,4 @@
-package core
+package transaction_test
 
 import (
 	"context"
@@ -7,17 +7,55 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/mineot/krios/internal/access"
+	"github.com/mineot/krios/internal/config"
+	"github.com/mineot/krios/internal/errs"
+	"github.com/mineot/krios/internal/testutil"
+	"github.com/mineot/krios/internal/transaction"
 )
 
-func assertTxDone(t *testing.T, tx *Tx) {
+func driverConfig(d *testutil.Driver) config.Config { return testutil.Config(d) }
+
+func openDriver(t *testing.T, d *testutil.Driver) *access.DB {
+	t.Helper()
+
+	db, err := access.Open(context.Background(), driverConfig(d))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+
+	return db
+}
+
+func beginDriver(t *testing.T, db *access.DB, ctx context.Context) *transaction.Tx {
+	t.Helper()
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+
+	return tx
+}
+
+func assertTxDone(t *testing.T, tx *transaction.Tx) {
 	t.Helper()
 	ctx := context.Background()
 	_, execErr := tx.ExecContext(ctx, "write")
 	_, queryErr := tx.QueryContext(ctx, "read")
 	var value int
 	for _, err := range []error{execErr, queryErr, tx.QueryRowContext(ctx, "read").Scan(&value), tx.Commit(ctx), tx.Rollback(ctx)} {
-		if !errors.Is(err, ErrTxDone) {
-			t.Errorf("operation after end = %v, want ErrTxDone", err)
+		if !errors.Is(err, errs.ErrTxDone) {
+			t.Errorf("operation after end = %v, want errs.ErrTxDone", err)
 		}
 	}
 }
@@ -29,8 +67,8 @@ func TestTxFinalizationFailureIsTerminal(t *testing.T) {
 			name = "commit"
 		}
 		t.Run(name, func(t *testing.T) {
-			cause := &readFailure{}
-			d := &testDriver{commitErr: cause, rollbackErr: cause}
+			cause := &testutil.ReadFailure{}
+			d := &testutil.Driver{CommitErr: cause, RollbackErr: cause}
 			tx := beginDriver(t, openDriver(t, d), context.Background())
 			finish := tx.Rollback
 			if commit {
@@ -40,7 +78,7 @@ func TestTxFinalizationFailureIsTerminal(t *testing.T) {
 				t.Fatalf("finish = %v", err)
 			}
 			assertTxDone(t, tx)
-			if d.commits.Load()+d.rollbacks.Load() != 1 {
+			if d.Commits.Load()+d.Rollbacks.Load() != 1 {
 				t.Fatal("native finalization repeated")
 			}
 		})
@@ -55,12 +93,12 @@ func TestRollbackIgnoresCanceledContext(t *testing.T) {
 			ctx, cancel = context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 		}
 		cancel()
-		d := &testDriver{}
+		d := &testutil.Driver{}
 		tx := beginDriver(t, openDriver(t, d), context.Background())
 		if err := tx.Rollback(ctx); err != nil {
 			t.Errorf("Rollback = %v", err)
 		}
-		if d.rollbacks.Load() != 1 {
+		if d.Rollbacks.Load() != 1 {
 			t.Error("cleanup never reached driver")
 		}
 		assertTxDone(t, tx)
@@ -71,7 +109,7 @@ func TestBlockedCommitPreservesBothErrors(t *testing.T) {
 	for _, query := range []bool{false, true} {
 		t.Run(map[bool]string{false: "exec", true: "query"}[query], func(t *testing.T) {
 			first, later := errors.New("first statement"), errors.New("later statement")
-			rollbackErr := &readFailure{}
+			rollbackErr := &testutil.ReadFailure{}
 			calls := 0
 			fail := func() error {
 				calls++
@@ -80,7 +118,7 @@ func TestBlockedCommitPreservesBothErrors(t *testing.T) {
 				}
 				return later
 			}
-			d := &testDriver{rollbackErr: rollbackErr, exec: func(context.Context) error { return fail() }, query: func() (driver.Rows, error) { return nil, fail() }}
+			d := &testutil.Driver{RollbackErr: rollbackErr, Exec: func(context.Context) error { return fail() }, Query: func() (driver.Rows, error) { return nil, fail() }}
 			tx := beginDriver(t, openDriver(t, d), context.Background())
 			for range 2 {
 				if query {
@@ -95,11 +133,11 @@ func TestBlockedCommitPreservesBothErrors(t *testing.T) {
 			if !errors.Is(err, first) || !errors.Is(err, rollbackErr) || errors.Is(err, later) {
 				t.Errorf("Commit = %v; lost first or cleanup error", err)
 			}
-			var typed *readFailure
+			var typed *testutil.ReadFailure
 			if !errors.As(err, &typed) {
 				t.Error("lost rollback error type")
 			}
-			if d.commits.Load() != 0 || d.rollbacks.Load() != 1 {
+			if d.Commits.Load() != 0 || d.Rollbacks.Load() != 1 {
 				t.Error("wrong native finalization")
 			}
 			assertTxDone(t, tx)
@@ -108,42 +146,42 @@ func TestBlockedCommitPreservesBothErrors(t *testing.T) {
 }
 
 func TestCanceledCommitCanBeRetriedBeforeNativeCall(t *testing.T) {
-	d := &testDriver{}
+	d := &testutil.Driver{}
 	tx := beginDriver(t, openDriver(t, d), context.Background())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := tx.Commit(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	if d.commits.Load()+d.rollbacks.Load() != 0 {
+	if d.Commits.Load()+d.Rollbacks.Load() != 0 {
 		t.Fatal("unexpected native finalization")
 	}
 	if err := tx.Commit(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if d.commits.Load() != 1 {
+	if d.Commits.Load() != 1 {
 		t.Fatal("commit did not reach driver")
 	}
 }
 
 func TestBeginCancellationNormalizesNativeTerminalState(t *testing.T) {
-	d := &testDriver{rolledBack: make(chan struct{})}
+	d := &testutil.Driver{RolledBack: make(chan struct{})}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	tx := beginDriver(t, openDriver(t, d), ctx)
 	cancel()
 	select {
-	case <-d.rolledBack:
+	case <-d.RolledBack:
 	case <-time.After(5 * time.Second):
 		t.Fatal("native rollback did not finish")
 	}
-	// QueryRow defers the native ErrTxDone until Scan.
+	// QueryRow defers the native errs.ErrTxDone until Scan.
 	var value int
-	if err := tx.QueryRowContext(context.Background(), "read").Scan(&value); !errors.Is(err, ErrTxDone) {
+	if err := tx.QueryRowContext(context.Background(), "read").Scan(&value); !errors.Is(err, errs.ErrTxDone) {
 		t.Errorf("Scan = %v", err)
 	}
 	assertTxDone(t, tx)
-	if d.rollbacks.Load() != 1 {
+	if d.Rollbacks.Load() != 1 {
 		t.Fatal("rollback repeated")
 	}
 }
@@ -155,7 +193,7 @@ func TestLateReadFailureBlocksCommit(t *testing.T) {
 			name = "scan"
 		}
 		t.Run(name, func(t *testing.T) {
-			d := &testDriver{query: func() (driver.Rows, error) { return &testRows{nextErr: &readFailure{}}, nil }}
+			d := &testutil.Driver{Query: func() (driver.Rows, error) { return &testutil.Rows{NextErr: &testutil.ReadFailure{}}, nil }}
 			tx := beginDriver(t, openDriver(t, d), context.Background())
 
 			var lateErr error
@@ -180,11 +218,11 @@ func TestLateReadFailureBlocksCommit(t *testing.T) {
 			// The late failure poisons Commit: rollback runs and the class of
 			// error stays inspectable by the consumer.
 			err := tx.Commit(context.Background())
-			var typed *readFailure
+			var typed *testutil.ReadFailure
 			if err == nil || !errors.As(err, &typed) {
 				t.Fatalf("Commit = %v, want a blocked commit preserving the read failure", err)
 			}
-			if d.commits.Load() != 0 || d.rollbacks.Load() != 1 {
+			if d.Commits.Load() != 0 || d.Rollbacks.Load() != 1 {
 				t.Fatal("wrong native finalization")
 			}
 			assertTxDone(t, tx)
@@ -193,7 +231,7 @@ func TestLateReadFailureBlocksCommit(t *testing.T) {
 }
 
 func TestErrNoRowsDoesNotBlockCommit(t *testing.T) {
-	d := &testDriver{query: func() (driver.Rows, error) { return &testRows{}, nil }}
+	d := &testutil.Driver{Query: func() (driver.Rows, error) { return &testutil.Rows{}, nil }}
 	tx := beginDriver(t, openDriver(t, d), context.Background())
 
 	var value int
@@ -205,21 +243,18 @@ func TestErrNoRowsDoesNotBlockCommit(t *testing.T) {
 	if err := tx.Commit(context.Background()); err != nil {
 		t.Fatalf("Commit = %v, want nil", err)
 	}
-	if d.commits.Load() != 1 {
+	if d.Commits.Load() != 1 {
 		t.Fatal("commit did not reach driver")
 	}
 }
 
 func TestLateReadFailureOnDBNotRecorded(t *testing.T) {
-	d := &testDriver{query: func() (driver.Rows, error) { return &testRows{nextErr: &readFailure{}}, nil }}
+	d := &testutil.Driver{Query: func() (driver.Rows, error) { return &testutil.Rows{NextErr: &testutil.ReadFailure{}}, nil }}
 	db := openDriver(t, d)
 
-	row := db.QueryRowContext(context.Background(), "read")
-	if row.tx != nil {
-		t.Fatal("row from DB should not retain a transaction")
-	}
-	var value int
-	if err := row.Scan(&value); err == nil {
+	// DB results have no owner to record failures: the error surfaces to the
+	// consumer and nothing is poisoned.
+	if err := db.QueryRowContext(context.Background(), "read").Scan(new(int)); err == nil {
 		t.Fatal("missing read error")
 	}
 
@@ -228,9 +263,6 @@ func TestLateReadFailureOnDBNotRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	if rows.tx != nil {
-		t.Fatal("rows from DB should not retain a transaction")
-	}
 	if rows.Next() || rows.Err() == nil {
 		t.Fatal("missing iteration error")
 	}
@@ -238,8 +270,8 @@ func TestLateReadFailureOnDBNotRecorded(t *testing.T) {
 
 func TestFinalizationClosesOpenResults(t *testing.T) {
 	for _, commit := range []bool{false, true} {
-		native := &testRows{values: []driver.Value{int64(1), int64(2)}}
-		d := &testDriver{query: func() (driver.Rows, error) { return native, nil }}
+		native := &testutil.Rows{Values: []driver.Value{int64(1), int64(2)}}
+		d := &testutil.Driver{Query: func() (driver.Rows, error) { return native, nil }}
 		tx := beginDriver(t, openDriver(t, d), context.Background())
 		rows, err := tx.QueryContext(context.Background(), "read")
 		if err != nil {
@@ -256,7 +288,7 @@ func TestFinalizationClosesOpenResults(t *testing.T) {
 		if err := finish(context.Background()); err != nil {
 			t.Fatal(err)
 		}
-		if native.closes.Load() != 1 || rows.Next() {
+		if native.Closes.Load() != 1 || rows.Next() {
 			t.Fatal("result still open after finalization")
 		}
 		assertTxDone(t, tx)
@@ -265,7 +297,7 @@ func TestFinalizationClosesOpenResults(t *testing.T) {
 
 func TestConcurrentFinalizationWaitsForExecution(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
-	d := &testDriver{exec: func(ctx context.Context) error {
+	d := &testutil.Driver{Exec: func(ctx context.Context) error {
 		close(entered)
 		select {
 		case <-release:
@@ -292,10 +324,10 @@ func TestConcurrentFinalizationWaitsForExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	first, second := <-finishDone, <-finishDone
-	if !((first == nil && errors.Is(second, ErrTxDone)) || (second == nil && errors.Is(first, ErrTxDone))) {
+	if !((first == nil && errors.Is(second, errs.ErrTxDone)) || (second == nil && errors.Is(first, errs.ErrTxDone))) {
 		t.Fatalf("finalization = %v / %v", first, second)
 	}
-	if d.commits.Load()+d.rollbacks.Load() != 1 {
+	if d.Commits.Load()+d.Rollbacks.Load() != 1 {
 		t.Fatal("native transaction ended more than once")
 	}
 }

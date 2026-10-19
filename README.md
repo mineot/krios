@@ -119,18 +119,24 @@ O contexto passado a `Begin` controla toda a vida da transação e seu cancelame
 
 | Arquivo | Responsabilidade |
 | --- | --- |
-| `krios.go` | Fachada pública: aliases de tipos, constantes, erros e delegação de `Open` |
-| `internal/core/config.go`, `dsn.go`, `errors.go` | Configuração, DSNs e erros |
-| `internal/core/db.go`, `tx.go` | Conexão e transação |
-| `internal/core/execution.go` | Contrato interno Krios e delegação nativa |
-| `internal/core/rows.go`, `result.go` | Resultados e recursos de leitura |
-| `internal/core/entity.go`, `mapping.go`, `validation.go` | Entidades por reflexão (tags, cache), mapeamento para `*T`/`*[]T` e validação/formatação por campo |
-| `internal/core/*_test.go` | Testes internos; driver simulado com contadores/hooks |
+| `krios.go` | Fachada pública: aliases de tipos, constantes, erros e delegação de `Open` e `EntityOf` |
+| `internal/errs/errors.go` | Erros sentinela compartilhados e normalização de erros nativos |
+| `internal/config/config.go`, `dsn.go` | Configuração, validações e DSNs |
+| `internal/entity/entity.go`, `validation.go` | Entidades por reflexão (tags, cache) e validação/formatação por campo |
+| `internal/access/db.go` | Conexão (`Open`, `Close`) e contrato interno `executor` |
+| `internal/transaction/tx.go` | Transação (`Begin`, `Commit`, `Rollback`) e registro de erro tardio |
+| `internal/execute/execution.go` | Delegação nativa compartilhada (contexto, chamada, wrapper) |
+| `internal/scan/rows.go`, `mapping.go` | Recursos de leitura (`Row`/`Rows`, `All`) e mapeamento para `*T`/`*[]T` |
+| `internal/result/result.go` | Resultado de escrita com flags de disponibilidade |
+| `internal/testutil/driver.go` | Driver simulador com hooks e contadores usado pelos testes |
+| `internal/**/*_test.go` | Testes internos por pacote |
 | `tests/` | Integração SQLite e exemplos de consumo externo |
 | `cmd/krios/main.go` | Placeholder que imprime uma saudação; ainda não é exemplo funcional de acesso |
 | `.specs/` | Requisitos, decisões, melhorias e roteiro manual |
 
-Drivers são importados somente nos testes do repositório; não entram na compilação normal da biblioteca nem do placeholder. `DB`/`Tx` não retêm a configuração completa sem uso. O pacote público permanece na raiz e delega à implementação em `internal/core`, que não é importada pelo consumidor. Os aliases preservam os tipos e métodos disponíveis pelo import `github.com/mineot/krios`; a fachada não duplica a lógica.
+Drivers são importados somente nos testes do repositório; não entram na compilação normal da biblioteca nem do placeholder. `DB`/`Tx` não retêm a configuração completa sem uso. O pacote público permanece na raiz e delega à implementação nos pacotes internos sob `internal`, que não são importados pelo consumidor. Os aliases preservam os tipos e métodos disponíveis pelo import `github.com/mineot/krios`; a fachada não duplica a lógica.
+
+`scan` não depende de `transaction`: como Go não permite que métodos cruzem pacotes, `Row`/`Rows` guardam um recorder `func(error)` injetado por `transaction` em `QueryContext`/`QueryRowContext`. Assim o erro tardio de leitura bloqueia o commit sem criar o ciclo `scan ⇄ transaction`.
 
 ## SQLite local
 
@@ -160,6 +166,7 @@ MySQL/PostgreSQL aguardam execução do [roteiro manual](.specs/E09_manual_valid
 - [Implementação do mapeamento — E04-P02](.specs/E04-P02_decisions.md)
 - [Validação e formatação — E04-P03](.specs/E04-P03_decisions.md)
 - [Validação do mapeamento — E04-P04](.specs/E04-P04_decisions.md)
+- [Reorganização dos pacotes internos](.specs/0004_reorganization.md)
 
 ## Licença
 

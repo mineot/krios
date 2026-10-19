@@ -11,64 +11,70 @@ package krios
 import (
 	"context"
 
-	"github.com/mineot/krios/internal/core"
+	"github.com/mineot/krios/internal/access"
+	"github.com/mineot/krios/internal/config"
+	"github.com/mineot/krios/internal/entity"
+	"github.com/mineot/krios/internal/errs"
+	"github.com/mineot/krios/internal/result"
+	"github.com/mineot/krios/internal/scan"
+	"github.com/mineot/krios/internal/transaction"
 )
 
 // Public aliases preserve the consumer API while implementation lives in core.
 type (
 	// DBType identifies a supported database engine.
-	DBType = core.DBType
+	DBType = config.DBType
 	// SQLiteConfig holds the SQLite connection settings.
-	SQLiteConfig = core.SQLiteConfig
+	SQLiteConfig = config.SQLiteConfig
 	// MySQLConfig holds the MySQL connection settings.
-	MySQLConfig = core.MySQLConfig
+	MySQLConfig = config.MySQLConfig
 	// PostgresConfig holds the PostgreSQL connection settings.
-	PostgresConfig = core.PostgresConfig
+	PostgresConfig = config.PostgresConfig
 	// MigrationsConfig reserves future migration settings.
-	MigrationsConfig = core.MigrationsConfig
+	MigrationsConfig = config.MigrationsConfig
 	// Config describes database access and is passed to Open.
-	Config = core.Config
+	Config = config.Config
 	// DB is the database access returned by Open. It supports concurrent use.
-	DB = core.DB
+	DB = access.DB
 	// Tx is an explicit transaction returned by DB.Begin.
-	Tx = core.Tx
+	Tx = transaction.Tx
 	// Result exposes affected rows and generated IDs with availability flags.
-	Result = core.Result
+	Result = result.Result
 	// Row defers a single-row query's result or error until Scan.
-	Row = core.Row
+	Row = scan.Row
 	// Rows is a query iterator. The consumer must close it and check Err.
-	Rows = core.Rows
+	Rows = scan.Rows
 	// Entity is the descriptor derived by reflection from a Go struct type.
-	Entity = core.Entity
+	Entity = entity.Entity
 	// Validator is implemented by field types that validate their own value.
-	Validator = core.Validator
+	Validator = entity.Validator
 	// Formatter is implemented by field types that provide a presentation text.
-	Formatter = core.Formatter
+	Formatter = entity.Formatter
 )
 
 const (
-	DBTypeSQLite   = core.DBTypeSQLite
-	DBTypeMySQL    = core.DBTypeMySQL
-	DBTypePostgres = core.DBTypePostgres
+	DBTypeSQLite   = config.DBTypeSQLite
+	DBTypeMySQL    = config.DBTypeMySQL
+	DBTypePostgres = config.DBTypePostgres
 )
 
 var (
 	// ErrInvalidConfig indicates missing or inconsistent configuration values.
-	ErrInvalidConfig = core.ErrInvalidConfig
+	ErrInvalidConfig = errs.ErrInvalidConfig
 	// ErrDriverNotLoaded indicates an unregistered driver name.
-	ErrDriverNotLoaded = core.ErrDriverNotLoaded
+	ErrDriverNotLoaded = errs.ErrDriverNotLoaded
 	// ErrConnectionFailed identifies a connection failure, preserving its cause.
-	ErrConnectionFailed = core.ErrConnectionFailed
+	ErrConnectionFailed = errs.ErrConnectionFailed
 	// ErrClosed indicates an operation attempted after DB.Close.
-	ErrClosed = core.ErrClosed
+	ErrClosed = errs.ErrClosed
 	// ErrTxDone indicates an operation attempted on a terminal transaction.
-	ErrTxDone = core.ErrTxDone
+	ErrTxDone = errs.ErrTxDone
 	// ErrInvalidEntity indicates that a struct cannot be mapped into an entity.
-	ErrInvalidEntity = core.ErrInvalidEntity
+	ErrInvalidEntity = errs.ErrInvalidEntity
 	// ErrValidation indicates that a field rejected its own value.
-	ErrValidation = core.ErrValidation
+	ErrValidation = errs.ErrValidation
 	// ErrFormat indicates that a field failed to produce its presentation text.
-	ErrFormat = core.ErrFormat
+	ErrFormat = errs.ErrFormat
 )
 
 // Open validates cfg, opens database access and verifies connectivity.
@@ -76,7 +82,7 @@ var (
 // (10 seconds when zero). Blocking calls require driver cooperation with
 // cancellation. Resources created during a failed attempt are released.
 func Open(ctx context.Context, cfg Config) (*DB, error) {
-	return core.Open(ctx, cfg)
+	return access.Open(ctx, cfg)
 }
 
 // EntityOf derives and returns the entity descriptor for T, which may be a
@@ -87,5 +93,5 @@ func Open(ctx context.Context, cfg Config) (*DB, error) {
 // A field tag has the form `krios:"column[,pk]"`; `krios:"-"` ignores the
 // field and a missing or empty tag derives the column from the field name.
 func EntityOf[T any]() (*Entity, error) {
-	return core.EntityOf[T]()
+	return entity.EntityOf[T]()
 }

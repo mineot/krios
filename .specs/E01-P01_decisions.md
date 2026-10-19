@@ -61,6 +61,6 @@ As decisões anteriores acima permanecem como histórico. O mapa vigente de arqu
 
 ### Revisão (2026-10-19) — fachada pública e implementação interna
 
-A pedido do consumidor, os arquivos de implementação e seus testes foram movidos para `internal/core` (pacote `core`). Esta revisão substitui a distribuição física de M05 na raiz. O pacote público `krios` mantém somente `krios.go`, com aliases dos tipos, constantes, sentinelas de erro e uma função `Open` que delega à implementação. Os métodos de DB/Tx e resultados são disponibilizados pelos aliases, sem wrappers adicionais.
+A pedido do consumidor, os arquivos de implementação e seus testes foram movidos para `internal/`. Esta revisão substitui a distribuição física de M05 na raiz. O pacote público `krios` mantém somente `krios.go`, com aliases dos tipos, constantes, sentinelas de erro e uma função `Open` que delega à implementação. Os métodos de DB/Tx e resultados são disponibilizados pelos aliases, sem wrappers adicionais.
 
 O import do consumidor continua `github.com/mineot/krios`. Os testes de integração e exemplos continuam em `tests/`, usando esse import público. O módulo, os comandos do Makefile e os jobs do CI continuam operando sobre `./...`. O pacote interno contém implementação concreta; não reintroduz os subpacotes apenas documentais descartados na fase inicial.

@@ -1,4 +1,7 @@
-package core
+// Package access opens and manages database access. It validates the
+// configuration, verifies connectivity and exposes execution and transaction
+// entry points.
+package access
 
 import (
 	"context"
@@ -6,6 +9,26 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+
+	"github.com/mineot/krios/internal/config"
+	"github.com/mineot/krios/internal/errs"
+	"github.com/mineot/krios/internal/execute"
+	"github.com/mineot/krios/internal/result"
+	"github.com/mineot/krios/internal/scan"
+	"github.com/mineot/krios/internal/transaction"
+)
+
+// executor is the Krios contract used by consumers inside the packages,
+// including future builders. It preserves DB/Tx guards and transaction policy.
+type executor interface {
+	ExecContext(context.Context, string, ...any) (result.Result, error)
+	QueryContext(context.Context, string, ...any) (*scan.Rows, error)
+	QueryRowContext(context.Context, string, ...any) scan.Row
+}
+
+var (
+	_ executor = (*DB)(nil)
+	_ executor = (*transaction.Tx)(nil)
 )
 
 // DB is the database access opened by Open. It is safe for concurrent use.
@@ -25,29 +48,29 @@ type DB struct {
 // ErrConnectionFailed. Any resource created is released when opening fails.
 // Blocking driver calls must cooperate with context cancellation; Open cannot
 // interrupt non-cooperative driver preparation, connection or cleanup calls.
-func Open(ctx context.Context, cfg Config) (*DB, error) {
-	if err := cfg.validate(); err != nil {
+func Open(ctx context.Context, cfg config.Config) (*DB, error) {
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
 	if !slices.Contains(sql.Drivers(), cfg.Driver) {
-		return nil, fmt.Errorf("%w: %q", ErrDriverNotLoaded, cfg.Driver)
+		return nil, fmt.Errorf("%w: %q", errs.ErrDriverNotLoaded, cfg.Driver)
 	}
 
-	pingCtx, cancel := context.WithTimeout(ctx, cfg.timeout())
+	pingCtx, cancel := context.WithTimeout(ctx, cfg.EffectiveTimeout())
 	defer cancel()
 
 	if err := pingCtx.Err(); err != nil {
 		return nil, fmt.Errorf("krios: open: %w", err)
 	}
 
-	sqlDB, err := sql.Open(cfg.Driver, buildDSN(cfg))
+	sqlDB, err := sql.Open(cfg.Driver, config.BuildDSN(cfg))
 
 	if err != nil {
 		if ctxErr := pingCtx.Err(); ctxErr != nil {
 			return nil, fmt.Errorf("krios: open: %w", ctxErr)
 		}
-		return nil, fmt.Errorf("%w: %w", ErrConnectionFailed, err)
+		return nil, fmt.Errorf("%w: %w", errs.ErrConnectionFailed, err)
 	}
 
 	if err := pingCtx.Err(); err != nil {
@@ -62,7 +85,7 @@ func Open(ctx context.Context, cfg Config) (*DB, error) {
 			return nil, fmt.Errorf("krios: open: %w", ctxErr)
 		}
 
-		return nil, fmt.Errorf("%w: %w", ErrConnectionFailed, err)
+		return nil, fmt.Errorf("%w: %w", errs.ErrConnectionFailed, err)
 	}
 
 	if err := pingCtx.Err(); err != nil {
@@ -96,42 +119,42 @@ func (db *DB) ensureOpen() error {
 	defer db.mu.Unlock()
 
 	if db.closed {
-		return ErrClosed
+		return errs.ErrClosed
 	}
 
 	return nil
 }
 
 // ExecContext executes a query without returning rows.
-func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (Result, error) {
+func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (result.Result, error) {
 	if err := db.ensureOpen(); err != nil {
 		return nil, err
 	}
 
-	return execWith(ctx, db.sqlDB, "exec", query, args...)
+	return execute.ExecWith(ctx, db.sqlDB, "exec", query, args...)
 }
 
 // QueryContext executes a query that returns rows.
-func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (*Rows, error) {
+func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (*scan.Rows, error) {
 	if err := db.ensureOpen(); err != nil {
 		return nil, err
 	}
 
-	return queryWith(ctx, db.sqlDB, "query", query, args...)
+	return execute.QueryWith(ctx, db.sqlDB, "query", query, args...)
 }
 
 // QueryRowContext executes a query that is expected to return at most one row.
-func (db *DB) QueryRowContext(ctx context.Context, query string, args ...any) Row {
+func (db *DB) QueryRowContext(ctx context.Context, query string, args ...any) scan.Row {
 	if err := db.ensureOpen(); err != nil {
-		return Row{err: err}
+		return scan.ErrorRow(err)
 	}
 
-	return queryRowWith(ctx, db.sqlDB, query, args...)
+	return execute.QueryRowWith(ctx, db.sqlDB, query, args...)
 }
 
 // Begin starts a transaction. Its context remains in effect for the lifetime
 // of the transaction; cancellation causes database/sql to roll it back.
-func (db *DB) Begin(ctx context.Context) (*Tx, error) {
+func (db *DB) Begin(ctx context.Context) (*transaction.Tx, error) {
 	if err := db.ensureOpen(); err != nil {
 		return nil, err
 	}
@@ -146,5 +169,5 @@ func (db *DB) Begin(ctx context.Context) (*Tx, error) {
 		return nil, err
 	}
 
-	return &Tx{tx: stx}, nil
+	return transaction.New(stx), nil
 }
