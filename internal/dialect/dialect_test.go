@@ -70,6 +70,25 @@ func TestQuoteIdentQualifiedName(t *testing.T) {
 	}
 }
 
+func TestQuoteIdentEscapesDelimiters(t *testing.T) {
+	cases := []struct {
+		typ  config.DBType
+		name string
+		want string
+	}{
+		{config.DBTypeSQLite, `weird"name`, `"weird""name"`},
+		{config.DBTypeSQLite, `public.we"ird`, `"public"."we""ird"`},
+		{config.DBTypePostgres, `weird"name`, `"weird""name"`},
+		{config.DBTypeMySQL, "weird`name", "`weird``name`"},
+		{config.DBTypeMySQL, "app.we`ird", "`app`.`we``ird`"},
+	}
+	for _, tc := range cases {
+		if got := For(tc.typ).QuoteIdent(tc.name); got != tc.want {
+			t.Errorf("%s QuoteIdent(%q) = %q, want %q", tc.typ, tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestTransactionalDDLByDialect(t *testing.T) {
 	if !For(config.DBTypeSQLite).(MigrationDialect).SupportsTransactionalDDL() {
 		t.Error("SQLite must support transactional DDL")
@@ -100,6 +119,8 @@ func TestIsTransactionalStatement(t *testing.T) {
 		{"\n-- c\n/* b */\nALTER TABLE t ADD c INT", false},
 		{"DROP TABLE t", false},
 		{"TRUNCATE TABLE t", false},
+		{"ANALYZE TABLE t", false},
+		{"\n-- comment\nanalyze table t", false},
 		{"/* unterminated", false},
 	}
 

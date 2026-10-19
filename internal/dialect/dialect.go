@@ -44,17 +44,21 @@ func For(t config.DBType) Dialect {
 
 func quoteDouble(name string) string {
 	parts := strings.Split(name, ".")
+
 	for i, part := range parts {
-		parts[i] = `"` + part + `"`
+		parts[i] = `"` + strings.ReplaceAll(part, `"`, `""`) + `"`
 	}
+
 	return strings.Join(parts, ".")
 }
 
 func quoteBacktick(name string) string {
 	parts := strings.Split(name, ".")
+
 	for i, part := range parts {
-		parts[i] = "`" + part + "`"
+		parts[i] = "`" + strings.ReplaceAll(part, "`", "``") + "`"
 	}
+
 	return strings.Join(parts, ".")
 }
 

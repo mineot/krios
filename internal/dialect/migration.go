@@ -31,7 +31,7 @@ var nonTransactionalKeywords = map[string]bool{
 	"UNLOCK":   true,
 	"REPAIR":   true,
 	"OPTIMIZE": true,
-	"ANALYZY":  true,
+	"ANALYZE":  true,
 	"FLUSH":    true,
 }
 
