@@ -114,9 +114,11 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 **Entrega:** operações podem ser executadas no acesso principal ou em uma transação explicitamente escolhida.
 
-- [ ] **E03-P01 — Definir os contratos de execução.** Distinguir comandos de escrita e consultas com linhas, especificando parâmetros, resultados, erros e encerramento dos recursos de leitura. Criar a base compartilhada que será utilizada por construtores e arquivos SQL.
+- [x] **E03-P01 — Definir os contratos de execução.** Distinguir comandos de escrita e consultas com linhas, especificando parâmetros, resultados, erros e encerramento dos recursos de leitura. Criar a base compartilhada que será utilizada por construtores e arquivos SQL.
 
   > **Pendências:** definir tipos expostos de `database/sql`, assinaturas de execução, propriedade dos recursos de leitura (§6.8) e a associação dos executores à conexão ou à transação (§6.3). A exposição pública de SQL em texto não é um requisito adicional desta etapa.
+
+  > **Decisões (2026-10-19) em [E03-P01_decisions.md](E03-P01_decisions.md):** `Executor` mantido **interno** (§4, pergunta 1), `krios.Result` definido como **interface** com `RowsAffected()` e `LastInsertId()` (§4, pergunta 2), `Rows` com `Close()` obrigatório (§4, pergunta 3), serialização de `*Tx` com `sync.Mutex` (§4, pergunta 4), `Commit`/`Rollback` aceitam `context.Context` validando `ctx.Err()` (§4, pergunta 5) e `sql.ErrNoRows` preservado em `Row.Scan` (§4, pergunta 6). Todos os contratos especificados nas §3.1–§3.4.
 
 - [ ] **E03-P02 — Implementar `Begin`, `Commit` e `Rollback`.** Criar o objeto de transação e a execução vinculada a ele, mantendo operações do acesso principal independentes. Rejeitar novas operações em uma transação encerrada.
 
@@ -245,8 +247,8 @@ Ao concluir uma entrega, registrar abaixo sua referência de implementação e v
 | Entrega | Estado       | Evidências e observações |
 | ------- | ------------ | ------------------------ |
 | E01     | Concluída | E01-P01, E01-P02 e E01-P03 concluídos. Checks remotos Go 1.26/1.27 confirmados pelo consumidor e versão incorporada do SQLite aceita em 18/10/2026. Ver [Makefile](../Makefile), [testes](../tests/sqlite_test.go), [workflow](../.github/workflows/check.yml) e [README](../README.md). |
-| E02     | Não iniciada | —                        |
-| E03     | Não iniciada | —                        |
+| E02     | Concluída | E02-P01–E02-P04 concluídos. Configuração, `Open`/`Close`, validação nos três bancos, idempotência e erros documentados. Ver [E02-P01_decisions.md](E02-P01_decisions.md) e [krios.go](../krios.go). |
+| E03     | Em andamento | E03-P01 concluída com contratos definidos em [E03-P01_decisions.md](E03-P01_decisions.md) (Executor interno, `krios.Result` interface, `Rows` fechado pelo consumidor, serialização de `*Tx`, `Commit`/`Rollback` com `context.Context` e `sql.ErrNoRows` em `Row.Scan`). Faltam E03-P02 e E03-P03. |
 | E04     | Não iniciada | —                        |
 | E05     | Não iniciada | —                        |
 | E06     | Não iniciada | —                        |
