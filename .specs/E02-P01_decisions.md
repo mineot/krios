@@ -10,16 +10,16 @@ Dialetos permanecem em E05-P01; migrações em E08. `MigrationsConfig` é uma re
 
 ## 2. Configuração vigente
 
-| Campo | Contrato |
-| --- | --- |
-| `Type DBType` | Obrigatório: `DBTypeSQLite`, `DBTypeMySQL` ou `DBTypePostgres` |
-| `Driver string` | Nome registrado pelo driver importado pelo consumidor em `database/sql` |
-| `SQLite *SQLiteConfig` | Obrigatório somente para SQLite; `DBPath` não vazio |
-| `MySQL *MySQLConfig` | Obrigatório somente para MySQL; `Host`, `User`, `Password`, `DBName` não vazios |
-| `Postgres *PostgresConfig` | Obrigatório somente para PostgreSQL; mesmos campos obrigatórios do MySQL |
-| `Port int`, nas configurações de rede | Zero aplica 3306/5432; valores explícitos entre 1 e 65535 |
-| `Timeout time.Duration` | Zero aplica 10 segundos; negativo é inválido |
-| `Migrations *MigrationsConfig` | Opcional; sem validação de conteúdo nesta entrega |
+| Campo                                 | Contrato                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------- |
+| `Type DBType`                         | Obrigatório: `DBTypeSQLite`, `DBTypeMySQL` ou `DBTypePostgres`                  |
+| `Driver string`                       | Nome registrado pelo driver importado pelo consumidor em `database/sql`         |
+| `SQLite *SQLiteConfig`                | Obrigatório somente para SQLite; `DBPath` não vazio                             |
+| `MySQL *MySQLConfig`                  | Obrigatório somente para MySQL; `Host`, `User`, `Password`, `DBName` não vazios |
+| `Postgres *PostgresConfig`            | Obrigatório somente para PostgreSQL; mesmos campos obrigatórios do MySQL        |
+| `Port int`, nas configurações de rede | Zero aplica 3306/5432; valores explícitos entre 1 e 65535                       |
+| `Timeout time.Duration`               | Zero aplica 10 segundos; negativo é inválido                                    |
+| `Migrations *MigrationsConfig`        | Opcional; sem validação de conteúdo nesta entrega                               |
 
 A ordem de validação é: tipo, driver vazio, configuração do banco ausente, configuração de outro banco preenchida, campos obrigatórios, porta e timeout. Valores inválidos preservam `ErrInvalidConfig` via `errors.Is`. Os campos são recebidos literalmente, sem trim de senha ou identificador. Senha vazia continua fora do escopo aprovado. Não existe opção de desativar o timeout.
 
@@ -29,11 +29,11 @@ A ordem de validação é: tipo, driver vazio, configuração do banco ausente, 
 
 O consumidor importa o driver; a biblioteca não o importa. `Open` confere `sql.Drivers()`, mas não tenta deduzir compatibilidade pelo nome. O consumidor deve escolher um driver que aceite o formato gerado.
 
-| Banco | Import de referência | Nome de registro | DSN |
-| --- | --- | --- | --- |
-| SQLite | `modernc.org/sqlite` | `sqlite` | O próprio `DBPath` |
-| MySQL | `github.com/go-sql-driver/mysql` | `mysql` | `user:password@tcp(host:port)/dbname` |
-| PostgreSQL | `github.com/jackc/pgx/v5/stdlib` | `pgx` | URL `postgres://user:password@host:port/dbname` |
+| Banco      | Import de referência             | Nome de registro | DSN                                             |
+| ---------- | -------------------------------- | ---------------- | ----------------------------------------------- |
+| SQLite     | `modernc.org/sqlite`             | `sqlite`         | O próprio `DBPath`                              |
+| MySQL      | `github.com/go-sql-driver/mysql` | `mysql`          | `user:password@tcp(host:port)/dbname`           |
+| PostgreSQL | `github.com/jackc/pgx/v5/stdlib` | `pgx`            | URL `postgres://user:password@host:port/dbname` |
 
 MySQL mantém a senha literal e aplica `url.PathEscape` a `DBName`. A instrução original de percent-encoding da senha estava incorreta e foi substituída pelo [contrato do driver](https://github.com/go-sql-driver/mysql#dsn-data-source-name). PostgreSQL usa `net/url`; ambos usam `net.JoinHostPort` para preservar IPv6. Os testes de DSN não abrem servidores reais nem validam todos os drivers possíveis.
 
@@ -48,13 +48,13 @@ Após validar configuração e registro do driver, `Open` inicia o orçamento te
 
 Operações bloqueantes exigem cooperação do driver: o Krios não interrompe preparação, conexão ou fechamento que ignorem cancelamento. Não são criadas goroutines para abandonar essas operações. O sucesso do ping confirma conectividade naquele momento, sem garantir esquema ou disponibilidade futura.
 
-| Condição | Identificação com `errors.Is` |
-| --- | --- |
-| Configuração inválida | `ErrInvalidConfig` |
-| Driver não registrado | `ErrDriverNotLoaded` |
-| Cancelamento/prazo observado | `context.Canceled` / `context.DeadlineExceeded`, sem `ErrConnectionFailed` |
-| Falha de preparação/conexão/ping sem cancelamento observado | `ErrConnectionFailed` e a causa original |
-| Operação iniciada após `Close` | `ErrClosed`; em `QueryRowContext`, comunicado por `Scan` |
+| Condição                                                    | Identificação com `errors.Is`                                              |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Configuração inválida                                       | `ErrInvalidConfig`                                                         |
+| Driver não registrado                                       | `ErrDriverNotLoaded`                                                       |
+| Cancelamento/prazo observado                                | `context.Canceled` / `context.DeadlineExceeded`, sem `ErrConnectionFailed` |
+| Falha de preparação/conexão/ping sem cancelamento observado | `ErrConnectionFailed` e a causa original                                   |
+| Operação iniciada após `Close`                              | `ErrClosed`; em `QueryRowContext`, comunicado por `Scan`                   |
 
 `Close` é idempotente: chamadas seguintes retornam `nil`. O estado é protegido por mutex. Operações que concorrem com o encerramento podem concluir ou retornar falha nativa; não há promessa de ordem, mas não devem causar corrida de dados no wrapper. Os resultados já entregues continuam sujeitos às regras de propriedade de E03.
 
@@ -64,23 +64,23 @@ Os nomes de testes internos abaixo são relativos a `internal/core/`; os caminho
 
 Exemplos executáveis com import externo e banco temporário estão em [tests/examples_test.go](../tests/examples_test.go). O consumidor preenche a configuração em código; não há exigência de arquivo externo ou variável de ambiente.
 
-| Evidência | Localização | Alcance |
-| --- | --- | --- |
-| Campos, padrões e portas | `krios_test.go`, `dsn_test.go` | Regras locais e formato do DSN |
-| Falha/cancelamento no ping e liberação | `db_test.go`, `driver_test.go` | Driver simulado com contadores; inclui preparação dentro do orçamento |
-| Abertura/fechamento reais | `tests/lifecycle_test.go`, `tests/lifecycle_three_test.go` | SQLite temporário |
-| Falhas controladas para configurações MySQL/PostgreSQL | `tests/lifecycle_three_test.go` | Propagação de falhas, sem conexão real |
-| Integração MySQL/PostgreSQL | [Roteiro E09](E09_manual_validation.md) | Pendente de execução pelo consumidor |
+| Evidência                                              | Localização                                                | Alcance                                                               |
+| ------------------------------------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------------- |
+| Campos, padrões e portas                               | `krios_test.go`, `dsn_test.go`                             | Regras locais e formato do DSN                                        |
+| Falha/cancelamento no ping e liberação                 | `db_test.go`, `driver_test.go`                             | Driver simulado com contadores; inclui preparação dentro do orçamento |
+| Abertura/fechamento reais                              | `tests/lifecycle_test.go`, `tests/lifecycle_three_test.go` | SQLite temporário                                                     |
+| Falhas controladas para configurações MySQL/PostgreSQL | `tests/lifecycle_three_test.go`                            | Propagação de falhas, sem conexão real                                |
+| Integração MySQL/PostgreSQL                            | [Roteiro E09](E09_manual_validation.md)                    | Pendente de execução pelo consumidor                                  |
 
 ## 6. Histórico das decisões
 
-| Marco | Decisão e revisão |
-| --- | --- |
-| E02-P01, 18/10 | Configuração por banco, driver explícito, timeout de 10 s e erros distinguíveis |
-| Revisão de organização, 18/10 | Arquivo único adotado provisoriamente; substituído pela divisão por responsabilidade em M05 |
-| E02-P03, 18/10 | `Open`, `Close` idempotente e `ErrClosed` implementados |
-| M01–M04, 19/10 | Correção do DSN MySQL, portas até 65535, orçamento anterior à preparação e testes de limpeza |
-| M05, 19/10 | Remoção de configuração retida sem uso e organização por responsabilidade; posteriormente movida para `internal/core`, com fachada pública na raiz a pedido do consumidor |
+| Marco                         | Decisão e revisão                                                                                                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E02-P01, 18/10                | Configuração por banco, driver explícito, timeout de 10 s e erros distinguíveis                                                                                           |
+| Revisão de organização, 18/10 | Arquivo único adotado provisoriamente; substituído pela divisão por responsabilidade em M05                                                                               |
+| E02-P03, 18/10                | `Open`, `Close` idempotente e `ErrClosed` implementados                                                                                                                   |
+| M01–M04, 19/10                | Correção do DSN MySQL, portas até 65535, orçamento anterior à preparação e testes de limpeza                                                                              |
+| M05, 19/10                    | Remoção de configuração retida sem uso e organização por responsabilidade; posteriormente movida para `internal/core`, com fachada pública na raiz a pedido do consumidor |
 
 ### Adendo — E02-P03 (2026-10-18)
 

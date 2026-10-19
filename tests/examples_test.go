@@ -140,3 +140,57 @@ func Example_rollbackAfterReadError() {
 	// Output:
 	// rollback com contexto cancelado: true
 }
+
+// exampleEntity maps a table using the entity descriptor: tags name the
+// columns and the type name is overridden by TableName.
+type exampleEntity struct {
+	ID   int64   `krios:"id,pk"`
+	Name string  `krios:"name"`
+	Bio  *string `krios:"bio"`
+}
+
+func (exampleEntity) TableName() string { return "users" }
+
+func Example_structMapping() {
+	db, cleanup := exampleDatabase()
+	defer cleanup()
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, bio TEXT)"); err != nil {
+		panic(err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO users (id, name, bio) VALUES (1, 'alice', 'reader'), (2, 'bob', NULL)"); err != nil {
+		panic(err)
+	}
+
+	// Rows.All maps every remaining row by column name and closes the iterator.
+	rows, err := db.QueryContext(ctx, "SELECT id, name, bio FROM users ORDER BY id")
+	if err != nil {
+		panic(err)
+	}
+	var users []exampleEntity
+	if err := rows.All(&users); err != nil {
+		panic(err)
+	}
+	for _, u := range users {
+		bio := "<nil>"
+		if u.Bio != nil {
+			bio = *u.Bio
+		}
+		fmt.Println(u.ID, u.Name, bio)
+	}
+
+	// A single record maps through Row.Scan; sql.ErrNoRows is preserved.
+	var one exampleEntity
+	err = db.QueryRowContext(ctx, "SELECT id, name, bio FROM users WHERE id = ?", 1).Scan(&one)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("registro único:", one.ID, one.Name, *one.Bio)
+	err = db.QueryRowContext(ctx, "SELECT id, name, bio FROM users WHERE id = ?", 99).Scan(&one)
+	fmt.Println("ausente:", errors.Is(err, sql.ErrNoRows))
+	// Output:
+	// 1 alice reader
+	// 2 bob <nil>
+	// registro único: 1 alice reader
+	// ausente: true
+}

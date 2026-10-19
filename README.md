@@ -2,7 +2,7 @@
 
 Biblioteca Go em desenvolvimento para acesso a SQLite3, MySQL e PostgreSQL por `database/sql`.
 
-Implementados: configuração em código, abertura/fechamento, SQL parametrizado e transações explícitas. O mapeamento de entidades por reflexão sobre structs, as consultas encadeadas, o SQL incorporado e as migrações pertencem às próximas entregas. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN e aguardam integração manual.
+Implementados: configuração em código, abertura/fechamento, SQL parametrizado, transações explícitas e mapeamento de entidades por reflexão sobre structs (`krios.EntityOf`, `Row.Scan` para um registro e `Rows.All` para múltiplos). As consultas encadeadas, o SQL incorporado e as migrações pertencem às próximas entregas. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN e aguardam integração manual.
 
 ## Desenvolvimento local
 
@@ -50,6 +50,30 @@ O nome de registro e o formato do DSN devem ser compatíveis com o driver escolh
 
 Os [exemplos executáveis](tests/examples_test.go) demonstram abertura, consulta, `Rows.Err`, transações, commit bloqueado e rollback após erro de leitura. Execute `go test -run '^Example' -v ./tests`. Cada exemplo cria seu próprio banco temporário.
 
+## Entidades e mapeamento
+
+Estruturas Go descrevem tabelas e colunas; tags `krios` nomeiam as colunas:
+
+```go
+type User struct {
+    ID   int64   `krios:"id,pk"`
+    Name string  `krios:"name"`
+    Bio  *string `krios:"bio"`
+}
+
+func (User) TableName() string { return "users" }
+```
+
+- Nome da tabela: `snake_case` do tipo, sobrescrito por um método `TableName() string` (por valor ou ponteiro).
+- Campo sem tag usa `snake_case` do nome (`UserID` → `user_id`); `krios:"-"` ignora o campo; `pk` marca a chave primária (pode ser composta).
+- `krios.EntityOf[User]()` devolve o descritor `*krios.Entity` (`Table`, `Columns`, `PrimaryKeys`, `Type`), memorizado por tipo. Entidade inválida retorna `ErrInvalidEntity`.
+- `Row.Scan(&user)` preenche um registro na ordem de declaração dos campos; `sql.ErrNoRows` é preservado.
+- `Rows.All(&users)` preenche `*[]T` casando colunas por nome (exato e depois sem diferenciar maiúsculas/minúsculas). Colunas sem campo são descartadas, campos sem coluna permanecem zero e o iterador é sempre fechado; o slice só é substituído em caso de sucesso.
+- `NULL` é aceito em `*T` e `sql.Null*`; `NULL` em campo não anulável e conversões incompatíveis retornam erro contextualizado com a tabela, preservando a causa (`errors.Is`/`errors.As`). Ler um registro único por `Row.Scan` é posicional; para nomes/aliases e subconjuntos de colunas use `Rows.All`.
+- `Rows.Columns()` expõe os nomes do resultset corrente.
+
+O exemplo executável `Example_structMapping` em [tests/examples_test.go](tests/examples_test.go) percorre os dois modos de leitura. As decisões de sintaxe e correspondência estão em [E04-P02](.specs/E04-P02_decisions.md).
+
 ## Erros e propriedade dos resultados
 
 - Tratar erros com `errors.Is`/`errors.As`. Erros do driver são preservados.
@@ -57,6 +81,7 @@ Os [exemplos executáveis](tests/examples_test.go) demonstram abertura, consulta
 - Após `QueryContext`, registrar `defer rows.Close()`, tratar `Scan` e verificar `rows.Err()` depois da iteração. O erro continua disponível após fechar.
 - `Result.RowsAffected()` e `LastInsertId()` retornam valor e disponibilidade; zero com `true` é válido. `false` inclui erro do driver ao obter essa informação, cujo detalhe não é exposto pela interface.
 - Wrappers de acesso e resultados são obtidos por `Open`, `Begin` e consultas; seus valores zero não representam recursos prontos para uso.
+- `ErrInvalidEntity` indica struct/tag/`TableName` inválidos na derivação ou destino de mapeamento malformado. Erros de mapeamento preservam a causa do driver.
 
 ## Transações e concorrência
 
@@ -77,6 +102,7 @@ O contexto passado a `Begin` controla toda a vida da transação e seu cancelame
 | `internal/core/db.go`, `tx.go` | Conexão e transação |
 | `internal/core/execution.go` | Contrato interno Krios e delegação nativa |
 | `internal/core/rows.go`, `result.go` | Resultados e recursos de leitura |
+| `internal/core/entity.go`, `mapping.go` | Entidades por reflexão (tags, cache) e mapeamento para `*T`/`*[]T` |
 | `internal/core/*_test.go` | Testes internos; driver simulado com contadores/hooks |
 | `tests/` | Integração SQLite e exemplos de consumo externo |
 | `cmd/krios/main.go` | Placeholder que imprime uma saudação; ainda não é exemplo funcional de acesso |
@@ -108,6 +134,8 @@ MySQL/PostgreSQL aguardam execução do [roteiro manual](.specs/E09_manual_valid
 - [Base técnica — E01-P01](.specs/E01-P01_decisions.md)
 - [Configuração — E02-P01](.specs/E02-P01_decisions.md)
 - [Execução e transações — E03-P01](.specs/E03-P01_decisions.md)
+- [Mapeamento por reflexão — E04-P01](.specs/E04-P01_decisions.md)
+- [Implementação do mapeamento — E04-P02](.specs/E04-P02_decisions.md)
 
 ## Licença
 

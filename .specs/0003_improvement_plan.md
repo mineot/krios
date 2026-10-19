@@ -42,15 +42,15 @@ Essa escolha é uma política do Krios para preservar a assinatura existente. `d
 
 Separar explicitamente os estados e resultados:
 
-| Situação | Comportamento esperado do Krios |
-| --- | --- |
-| Operação após encerramento | Retornar `ErrTxDone`, inclusive via `Row.Scan` |
-| Contexto fornecido a `Commit` já cancelado, antes da chamada nativa, sem erro anterior | Retornar erro de contexto; não marcar encerramento apenas por essa rejeição |
-| Primeiro erro de `ExecContext`/`QueryContext` já registrado | `Commit` tenta rollback, inclusive com contexto cancelado; preserva o erro original |
-| Falha de `Commit` ou `Rollback` depois de finalização nativa | Encerrar o uso do wrapper; preservar a causa da falha; chamadas seguintes retornam `ErrTxDone` |
-| Cancelamento do contexto de `Begin` | Considerar a reversão automática nativa e normalizar o estado terminal quando observado |
-| Erro original e erro de rollback | Preservar ambos para inspeção por `errors.Is`/`errors.As`, usando encadeamento múltiplo |
-| Falha de confirmação com resultado remoto incerto | Não afirmar sucesso, rollback garantido ou segurança de repetir a operação |
+| Situação                                                                               | Comportamento esperado do Krios                                                                |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Operação após encerramento                                                             | Retornar `ErrTxDone`, inclusive via `Row.Scan`                                                 |
+| Contexto fornecido a `Commit` já cancelado, antes da chamada nativa, sem erro anterior | Retornar erro de contexto; não marcar encerramento apenas por essa rejeição                    |
+| Primeiro erro de `ExecContext`/`QueryContext` já registrado                            | `Commit` tenta rollback, inclusive com contexto cancelado; preserva o erro original            |
+| Falha de `Commit` ou `Rollback` depois de finalização nativa                           | Encerrar o uso do wrapper; preservar a causa da falha; chamadas seguintes retornam `ErrTxDone` |
+| Cancelamento do contexto de `Begin`                                                    | Considerar a reversão automática nativa e normalizar o estado terminal quando observado        |
+| Erro original e erro de rollback                                                       | Preservar ambos para inspeção por `errors.Is`/`errors.As`, usando encadeamento múltiplo        |
+| Falha de confirmação com resultado remoto incerto                                      | Não afirmar sucesso, rollback garantido ou segurança de repetir a operação                     |
 
 Manter o bloqueio de commit após erro imediato como proteção adicional já adotada. Não ampliar nesta correção a observação automática de falhas em `Scan`/iteração: o consumidor deve tratá-las e solicitar rollback. Ausência de linha e erro de conversão não receberão novas políticas implícitas. Documentar essa fronteira sem afirmar que todo grupo com qualquer falha será automaticamente revertido.
 
@@ -78,14 +78,14 @@ Organização revisada a pedido do consumidor após M06: `krios.go` na raiz mant
 
 ## 4. Entregas de melhoria
 
-| Entrega | Resultado | Prioridade | Depende de |
-| --- | --- | --- | --- |
-| M01 | Contratos vigentes e evidências reconciliados | Alta | — |
-| M02 | Erros e resultados de leitura preservados | Alta | M01 |
-| M03 | Finalização e limpeza transacional consistentes | Alta | M02 |
-| M04 | DSNs, validações e abertura verificados | Média | M01 |
-| M05 | Base interna e organização simplificadas | Média | M02, M03, M04 |
-| M06 | Exemplos, verificações e passagem para E04 | Alta para concluir a revisão | M01–M05 |
+| Entrega | Resultado                                       | Prioridade                   | Depende de    |
+| ------- | ----------------------------------------------- | ---------------------------- | ------------- |
+| M01     | Contratos vigentes e evidências reconciliados   | Alta                         | —             |
+| M02     | Erros e resultados de leitura preservados       | Alta                         | M01           |
+| M03     | Finalização e limpeza transacional consistentes | Alta                         | M02           |
+| M04     | DSNs, validações e abertura verificados         | Média                        | M01           |
+| M05     | Base interna e organização simplificadas        | Média                        | M02, M03, M04 |
+| M06     | Exemplos, verificações e passagem para E04      | Alta para concluir a revisão | M01–M05       |
 
 Sequência recomendada: M01 → M02 → M03 → M04 → M05 → M06. M04 é tecnicamente independente das correções de leitura/transação após M01.
 
@@ -146,44 +146,43 @@ Na especificação de E04 foi adotado o mapeamento por reflexão sobre structs (
 
 ## 6. Registro de progresso
 
-| Entrega | Estado | Evidência |
-| --- | --- | --- |
-| M01 | Concluída localmente | Contratos vigentes em E02/E03, organização em E01, progresso e pendências reconciliados em 0001/0002. |
-| M02 | Concluída localmente | [rows_test.go](../internal/core/rows_test.go): regressões falharam antes da correção; erros, recursos e Result validados após a correção. |
-| M03 | Concluída localmente | [tx_test.go](../internal/core/tx_test.go), [execution_test.go](../internal/core/execution_test.go) e integração SQLite: limpeza, estado terminal, erro duplo, cancelamento e concorrência. |
-| M04 | Concluída localmente | [dsn_test.go](../internal/core/dsn_test.go), [db_test.go](../internal/core/db_test.go): escapes, portas, orçamento incluindo preparação e liberação no ping. |
-| M05 | Concluída localmente | Correções testadas antes da divisão em arquivos; suíte preservada depois. `go list -deps ./...` confirmou drivers ausentes da compilação normal. |
-| M06 | Concluída localmente | [Exemplos](../tests/examples_test.go), check/race locais em Go 1.26.8 e 1.27.1, [workflow](../.github/workflows/check.yml) e [roteiro E09](E09_manual_validation.md). Execução remota e integração real pendentes. |
+| Entrega | Estado               | Evidência                                                                                                                                                                                                          |
+| ------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M01     | Concluída localmente | Contratos vigentes em E02/E03, organização em E01, progresso e pendências reconciliados em 0001/0002.                                                                                                              |
+| M02     | Concluída localmente | [rows_test.go](../internal/core/rows_test.go): regressões falharam antes da correção; erros, recursos e Result validados após a correção.                                                                          |
+| M03     | Concluída localmente | [tx_test.go](../internal/core/tx_test.go), [execution_test.go](../internal/core/execution_test.go) e integração SQLite: limpeza, estado terminal, erro duplo, cancelamento e concorrência.                         |
+| M04     | Concluída localmente | [dsn_test.go](../internal/core/dsn_test.go), [db_test.go](../internal/core/db_test.go): escapes, portas, orçamento incluindo preparação e liberação no ping.                                                       |
+| M05     | Concluída localmente | Correções testadas antes da divisão em arquivos; suíte preservada depois. `go list -deps ./...` confirmou drivers ausentes da compilação normal.                                                                   |
+| M06     | Concluída localmente | [Exemplos](../tests/examples_test.go), check/race locais em Go 1.26.8 e 1.27.1, [workflow](../.github/workflows/check.yml) e [roteiro E09](E09_manual_validation.md). Execução remota e integração real pendentes. |
 
 Ao concluir cada entrega, registrar a revisão/commit, os testes executados, a versão de Go e qualquer limitação remanescente. A revisão parcial original é a motivação do plano, não evidência de que suas melhorias foram implementadas.
-
 
 ## 7. Evidências da execução de M01–M06
 
 Revisão local de 2026-10-19, antes de commit/publicação. Após M06, a pedido do consumidor, implementação e testes internos foram movidos para `internal/core`; os nomes simples de arquivos nas evidências abaixo referem-se a esse diretório. A fachada pública e o import do consumidor foram preservados. Os caminhos abaixo identificam a implementação e seus testes; não foi criada uma versão publicada.
 
-| Verificação | Go 1.26.8 | Go 1.27.1 |
-| --- | --- | --- |
-| `make check CGO_ENABLED=0` | Passou | Passou, selecionado com `GO=/caminho/bin/go` |
-| `make race` | Passou | Passou, selecionado com `GO=/caminho/bin/go` |
-| Exemplos compilados e executados pela suíte | Passou | Passou |
+| Verificação                                 | Go 1.26.8 | Go 1.27.1                                    |
+| ------------------------------------------- | --------- | -------------------------------------------- |
+| `make check CGO_ENABLED=0`                  | Passou    | Passou, selecionado com `GO=/caminho/bin/go` |
+| `make race`                                 | Passou    | Passou, selecionado com `GO=/caminho/bin/go` |
+| Exemplos compilados e executados pela suíte | Passou    | Passou                                       |
 
 Antes das correções, a suíte nova falhou nos erros de `QueryRowContext`, preservação de `Rows.Err`, finalização transacional, rollback cancelado, preservação do erro duplo, porta 65536, DSN MySQL e orçamento de preparação. Depois das correções, a suíte passou; a divisão física em arquivos ocorreu posteriormente e foi validada novamente nas duas linhas Go.
 
-| Achado ou melhoria | Implementação | Evidência principal |
-| --- | --- | --- |
-| QueryRow mascarava falhas | `rows.go`, `execution.go`, `db.go`, `tx.go` | `TestQueryRowErrors`, correção de `TestTxRejectsAllMethodsAfterDone` |
-| Close apagava erro de leitura | `rows.go` | `TestRowsLifecycle` |
-| Estado divergente após falha de finalização | `tx.go`, `errors.go` | `TestTxFinalizationFailureIsTerminal`, `TestBeginCancellationNormalizesNativeTerminalState` |
-| Cancelamento impedia limpeza | `tx.go` | `TestRollbackIgnoresCanceledContext`, `TestBlockedCommitPreservesBothErrors` |
-| Política de erros tardios e concorrência | Contrato E03 e `tx.go` | `TestLateReadFailureBlocksCommit` (renomeado de `...RequiresConsumerRollback` em E03-P04), `TestErrNoRowsDoesNotBlockCommit`, `TestFinalizationClosesOpenResults`, `TestConcurrentFinalizationWaitsForExecution`, exemplos |
-| DSN e limite de portas | `dsn.go`, `config.go` | `TestMySQLDSN`, `TestPostgresDSN`, `TestConnectionPortRange` |
-| Timeout só começava após preparação | `db.go` | `TestOpenBudgetIncludesDriverPreparation`, `TestOpenUsesShortestDeadline` |
-| Falta de evidência de liberação/cancelamento | `db.go`, contrato executor | `TestOpenReleasesConnectionOnPingFailure`, `TestOpenCancellationDuringPing`, `TestExecutionCancellationInFlight` |
-| Executor inadequado para consumidores internos | `execution.go` | Asserções em compilação e `TestExecutorPreservesPublicGuards` |
-| Estado, helpers e organização redundantes | `db.go`, `tx.go`, arquivos separados e testes limpos | Suíte após refatoração e dependências compiladas somente da biblioteca padrão |
-| Documentação e progresso excessivamente otimistas | E01/E02/E03, 0001/0002, README | E02-P04 reaberto como parcial; formatos, histórico e limitações explícitos |
-| Exemplos e automação | `tests/examples_test.go`, Makefile, workflow | Exemplos reais SQLite e check/race locais; novo job remoto ainda não executado |
+| Achado ou melhoria                                | Implementação                                        | Evidência principal                                                                                                                                                                                                        |
+| ------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| QueryRow mascarava falhas                         | `rows.go`, `execution.go`, `db.go`, `tx.go`          | `TestQueryRowErrors`, correção de `TestTxRejectsAllMethodsAfterDone`                                                                                                                                                       |
+| Close apagava erro de leitura                     | `rows.go`                                            | `TestRowsLifecycle`                                                                                                                                                                                                        |
+| Estado divergente após falha de finalização       | `tx.go`, `errors.go`                                 | `TestTxFinalizationFailureIsTerminal`, `TestBeginCancellationNormalizesNativeTerminalState`                                                                                                                                |
+| Cancelamento impedia limpeza                      | `tx.go`                                              | `TestRollbackIgnoresCanceledContext`, `TestBlockedCommitPreservesBothErrors`                                                                                                                                               |
+| Política de erros tardios e concorrência          | Contrato E03 e `tx.go`                               | `TestLateReadFailureBlocksCommit` (renomeado de `...RequiresConsumerRollback` em E03-P04), `TestErrNoRowsDoesNotBlockCommit`, `TestFinalizationClosesOpenResults`, `TestConcurrentFinalizationWaitsForExecution`, exemplos |
+| DSN e limite de portas                            | `dsn.go`, `config.go`                                | `TestMySQLDSN`, `TestPostgresDSN`, `TestConnectionPortRange`                                                                                                                                                               |
+| Timeout só começava após preparação               | `db.go`                                              | `TestOpenBudgetIncludesDriverPreparation`, `TestOpenUsesShortestDeadline`                                                                                                                                                  |
+| Falta de evidência de liberação/cancelamento      | `db.go`, contrato executor                           | `TestOpenReleasesConnectionOnPingFailure`, `TestOpenCancellationDuringPing`, `TestExecutionCancellationInFlight`                                                                                                           |
+| Executor inadequado para consumidores internos    | `execution.go`                                       | Asserções em compilação e `TestExecutorPreservesPublicGuards`                                                                                                                                                              |
+| Estado, helpers e organização redundantes         | `db.go`, `tx.go`, arquivos separados e testes limpos | Suíte após refatoração e dependências compiladas somente da biblioteca padrão                                                                                                                                              |
+| Documentação e progresso excessivamente otimistas | E01/E02/E03, 0001/0002, README                       | E02-P04 reaberto como parcial; formatos, histórico e limitações explícitos                                                                                                                                                 |
+| Exemplos e automação                              | `tests/examples_test.go`, Makefile, workflow         | Exemplos reais SQLite e check/race locais; novo job remoto ainda não executado                                                                                                                                             |
 
 A verificação de dependências foi feita com `go list -deps ./...`: os pacotes de produção usam somente a biblioteca padrão além dos próprios pacotes Krios. Os drivers reais continuam nos testes. Links locais da documentação e sintaxe dos exemplos completos de Go em Markdown foram verificados; o consumidor manual não foi executado contra servidores.
 

@@ -95,15 +95,15 @@ Registro fora do consumo: `Row`/`Rows` carregam referência interna à `Tx` e o 
 
 ## 4. Histórico e compatibilidade
 
-| Decisão original | Estado na revisão |
-| --- | --- |
-| Interface de execução interna | Mantida; agora há distinção explícita entre contrato Krios e contrato nativo |
-| Result como interface `(int64, bool)` | Mantida, com disponibilidade documentada |
-| Fechamento de Rows pelo consumidor | Mantido; preservação do erro corrigida |
-| Serialização de chamadas em Tx | Mantida, com limite explícito para resultados abertos |
-| Commit/Rollback verificavam contexto antes de tudo | Superada: limpeza tem precedência; rejeição prévia de commit sem erro registrado continua |
-| Preservação de `sql.ErrNoRows` | Mantida somente para consulta vazia; teste que mascarava encerramento foi corrigido |
-| E03-P02: finalização marcava done apenas no sucesso | Superada: tentativas nativas são terminais mesmo quando falham |
+| Decisão original                                     | Estado na revisão                                                                                                                        |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Interface de execução interna                        | Mantida; agora há distinção explícita entre contrato Krios e contrato nativo                                                             |
+| Result como interface `(int64, bool)`                | Mantida, com disponibilidade documentada                                                                                                 |
+| Fechamento de Rows pelo consumidor                   | Mantido; preservação do erro corrigida                                                                                                   |
+| Serialização de chamadas em Tx                       | Mantida, com limite explícito para resultados abertos                                                                                    |
+| Commit/Rollback verificavam contexto antes de tudo   | Superada: limpeza tem precedência; rejeição prévia de commit sem erro registrado continua                                                |
+| Preservação de `sql.ErrNoRows`                       | Mantida somente para consulta vazia; teste que mascarava encerramento foi corrigido                                                      |
+| E03-P02: finalização marcava done apenas no sucesso  | Superada: tentativas nativas são terminais mesmo quando falham                                                                           |
 | E03-P03: commit bloqueado por primeiro erro imediato | Mantida e estendida: erros tardios de leitura também bloqueiam (§3.4.6); erro duplo preservado e contexto cancelado não impede a limpeza |
 
 Código que usava `ErrNoRows` para detectar encerramento deve usar `ErrClosed`/`ErrTxDone`. Código que esperava cancelamento de `Rollback` deve tratar o resultado da limpeza. A assinatura de nenhum método público mudou.

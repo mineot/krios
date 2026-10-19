@@ -16,21 +16,38 @@ type Row struct {
 }
 
 // Scan copies the values from the matched row into the provided destinations.
-// It returns sql.ErrNoRows if no row was found. Any other failure is recorded
-// on the owning transaction and blocks Commit (see Tx.Commit).
+// It returns sql.ErrNoRows if no row was found. A single struct pointer is
+// filled from the mapped entity columns in declaration order (see EntityOf);
+// any other destination is scanned positionally. Any failure is recorded on
+// the owning transaction and blocks Commit (see Tx.Commit).
 func (rw Row) Scan(dest ...any) error {
 	if rw.err != nil {
 		rw.record(rw.err)
 		return rw.err
 	}
+
 	if rw.r == nil {
 		err := errors.New("krios: row is invalid")
 		rw.record(err)
 		return err
 	}
 
+	if len(dest) == 1 {
+		ent, mapped, err := entityDest(dest[0])
+
+		if err != nil {
+			rw.record(err)
+			return err
+		}
+
+		if mapped {
+			return rw.scanEntity(ent, dest[0])
+		}
+	}
+
 	err := rw.r.Scan(dest...)
 	rw.record(err)
+
 	return normalizeTxError(err)
 }
 
@@ -93,6 +110,23 @@ func (rw *Rows) Err() error {
 	err := rw.r.Err()
 	rw.record(err)
 	return err
+}
+
+// Columns returns the result set column names in driver order. A failure is
+// recorded on the owning transaction and blocks Commit.
+func (rw *Rows) Columns() ([]string, error) {
+	if rw == nil || rw.r == nil {
+		return nil, errors.New("krios: rows are closed or invalid")
+	}
+
+	columns, err := rw.r.Columns()
+
+	if err != nil {
+		rw.record(err)
+		return nil, err
+	}
+
+	return columns, nil
 }
 
 // Close closes the underlying rows iterator. It is idempotent. Failures

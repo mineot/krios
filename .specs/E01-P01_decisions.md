@@ -6,13 +6,13 @@ Data: 2026-10-18
 
 ## Decisões
 
-| Item | Decisão | Justificativa |
-|-----|---------|---------------|
-| Caminho do módulo | `github.com/mineot/krios` | Baseado no remote `origin https://github.com/mineot/krios.git`. |
-| Versão mínima de Go | `go 1.26.0` | Desenvolvimento na atualização mais recente da linha 1.27; testes automatizados nas atualizações mais recentes das linhas 1.26 e 1.27. `go.mod` declara `go 1.26.0`. |
-| Pacote público de entrada | Pacote `krios` na raiz | Mais idiomático e consistente com importação `github.com/mineot/krios`. |
-| Divisão de responsabilidades (inicial) | Configuração, conexão, transações, migrações, entidades, consultas e dialetos. A divisão física em arquivos e pacotes é provisória. | As responsabilidades orientam a implementação; subpacotes devem ser mantidos ou criados conforme uma separação concreta os justifique. |
-| Fronteira API vs interna | Público expõe: `Config`, tipos/abstrações necessárias p/ `Open`, `Close`, `Begin`, `Commit`, `Rollback`, entidades, construtores/resultados, configuração/execução de migrações. Interno mantém montagem SQL, dialetos, execução, validação. | Implementação interna não deve ser consumida fora do módulo. |
+| Item                                   | Decisão                                                                                                                                                                                                                                      | Justificativa                                                                                                                                                        |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Caminho do módulo                      | `github.com/mineot/krios`                                                                                                                                                                                                                    | Baseado no remote `origin https://github.com/mineot/krios.git`.                                                                                                      |
+| Versão mínima de Go                    | `go 1.26.0`                                                                                                                                                                                                                                  | Desenvolvimento na atualização mais recente da linha 1.27; testes automatizados nas atualizações mais recentes das linhas 1.26 e 1.27. `go.mod` declara `go 1.26.0`. |
+| Pacote público de entrada              | Pacote `krios` na raiz                                                                                                                                                                                                                       | Mais idiomático e consistente com importação `github.com/mineot/krios`.                                                                                              |
+| Divisão de responsabilidades (inicial) | Configuração, conexão, transações, migrações, entidades, consultas e dialetos. A divisão física em arquivos e pacotes é provisória.                                                                                                          | As responsabilidades orientam a implementação; subpacotes devem ser mantidos ou criados conforme uma separação concreta os justifique.                               |
+| Fronteira API vs interna               | Público expõe: `Config`, tipos/abstrações necessárias p/ `Open`, `Close`, `Begin`, `Commit`, `Rollback`, entidades, construtores/resultados, configuração/execução de migrações. Interno mantém montagem SQL, dialetos, execução, validação. | Implementação interna não deve ser consumida fora do módulo.                                                                                                         |
 
 ## Observações
 
@@ -26,8 +26,8 @@ Data: 2026-10-18
 
 Mudança **intencional** da organização de arquivos, preservando a decisão original acima para rastreabilidade.
 
-| Item | Decisão original | Decisão revisada | Justificativa |
-|-----|------------------|------------------|---------------|
+| Item                         | Decisão original                                                                                   | Decisão revisada                                                                                                                                      | Justificativa                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | Organização física do pacote | `krios` na raiz com responsabilidades em **arquivos separados** (`config.go`, `errs.go`, `doc.go`) | Pacote público `krios` na raiz, com o código desta fase **consolidado em um único arquivo `krios.go`** (documentação do pacote, configuração e erros) | Reduzir a dispersão e facilitar a leitura humana nesta fase inicial |
 
 Observações da revisão:
@@ -41,8 +41,8 @@ Observações da revisão:
 
 Mudança **intencional** da organização dos testes do pacote, preservando as decisões anteriores para rastreabilidade.
 
-| Item | Decisão anterior | Decisão revisada | Justificativa |
-|-----|------------------|------------------|---------------|
+| Item                        | Decisão anterior                                                                                | Decisão revisada                                                             | Justificativa                                 |
+| --------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
 | Arquivos de teste do pacote | `config_test.go` e `example_config_test.go` separados, o segundo no pacote externo `krios_test` | Concentrar os testes do pacote em um único `krios_test.go` no pacote `krios` | Organização e leitura mais simples nesta fase |
 
 Observações da revisão:

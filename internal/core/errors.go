@@ -27,6 +27,11 @@ var (
 	// ErrTxDone indicates an operation attempted on a terminal transaction,
 	// including after a native finalization failure or automatic rollback.
 	ErrTxDone = errors.New("krios: transaction already committed or rolled back")
+
+	// ErrInvalidEntity indicates that a struct could not be mapped into an
+	// entity: it is not a struct, has no mappable fields, uses unsupported
+	// fields or tags, or declares an invalid TableName.
+	ErrInvalidEntity = errors.New("krios: invalid entity")
 )
 
 func normalizeTxError(err error) error {

@@ -120,19 +120,19 @@ Executar `go mod tidy`, `go run .` e guardar o resultado e versões. Usar soment
 
 ## 3. Cenários complementares
 
-| ID | Procedimento | Resultado esperado |
-| --- | --- | --- |
-| V01 | Executar o consumidor acima em cada banco | Mensagem de sucesso; grupos confirmados/revertidos; operação externa preservada |
-| V02 | Criar usuário de teste com senha contendo `@`, `:`, `%` e espaço; repetir V01 | Autenticação com senha literal, sem percent-encoding manual |
-| V03 | Criar banco com nome contendo `%` e espaço, se aceito pelo servidor; preencher nome literal | Acesso ao banco exato; não a um nome decodificado incorretamente |
-| V04 | Repetir V01 com host `::1`, se o servidor escutar em IPv6 | Endereço composto corretamente; registrar indisponibilidade do ambiente separadamente |
-| V05 | Antes de `Open`, cancelar o contexto; repetir com deadline passado | Erro de contexto verificável, sem `ErrConnectionFailed` |
-| V06 | Executar `SELECT SLEEP(5)` (MySQL) ou `SELECT pg_sleep(5)` (PostgreSQL) com contexto de 100 ms, via Query/Scan | Cancelamento/prazo conforme driver; registrar duração e causa; fechar resultados e reverter Tx quando utilizada |
-| V07 | Abrir consulta com várias linhas, ler somente a primeira e fechar; depois fazer nova consulta | Recurso liberado; nova consulta utilizável; consultar `Err` após fechar |
-| V08 | Dentro de Tx, provocar erro de conversão em `Scan` e solicitar rollback explicitamente | Erro de leitura preservado; escritas anteriores do grupo desfeitas |
-| V09 | Enquanto Tx contém insert ainda não confirmado, consultar via DB; depois rollback | Operação no DB não participa do grupo nem enxerga escrita não confirmada no isolamento configurado; registrar bloqueios/isolamento |
-| V10 | Consumir/fechar resultados e finalizar; repetir todos os métodos na Tx | `ErrTxDone`, inclusive em `Row.Scan` |
-| V11 | Em ambiente descartável, interromper a conexão durante confirmação, se houver infraestrutura para controle | Erro preservado; objeto terminal; estado remoto registrado como incerto até consulta independente |
+| ID  | Procedimento                                                                                                                                            | Resultado esperado                                                                                                                                                                                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V01 | Executar o consumidor acima em cada banco                                                                                                               | Mensagem de sucesso; grupos confirmados/revertidos; operação externa preservada                                                                                                                            |
+| V02 | Criar usuário de teste com senha contendo `@`, `:`, `%` e espaço; repetir V01                                                                           | Autenticação com senha literal, sem percent-encoding manual                                                                                                                                                |
+| V03 | Criar banco com nome contendo `%` e espaço, se aceito pelo servidor; preencher nome literal                                                             | Acesso ao banco exato; não a um nome decodificado incorretamente                                                                                                                                           |
+| V04 | Repetir V01 com host `::1`, se o servidor escutar em IPv6                                                                                               | Endereço composto corretamente; registrar indisponibilidade do ambiente separadamente                                                                                                                      |
+| V05 | Antes de `Open`, cancelar o contexto; repetir com deadline passado                                                                                      | Erro de contexto verificável, sem `ErrConnectionFailed`                                                                                                                                                    |
+| V06 | Executar `SELECT SLEEP(5)` (MySQL) ou `SELECT pg_sleep(5)` (PostgreSQL) com contexto de 100 ms, via Query/Scan                                          | Cancelamento/prazo conforme driver; registrar duração e causa; fechar resultados e reverter Tx quando utilizada                                                                                            |
+| V07 | Abrir consulta com várias linhas, ler somente a primeira e fechar; depois fazer nova consulta                                                           | Recurso liberado; nova consulta utilizável; consultar `Err` após fechar                                                                                                                                    |
+| V08 | Dentro de Tx, provocar erro de conversão em `Scan` e solicitar rollback explicitamente                                                                  | Erro de leitura preservado; escritas anteriores do grupo desfeitas                                                                                                                                         |
+| V09 | Enquanto Tx contém insert ainda não confirmado, consultar via DB; depois rollback                                                                       | Operação no DB não participa do grupo nem enxerga escrita não confirmada no isolamento configurado; registrar bloqueios/isolamento                                                                         |
+| V10 | Consumir/fechar resultados e finalizar; repetir todos os métodos na Tx                                                                                  | `ErrTxDone`, inclusive em `Row.Scan`                                                                                                                                                                       |
+| V11 | Em ambiente descartável, interromper a conexão durante confirmação, se houver infraestrutura para controle                                              | Erro preservado; objeto terminal; estado remoto registrado como incerto até consulta independente                                                                                                          |
 | V12 | Dentro de Tx, executar escrita e depois leitura com erro de conversão (ex.: texto em `int`) ou erro de iteração; tentar `Commit` sem rollback explícito | `Commit` bloqueado com auto-rollback (E03-P04): erro original recuperável por `errors.Is`, escrita não persistida, Tx terminal. Repetir com consulta sem linhas (`ErrNoRows`) → `Commit` **não** bloqueado |
 
 V11 não autoriza repetir automaticamente a escrita: confirmar a situação por outra conexão. Se o ambiente não permitir injeção controlada, registrar o cenário como não executado; os testes simulados continuam sendo evidência somente do contrato local.
@@ -141,20 +141,20 @@ V11 não autoriza repetir automaticamente a escrita: confirmar a situação por 
 
 Aplicam-se quando E08 estiver implementado; ver [E08-P01_decisions.md](E08-P01_decisions.md).
 
-| ID | Procedimento | Resultado esperado |
-| --- | --- | --- |
-| M01 | MySQL: migração com DDL não-transacional seguido de comando que falha no meio do arquivo | Arquivo registrado com `in_progress`/`failed`; erro com contexto; `applied_at` não preenchido para o arquivo falho |
-| M02 | Após M01, chamar `RunMigrations` novamente | Bloqueio com `ErrPartialMigration` (`Direction`, `TargetVersion`, `LastVersion`, `LastFile`, `Status`); nenhuma execução automática |
-| M03 | Após M01, inspecionar o banco | DDL já executado **não** revertido (sem rollback de commit implícito); estado real registrado como evidência |
-| M04 | Recuperar conforme política: concluir manualmente e marcar registro como `applied` (ou reverter manualmente e limpar registro); repetir `RunMigrations` | Execução segue da versão correta até a desejada |
-| M05 | PostgreSQL e SQLite: sequência com falha deliberada em arquivo | Rollback integral do percurso; nenhum registro `in_progress` remanescente; banco como antes da execução |
-| M06 | Estado `0` e ausência de versão desejada | Reversão total apenas em versão `0` explícita; versão ausente retorna erro antes de executar |
+| ID  | Procedimento                                                                                                                                            | Resultado esperado                                                                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| M01 | MySQL: migração com DDL não-transacional seguido de comando que falha no meio do arquivo                                                                | Arquivo registrado com `in_progress`/`failed`; erro com contexto; `applied_at` não preenchido para o arquivo falho                  |
+| M02 | Após M01, chamar `RunMigrations` novamente                                                                                                              | Bloqueio com `ErrPartialMigration` (`Direction`, `TargetVersion`, `LastVersion`, `LastFile`, `Status`); nenhuma execução automática |
+| M03 | Após M01, inspecionar o banco                                                                                                                           | DDL já executado **não** revertido (sem rollback de commit implícito); estado real registrado como evidência                        |
+| M04 | Recuperar conforme política: concluir manualmente e marcar registro como `applied` (ou reverter manualmente e limpar registro); repetir `RunMigrations` | Execução segue da versão correta até a desejada                                                                                     |
+| M05 | PostgreSQL e SQLite: sequência com falha deliberada em arquivo                                                                                          | Rollback integral do percurso; nenhum registro `in_progress` remanescente; banco como antes da execução                             |
+| M06 | Estado `0` e ausência de versão desejada                                                                                                                | Reversão total apenas em versão `0` explícita; versão ausente retorna erro antes de executar                                        |
 
 ## 4. Registro de evidências
 
-| Banco | Driver/versão | Servidor/versão | Go/revisão Krios | Cenários | Resultado | Pendências |
-| --- | --- | --- | --- | --- | --- | --- |
-| MySQL | A preencher | A preencher | A preencher | Nenhum | Não executado | Integração real |
-| PostgreSQL | A preencher | A preencher | A preencher | Nenhum | Não executado | Integração real |
+| Banco      | Driver/versão | Servidor/versão | Go/revisão Krios | Cenários | Resultado     | Pendências      |
+| ---------- | ------------- | --------------- | ---------------- | -------- | ------------- | --------------- |
+| MySQL      | A preencher   | A preencher     | A preencher      | Nenhum   | Não executado | Integração real |
+| PostgreSQL | A preencher   | A preencher     | A preencher      | Nenhum   | Não executado | Integração real |
 
 Para cada cenário, guardar: data, configuração sem segredos, passos executados, resultado esperado, resultado observado e limitação do ambiente. Falha conhecida deve gerar correção e nova evidência. Ao completar os cenários aplicáveis, atualizar E02-P04 e a validação final E09; ausência de evidência não deve ser marcada como sucesso.
