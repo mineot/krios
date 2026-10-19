@@ -386,6 +386,58 @@ func TestRowsColumnsReportsResultset(t *testing.T) {
 	}
 }
 
+func TestRowScanStructIsPositionalByDeclarationOrder(t *testing.T) {
+	// Row.Scan(&T) ignores column names and fills fields in declaration order.
+	// Result columns are labeled differently, yet values land positionally:
+	// column 0 -> ID, column 1 -> Name, column 2 -> Bio.
+	native := &tableRows{
+		columns: []string{"first", "second", "third"},
+		values:  [][]driver.Value{{int64(7), "alice", "hello"}},
+	}
+	db := openMapped(t, native)
+
+	var user mapUser
+	if err := db.QueryRowContext(context.Background(), "read").Scan(&user); err != nil {
+		t.Fatalf("Scan() = %v", err)
+	}
+	if user.ID != 7 || user.Name != "alice" || user.Bio == nil || *user.Bio != "hello" {
+		t.Errorf("positional mapping = %+v, want fields filled by result position", user)
+	}
+}
+
+func TestRowsAllKeepsRecordsIndependent(t *testing.T) {
+	native := &tableRows{
+		columns: []string{"id", "name", "bio"},
+		values: [][]driver.Value{
+			{int64(1), "alice", "a"},
+			{int64(2), "bob", "b"},
+			{int64(3), "carol", nil},
+		},
+	}
+	db := openMapped(t, native)
+
+	rows, err := db.QueryContext(context.Background(), "read")
+	if err != nil {
+		t.Fatalf("QueryContext() = %v", err)
+	}
+
+	var users []mapUser
+	if err := rows.All(&users); err != nil {
+		t.Fatalf("All() = %v", err)
+	}
+	if len(users) != 3 {
+		t.Fatalf("len(users) = %d, want 3", len(users))
+	}
+	for i, want := range []mapUser{{ID: 1, Name: "alice"}, {ID: 2, Name: "bob"}, {ID: 3, Name: "carol"}} {
+		if users[i].ID != want.ID || users[i].Name != want.Name {
+			t.Errorf("users[%d] = %+v, want id=%d name=%s", i, users[i], want.ID, want.Name)
+		}
+	}
+	if users[0].Bio == nil || *users[0].Bio != "a" || users[1].Bio == nil || *users[1].Bio != "b" || users[2].Bio != nil {
+		t.Errorf("bio values leaked between records: %+v", users)
+	}
+}
+
 func TestMappedReadFailuresBlockCommit(t *testing.T) {
 	t.Run("all iteration failure", func(t *testing.T) {
 		d := &testDriver{query: func() (driver.Rows, error) {

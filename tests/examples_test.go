@@ -258,3 +258,54 @@ func Example_validationFormatting() {
 	// erro de validação: true
 	// status: ACTIVE bio: reader id: 1
 }
+
+// exampleRecord demonstrates the E04 completion criterion: reading and
+// inspecting values of distinct records through reflection mapping.
+type exampleRecord struct {
+	ID   int64          `krios:"id,pk"`
+	Name string         `krios:"name"`
+	Bio  sql.NullString `krios:"bio"`
+}
+
+func (exampleRecord) TableName() string { return "records" }
+
+func Example_mappingValidation() {
+	db, cleanup := exampleDatabase()
+	defer cleanup()
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, "CREATE TABLE records (id INTEGER PRIMARY KEY, name TEXT NOT NULL, bio TEXT)"); err != nil {
+		panic(err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO records (id, name, bio) VALUES (1, 'alice', 'reader'), (2, 'bob', NULL)"); err != nil {
+		panic(err)
+	}
+
+	rows, err := db.QueryContext(ctx, "SELECT id, name, bio FROM records ORDER BY id")
+	if err != nil {
+		panic(err)
+	}
+	// Rows.All maps every row by column name; records stay independent.
+	var records []exampleRecord
+	if err := rows.All(&records); err != nil {
+		panic(err)
+	}
+	for _, r := range records {
+		bio := "<null>"
+		if r.Bio.Valid {
+			bio = r.Bio.String
+		}
+		fmt.Println(r.ID, r.Name, bio)
+	}
+
+	// A single record maps through Row.Scan; NULL populates sql.NullString.
+	var one exampleRecord
+	err = db.QueryRowContext(ctx, "SELECT id, name, bio FROM records WHERE id = ?", 2).Scan(&one)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("nome:", one.Name, "bio válida:", one.Bio.Valid)
+	// Output:
+	// 1 alice reader
+	// 2 bob <null>
+	// nome: bob bio válida: false
+}

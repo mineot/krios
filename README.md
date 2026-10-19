@@ -93,6 +93,8 @@ func (e Email) Format() (string, error) { return string(e), nil }
 
 Campos primitivos (`string`, `int`, …) não têm validação/formatação sem um tipo nomeado. O exemplo `Example_validationFormatting` demonstra o fluxo; as decisões estão em [E04-P03](.specs/E04-P03_decisions.md).
 
+O exemplo `Example_mappingValidation` reúne o fluxo completo de E04 (leitura de vários registros, `sql.Null*` e registro único) e as decisões de verificação estão em [E04-P04](.specs/E04-P04_decisions.md).
+
 ## Erros e propriedade dos resultados
 
 - Tratar erros com `errors.Is`/`errors.As`. Erros do driver são preservados.
@@ -157,6 +159,7 @@ MySQL/PostgreSQL aguardam execução do [roteiro manual](.specs/E09_manual_valid
 - [Mapeamento por reflexão — E04-P01](.specs/E04-P01_decisions.md)
 - [Implementação do mapeamento — E04-P02](.specs/E04-P02_decisions.md)
 - [Validação e formatação — E04-P03](.specs/E04-P03_decisions.md)
+- [Validação do mapeamento — E04-P04](.specs/E04-P04_decisions.md)
 
 ## Licença
 

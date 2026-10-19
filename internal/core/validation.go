@@ -198,7 +198,7 @@ func (e *Entity) Format(record any) (map[string]string, error) {
 		}
 
 		text, ok := stringValue(fv)
-		
+
 		if !ok {
 			text = ""
 		}
