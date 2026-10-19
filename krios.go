@@ -2,8 +2,8 @@
 // query building for SQLite3, MySQL and PostgreSQL on top of database/sql.
 // Configuration, the connection lifecycle (Open and Close), explicit
 // transactions (Begin, Commit, Rollback with execution on DB and Tx) and
-// reflection-based entity mapping are implemented; migrations and query
-// building are not implemented yet.
+// reflection-based entity mapping with per-field validation and formatting are
+// implemented; migrations and query building are not implemented yet.
 //
 // Drivers are chosen and imported by the consumer; Krios does not import them.
 package krios
@@ -40,6 +40,10 @@ type (
 	Rows = core.Rows
 	// Entity is the descriptor derived by reflection from a Go struct type.
 	Entity = core.Entity
+	// Validator is implemented by field types that validate their own value.
+	Validator = core.Validator
+	// Formatter is implemented by field types that provide a presentation text.
+	Formatter = core.Formatter
 )
 
 const (
@@ -61,6 +65,10 @@ var (
 	ErrTxDone = core.ErrTxDone
 	// ErrInvalidEntity indicates that a struct cannot be mapped into an entity.
 	ErrInvalidEntity = core.ErrInvalidEntity
+	// ErrValidation indicates that a field rejected its own value.
+	ErrValidation = core.ErrValidation
+	// ErrFormat indicates that a field failed to produce its presentation text.
+	ErrFormat = core.ErrFormat
 )
 
 // Open validates cfg, opens database access and verifies connectivity.

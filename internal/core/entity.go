@@ -22,10 +22,14 @@ type Entity struct {
 }
 
 // entityField binds a mapped column to the struct field that receives it.
+// validator and formatter record whether the field type (or its pointer)
+// implements the field-level interfaces detected in E04-P03.
 type entityField struct {
-	name  string
-	index int
-	pk    bool
+	name      string
+	index     int
+	pk        bool
+	validator bool
+	formatter bool
 }
 
 // entityResult is the cached derivation outcome: either an entity or the
@@ -132,7 +136,15 @@ func deriveEntity(t reflect.Type) (*Entity, error) {
 		}
 
 		idx := len(e.fields)
-		e.fields = append(e.fields, entityField{name: name, index: i, pk: pk})
+
+		e.fields = append(e.fields, entityField{
+			name:      name,
+			index:     i,
+			pk:        pk,
+			validator: implementsInterface(sf.Type, validatorType),
+			formatter: implementsInterface(sf.Type, formatterType),
+		})
+
 		e.byColumn[name] = idx
 		e.byColumnFold[fold] = idx
 

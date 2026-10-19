@@ -30,8 +30,19 @@ var (
 
 	// ErrInvalidEntity indicates that a struct could not be mapped into an
 	// entity: it is not a struct, has no mappable fields, uses unsupported
-	// fields or tags, or declares an invalid TableName.
+	// fields or tags, or declares an invalid TableName. It also covers invalid
+	// destinations passed to Entity.Validate, ValidateAll and Format.
 	ErrInvalidEntity = errors.New("krios: invalid entity")
+
+	// ErrValidation indicates that a field rejected its own value through the
+	// Validator interface. The error contextualizes the table and column and
+	// wraps the cause.
+	ErrValidation = errors.New("krios: field validation failed")
+
+	// ErrFormat indicates that a field failed to produce its presentation text
+	// through the Formatter interface. The error contextualizes the table and
+	// column and wraps the cause.
+	ErrFormat = errors.New("krios: field formatting failed")
 )
 
 func normalizeTxError(err error) error {

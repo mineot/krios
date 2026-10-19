@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mineot/krios"
 	_ "modernc.org/sqlite"
@@ -193,4 +194,67 @@ func Example_structMapping() {
 	// 2 bob <nil>
 	// registro único: 1 alice reader
 	// ausente: true
+}
+
+// exampleStatus validates and formats its own text through the field-level
+// interfaces detected by EntityOf.
+type exampleStatus string
+
+func (s exampleStatus) Validate() error {
+	if s == "" {
+		return errors.New("status is required")
+	}
+	return nil
+}
+
+func (s exampleStatus) Format() (string, error) { return strings.ToUpper(string(s)), nil }
+
+type exampleAccount struct {
+	ID     int64         `krios:"id,pk"`
+	Status exampleStatus `krios:"status"`
+	Bio    *string       `krios:"bio"`
+}
+
+func (exampleAccount) TableName() string { return "accounts" }
+
+func Example_validationFormatting() {
+	db, cleanup := exampleDatabase()
+	defer cleanup()
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, "CREATE TABLE accounts (id INTEGER PRIMARY KEY, status TEXT NOT NULL, bio TEXT)"); err != nil {
+		panic(err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO accounts (id, status, bio) VALUES (1, 'active', 'reader'), (2, '', NULL)"); err != nil {
+		panic(err)
+	}
+
+	rows, err := db.QueryContext(ctx, "SELECT id, status, bio FROM accounts ORDER BY id")
+	if err != nil {
+		panic(err)
+	}
+	var accounts []exampleAccount
+	if err := rows.All(&accounts); err != nil {
+		panic(err)
+	}
+
+	ent, err := krios.EntityOf[exampleAccount]()
+	if err != nil {
+		panic(err)
+	}
+
+	// Validation is explicit and stops at the first invalid record.
+	err = ent.ValidateAll(accounts)
+	fmt.Println("válidos:", err == nil)
+	fmt.Println("erro de validação:", errors.Is(err, krios.ErrValidation))
+
+	// Formatting is presentation-only; the original values are untouched.
+	text, err := ent.Format(accounts[0])
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("status:", text["status"], "bio:", text["bio"], "id:", text["id"])
+	// Output:
+	// válidos: false
+	// erro de validação: true
+	// status: ACTIVE bio: reader id: 1
 }
