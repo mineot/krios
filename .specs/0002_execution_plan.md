@@ -120,9 +120,11 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
   > **Decisões (2026-10-19) em [E03-P01_decisions.md](E03-P01_decisions.md):** `Executor` mantido **interno** (§4, pergunta 1), `krios.Result` definido como **interface** com `RowsAffected()` e `LastInsertId()` (§4, pergunta 2), `Rows` com `Close()` obrigatório (§4, pergunta 3), serialização de `*Tx` com `sync.Mutex` (§4, pergunta 4), `Commit`/`Rollback` aceitam `context.Context` validando `ctx.Err()` (§4, pergunta 5) e `sql.ErrNoRows` preservado em `Row.Scan` (§4, pergunta 6). Todos os contratos especificados nas §3.1–§3.4.
 
-- [ ] **E03-P02 — Implementar `Begin`, `Commit` e `Rollback`.** Criar o objeto de transação e a execução vinculada a ele, mantendo operações do acesso principal independentes. Rejeitar novas operações em uma transação encerrada.
+- [x] **E03-P02 — Implementar `Begin`, `Commit` e `Rollback`.** Criar o objeto de transação e a execução vinculada a ele, mantendo operações do acesso principal independentes. Rejeitar novas operações em uma transação encerrada.
 
   > **Pendências:** definir concorrência no mesmo objeto, responsabilidade pelo rollback após erro e tratamento de falhas em confirmação ou reversão (§6.3).
+
+  > **Implementado (2026-10-19):** em [krios.go](../krios.go) — sentinela `ErrTxDone`; tipos `Result` (interface), `Row` e `Rows` com `Close()` idempotente; interface interna `executor`; método `Begin(ctx) (*Tx, error)` via `BeginTx`; `Commit(ctx)`/`Rollback(ctx)` validando `done` e `ctx.Err()` antes da chamada nativa e marcando `done` apenas após sucesso; métodos `ExecContext`/`QueryContext`/`QueryRowContext` em `*DB` e `*Tx`, com serialização por `sync.Mutex` no mesmo `*Tx` (perguntas 1–6 de E03-P01 aplicadas). Não há rollback automático após falha de execução: `Commit`/`Rollback` são explícitos (§3.3 de E03-P01) e a responsabilidade pelo rollback do grupo permanece como pendência de §6.3 para validação em E03-P03. Falhas em confirmação/reversão repassam o erro nativo do driver. Testes em [tests/tx_test.go](../tests/tx_test.go): commit persiste, rollback descarta, `ErrTxDone` após encerrar, contexto cancelado em `Begin`/`Commit`, `ErrClosed` em DB fechado, `sql.ErrNoRows` em `QueryRow` e idempotência de `Rows.Close()`. `make check` passou (Go 1.26.8).
 
 - [ ] **E03-P03 — Validar os limites da transação.** Demonstrar três inserts relacionados confirmados em conjunto e a reversão do grupo quando um deles falha. Cobrir operações fora do grupo, transações encerradas e o comportamento concorrente definido no contrato.
 

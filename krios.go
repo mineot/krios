@@ -1,7 +1,8 @@
 // Package krios provides connection management, transactions, migrations and
 // query building for SQLite3, MySQL and PostgreSQL on top of database/sql.
-// Configuration and the connection lifecycle (Open and Close) are implemented;
-// transactions, migrations and query building are not implemented yet.
+// Configuration, the connection lifecycle (Open and Close) and explicit
+// transactions (Begin, Commit, Rollback with execution on DB and Tx) are
+// implemented; migrations and query building are not implemented yet.
 //
 // Drivers are chosen and imported by the consumer; Krios does not import them.
 package krios
@@ -36,6 +37,10 @@ var (
 
 	// ErrClosed indicates an operation attempted after Close.
 	ErrClosed = errors.New("krios: database access is closed")
+
+	// ErrTxDone indicates an operation attempted on a transaction that has
+	// already been committed or rolled back.
+	ErrTxDone = errors.New("krios: transaction already committed or rolled back")
 )
 
 const (
@@ -290,8 +295,6 @@ func (db *DB) Close() error {
 	return db.sqlDB.Close()
 }
 
-// ensureOpen reports ErrClosed after Close. Operations use it before touching
-// the database.
 func (db *DB) ensureOpen() error {
 	db.mu.Lock()
 
@@ -304,6 +307,281 @@ func (db *DB) ensureOpen() error {
 	return nil
 }
 
+// Result exposes driver result information in a driver-agnostic way.
+type Result interface {
+	RowsAffected() (int64, bool)
+	LastInsertId() (int64, bool)
+}
+
+type resultAdapter struct {
+	r sql.Result
+}
+
+func (ra resultAdapter) RowsAffected() (int64, bool) {
+	n, err := ra.r.RowsAffected()
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+func (ra resultAdapter) LastInsertId() (int64, bool) {
+	id, err := ra.r.LastInsertId()
+	if err != nil {
+		return 0, false
+	}
+	return id, true
+}
+
+func wrapResult(r sql.Result) Result {
+	if r == nil {
+		return resultAdapter{}
+	}
+	return resultAdapter{r: r}
+}
+
+// Row is a wrapper around *sql.Row that preserves sql.ErrNoRows on Scan
+// and does not expose the underlying raw pointer to the consumer.
+type Row struct {
+	r *sql.Row
+}
+
+// Scan copies the values from the matched row into the provided destinations.
+// It returns sql.ErrNoRows if no row was found.
+func (rw Row) Scan(dest ...any) error {
+	if rw.r == nil {
+		return sql.ErrNoRows
+	}
+	return rw.r.Scan(dest...)
+}
+
+func wrapRow(r *sql.Row) Row {
+	return Row{r: r}
+}
+
+// Rows is an iterator over query results. The caller is responsible for
+// calling Close(). Close() is idempotent. Iterating until Next() == false
+// does not replace Close().
+type Rows struct {
+	r      *sql.Rows
+	mu     sync.Mutex
+	closed bool
+}
+
+// Next prepares the next row for reading.
+func (rw *Rows) Next() bool {
+	if rw == nil || rw.r == nil {
+		return false
+	}
+	return rw.r.Next()
+}
+
+// Scan copies the values from the current row into the provided destinations.
+func (rw *Rows) Scan(dest ...any) error {
+	if rw == nil || rw.r == nil {
+		return errors.New("krios: rows are closed or invalid")
+	}
+	return rw.r.Scan(dest...)
+}
+
+// Err returns the error, if any, that was encountered during iteration.
+func (rw *Rows) Err() error {
+	if rw == nil || rw.r == nil {
+		return nil
+	}
+	return rw.r.Err()
+}
+
+// Close closes the underlying rows iterator. It is idempotent.
+func (rw *Rows) Close() error {
+	if rw == nil {
+		return nil
+	}
+	rw.mu.Lock()
+	defer rw.mu.Unlock()
+	if rw.closed {
+		return nil
+	}
+	rw.closed = true
+	var err error
+	if rw.r != nil {
+		err = rw.r.Close()
+	}
+	rw.r = nil
+	return err
+}
+
+func wrapRows(r *sql.Rows) *Rows {
+	if r == nil {
+		return nil
+	}
+	return &Rows{r: r}
+}
+
+// executor is an internal execution contract shared by DB and Tx.
+type executor interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// Tx represents an explicit transaction. Calls on the same Tx are serialized
+// (not safe for concurrent use by multiple goroutines). Operations on Tx
+// after Commit or Rollback return ErrTxDone.
+type Tx struct {
+	tx   *sql.Tx
+	mu   sync.Mutex // serialize execution calls on this transaction
+	done bool
+	cfg  Config // optional: may be useful later (dialect); kept for consistency
+}
+
+// ExecContext executes a query without returning rows.
+func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (Result, error) {
+	if err := db.ensureOpen(); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("krios: exec: %w", err)
+	}
+	res, err := db.sqlDB.ExecContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return wrapResult(res), nil
+}
+
+// QueryContext executes a query that returns rows.
+func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (*Rows, error) {
+	if err := db.ensureOpen(); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("krios: query: %w", err)
+	}
+	r, err := db.sqlDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return wrapRows(r), nil
+}
+
+// QueryRowContext executes a query that is expected to return at most one row.
+func (db *DB) QueryRowContext(ctx context.Context, query string, args ...any) Row {
+	if err := db.ensureOpen(); err != nil {
+		return Row{r: nil}
+	}
+	if err := ctx.Err(); err != nil {
+		return Row{r: nil}
+	}
+	return wrapRow(db.sqlDB.QueryRowContext(ctx, query, args...))
+}
+
+// Begin starts a transaction.
+func (db *DB) Begin(ctx context.Context) (*Tx, error) {
+	if err := db.ensureOpen(); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("krios: begin: %w", err)
+	}
+	stx, err := db.sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &Tx{
+		tx:  stx,
+		cfg: db.cfg,
+	}, nil
+}
+
+// ExecContext executes a query without returning rows on this transaction.
+func (tx *Tx) ExecContext(ctx context.Context, query string, args ...any) (Result, error) {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	if tx.done {
+		return nil, ErrTxDone
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("krios: tx exec: %w", err)
+	}
+	res, err := tx.tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return wrapResult(res), nil
+}
+
+// QueryContext executes a query that returns rows on this transaction.
+func (tx *Tx) QueryContext(ctx context.Context, query string, args ...any) (*Rows, error) {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	if tx.done {
+		return nil, ErrTxDone
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("krios: tx query: %w", err)
+	}
+	r, err := tx.tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return wrapRows(r), nil
+}
+
+// QueryRowContext executes a query that is expected to return at most one row
+// on this transaction.
+func (tx *Tx) QueryRowContext(ctx context.Context, query string, args ...any) Row {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	if tx.done {
+		return Row{r: nil}
+	}
+	if err := ctx.Err(); err != nil {
+		return Row{r: nil}
+	}
+	return wrapRow(tx.tx.QueryRowContext(ctx, query, args...))
+}
+
+// Commit commits the transaction.
+func (tx *Tx) Commit(ctx context.Context) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	if tx.done {
+		return ErrTxDone
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("krios: tx commit: %w", err)
+	}
+	if err := tx.tx.Commit(); err != nil {
+		return err
+	}
+	tx.done = true
+	return nil
+}
+
+// Rollback rolls back the transaction.
+func (tx *Tx) Rollback(ctx context.Context) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	if tx.done {
+		return ErrTxDone
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("krios: tx rollback: %w", err)
+	}
+	if err := tx.tx.Rollback(); err != nil {
+		return err
+	}
+	tx.done = true
+	return nil
+}
+
+// buildDSN returns the driver-specific data source name.
 func buildDSN(cfg Config) string {
 	switch cfg.Type {
 	case DBTypeSQLite:
