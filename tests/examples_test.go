@@ -196,6 +196,48 @@ func Example_structMapping() {
 	// ausente: true
 }
 
+func Example_selectQueries() {
+	db, cleanup := exampleDatabase()
+	defer cleanup()
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, bio TEXT)"); err != nil {
+		panic(err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO users (id, name, bio) VALUES (1, 'alice', 'reader'), (2, 'bob', NULL)"); err != nil {
+		panic(err)
+	}
+
+	users, err := krios.EntityOf[exampleEntity]()
+	if err != nil {
+		panic(err)
+	}
+
+	// Build renders the SQL and bound parameters without executing it.
+	query, args, err := db.Select(users).
+		Only("id", "name").
+		Where(users.Col("name").Like(krios.StartsWith, "a")).
+		Build()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(query)
+	fmt.Println(args)
+
+	// Comparators are typed through the entity; values become parameters.
+	var found exampleEntity
+	err = db.Select(users).
+		Where(krios.And(users.Col("name").Eq("alice"), users.Col("bio").IsNotNull())).
+		One(ctx, &found)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(found.ID, found.Name)
+	// Output:
+	// SELECT "users"."id", "users"."name" FROM "users" WHERE "users"."name" LIKE ? ESCAPE '!'
+	// [a%]
+	// 1 alice
+}
+
 // exampleStatus validates and formats its own text through the field-level
 // interfaces detected by EntityOf.
 type exampleStatus string

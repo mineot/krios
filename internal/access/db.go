@@ -11,8 +11,11 @@ import (
 	"sync"
 
 	"github.com/mineot/krios/internal/config"
+	"github.com/mineot/krios/internal/dialect"
+	"github.com/mineot/krios/internal/entity"
 	"github.com/mineot/krios/internal/errs"
 	"github.com/mineot/krios/internal/execute"
+	"github.com/mineot/krios/internal/query"
 	"github.com/mineot/krios/internal/result"
 	"github.com/mineot/krios/internal/scan"
 	"github.com/mineot/krios/internal/transaction"
@@ -33,7 +36,8 @@ var (
 
 // DB is the database access opened by Open. It is safe for concurrent use.
 type DB struct {
-	sqlDB *sql.DB
+	sqlDB   *sql.DB
+	dialect dialect.Dialect
 
 	mu     sync.Mutex
 	closed bool
@@ -51,6 +55,11 @@ type DB struct {
 func Open(ctx context.Context, cfg config.Config) (*DB, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
+	}
+
+	d := dialect.For(cfg.Type)
+	if d == nil {
+		return nil, fmt.Errorf("%w: unsupported database type %q", errs.ErrInvalidConfig, cfg.Type)
 	}
 
 	if !slices.Contains(sql.Drivers(), cfg.Driver) {
@@ -94,7 +103,7 @@ func Open(ctx context.Context, cfg config.Config) (*DB, error) {
 		return nil, fmt.Errorf("krios: open: %w", err)
 	}
 
-	return &DB{sqlDB: sqlDB}, nil
+	return &DB{sqlDB: sqlDB, dialect: d}, nil
 }
 
 // Close releases the resources associated with the access. It is idempotent:
@@ -169,5 +178,12 @@ func (db *DB) Begin(ctx context.Context) (*transaction.Tx, error) {
 		return nil, err
 	}
 
-	return transaction.New(stx), nil
+	return transaction.New(stx, db.dialect), nil
+}
+
+// Select starts a SELECT builder for ent, rendered with the access dialect
+// and executed through this access. Construction is validated on Build or on
+// the first execution call, with the access guards applied unchanged.
+func (db *DB) Select(ent *entity.Entity) *query.Select {
+	return query.New(db, db.dialect, ent)
 }

@@ -45,6 +45,12 @@ var (
 	// through the Formatter interface. The error contextualizes the table and
 	// column and wraps the cause.
 	ErrFormat = errors.New("krios: field formatting failed")
+
+	// ErrInvalidQuery indicates that a chained query was built with an
+	// invalid construction: an unknown column or entity, a nil operand, a
+	// duplicate selection, an empty logical group or any other state that
+	// cannot be rendered into SQL. It is produced before execution.
+	ErrInvalidQuery = errors.New("krios: invalid query")
 )
 
 // NormalizeTxError maps the native sql.ErrTxDone to ErrTxDone, preserving the

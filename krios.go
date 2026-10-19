@@ -1,9 +1,10 @@
 // Package krios provides connection management, transactions, migrations and
 // query building for SQLite3, MySQL and PostgreSQL on top of database/sql.
 // Configuration, the connection lifecycle (Open and Close), explicit
-// transactions (Begin, Commit, Rollback with execution on DB and Tx) and
-// reflection-based entity mapping with per-field validation and formatting are
-// implemented; migrations and query building are not implemented yet.
+// transactions (Begin, Commit, Rollback with execution on DB and Tx),
+// reflection-based entity mapping with per-field validation and formatting,
+// and chained SELECT building with filters and joins are implemented;
+// migrations are not implemented yet.
 //
 // Drivers are chosen and imported by the consumer; Krios does not import them.
 package krios
@@ -15,6 +16,7 @@ import (
 	"github.com/mineot/krios/internal/config"
 	"github.com/mineot/krios/internal/entity"
 	"github.com/mineot/krios/internal/errs"
+	"github.com/mineot/krios/internal/query"
 	"github.com/mineot/krios/internal/result"
 	"github.com/mineot/krios/internal/scan"
 	"github.com/mineot/krios/internal/transaction"
@@ -46,6 +48,16 @@ type (
 	Rows = scan.Rows
 	// Entity is the descriptor derived by reflection from a Go struct type.
 	Entity = entity.Entity
+	// Column references a mapped column and builds query conditions.
+	Column = entity.Column
+	// Condition is an opaque boolean predicate used by Where and Join.
+	Condition = entity.Condition
+	// LikeMode selects how Column.Like surrounds its value with wildcards.
+	LikeMode = entity.LikeMode
+	// Select is the chained SELECT builder created by DB.Select or Tx.Select.
+	Select = query.Select
+	// JoinKind selects the join operation of Select.Join.
+	JoinKind = query.JoinKind
 	// Validator is implemented by field types that validate their own value.
 	Validator = entity.Validator
 	// Formatter is implemented by field types that provide a presentation text.
@@ -56,6 +68,19 @@ const (
 	DBTypeSQLite   = config.DBTypeSQLite
 	DBTypeMySQL    = config.DBTypeMySQL
 	DBTypePostgres = config.DBTypePostgres
+)
+
+// LIKE matching modes accepted by Column.Like.
+const (
+	Contains   = entity.Contains
+	StartsWith = entity.StartsWith
+	EndsWith   = entity.EndsWith
+)
+
+// Join kinds accepted by Select.Join.
+const (
+	InnerJoin = query.InnerJoin
+	LeftJoin  = query.LeftJoin
 )
 
 var (
@@ -75,6 +100,9 @@ var (
 	ErrValidation = errs.ErrValidation
 	// ErrFormat indicates that a field failed to produce its presentation text.
 	ErrFormat = errs.ErrFormat
+	// ErrInvalidQuery indicates an invalid query construction, reported before
+	// execution.
+	ErrInvalidQuery = errs.ErrInvalidQuery
 )
 
 // Open validates cfg, opens database access and verifies connectivity.
@@ -94,4 +122,16 @@ func Open(ctx context.Context, cfg Config) (*DB, error) {
 // field and a missing or empty tag derives the column from the field name.
 func EntityOf[T any]() (*Entity, error) {
 	return entity.EntityOf[T]()
+}
+
+// And combines conditions into a conjunction. An empty group is invalid and
+// fails rendering with ErrInvalidQuery.
+func And(conditions ...Condition) Condition {
+	return entity.And(conditions...)
+}
+
+// Or combines conditions into a disjunction, nestable with And and Or. An
+// empty group is invalid and fails rendering with ErrInvalidQuery.
+func Or(conditions ...Condition) Condition {
+	return entity.Or(conditions...)
 }

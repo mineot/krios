@@ -58,7 +58,7 @@ A distinção coluna × valor é resolvida por **construtores ancorados na entid
 ## 5. Operadores e busca textual
 
 - Operadores da versão inicial: `=`, `<>`, `<`, `<=`, `>`, `>=`, `IS NULL`, `IS NOT NULL`, `IN`, `LIKE`.
-- `Like(mode, value)` distingue os modos exigidos pelo RF-06: `krios.Contains` (`%valor%`), `krios.StartsWith` (`valor%`), `krios.EndsWith` (`%valor`). O valor do consumidor tem `\`, `%` e `_` escapados com `\`, e a cláusula `ESCAPE '\'` é sempre emitida — o valor é tratado literalmente, sem coringa acidental.
+- `Like(mode, value)` distingue os modos exigidos pelo RF-06: `krios.Contains` (`%valor%`), `krios.StartsWith` (`valor%`), `krios.EndsWith` (`%valor`). O valor do consumidor tem `!`, `%` e `_` escapados com `!`, e a cláusula `ESCAPE '!'` é sempre emitida — o valor é tratado literalmente, sem coringa acidental. _Revisão da implementação (E05-P02, 2026-10-19): a decisão original previa `ESCAPE '\'`, mas o literal `'\'` é inválido no MySQL com o escape padrão; o caractere neutro `!` funciona nos três dialetos._
 - Sensibilidade a maiúsculas/minúsculas **não é adaptada**: segue a collation do banco. MySQL é insensível por padrão; PostgreSQL é sensível; SQLite é insensível para ASCII por padrão e sensível fora dele. Diferenças documentadas como limitação, sem tradução de sintaxe (decisão de consumidor em 2026-10-19). `ILIKE` e `NOT LIKE` ficam fora do escopo inicial.
 
 ## 6. `Where` e grupos lógicos

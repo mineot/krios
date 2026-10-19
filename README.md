@@ -2,7 +2,7 @@
 
 Biblioteca Go em desenvolvimento para acesso a SQLite3, MySQL e PostgreSQL por `database/sql`.
 
-Implementados: configuração em código, abertura/fechamento, SQL parametrizado, transações explícitas e mapeamento de entidades por reflexão sobre structs (`krios.EntityOf`, `Row.Scan` para um registro e `Rows.All` para múltiplos). As consultas encadeadas, o SQL incorporado e as migrações pertencem às próximas entregas. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN e aguardam integração manual.
+Implementados: configuração em código, abertura/fechamento, SQL parametrizado, transações explícitas, mapeamento de entidades por reflexão sobre structs (`krios.EntityOf`, `Row.Scan` para um registro e `Rows.All` para múltiplos) e consultas `SELECT` encadeadas com seleção de colunas, filtros e junções (`DB.Select`/`Tx.Select`, `Only`, `Where`, `Join`, `Build`). O SQL incorporado e as migrações pertencem às próximas entregas. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN/geração de SQL e aguardam integração manual.
 
 ## Desenvolvimento local
 
@@ -95,6 +95,32 @@ Campos primitivos (`string`, `int`, …) não têm validação/formatação sem 
 
 O exemplo `Example_mappingValidation` reúne o fluxo completo de E04 (leitura de vários registros, `sql.Null*` e registro único) e as decisões de verificação estão em [E04-P04](.specs/E04-P04_decisions.md).
 
+## Consultas encadeadas
+
+`DB.Select(ent)` e `Tx.Select(ent)` criam o construtor; a execução usa o mesmo contrato e as mesmas proteções de `ExecContext`/`QueryContext`.
+
+```go
+users, _ := krios.EntityOf[User]()
+tasks, _ := krios.EntityOf[Task]()
+
+var found []User
+err := db.Select(users).
+    Only("id", "name").
+    Join(tasks, krios.LeftJoin, tasks.Col("owner_id").Eq(users.Col("id"))).
+    Where(krios.And(users.Col("name").Like(krios.StartsWith, "a"), tasks.Col("id").IsNull())).
+    All(ctx, &found)
+```
+
+- `Only(names...)` restringe as colunas da **entidade base** (validada em `Build()`); sem seleção explícita, todas as colunas mapeadas são usadas na ordem de declaração dos campos. Duplicatas são erro.
+- `Where(conditions...)` combina condições com `AND` e pode ser chamado várias vezes. `And`/`Or` agrupam e aninham condições; grupo vazio é erro.
+- `Join(ent, kind, on)` aceita `krios.InnerJoin` e `krios.LeftJoin`; a condição `on` usa os mesmos comparadores, inclusive coluna × coluna. Toda entidade citada em `Only`/`Where`/`Join` precisa participar da consulta; tabela repetida é erro.
+- Comparadores: `Eq`, `Ne`, `Lt`, `Lte`, `Gt`, `Gte`, `IsNull`, `IsNotNull`, `In`, `Like(krios.Contains|StartsWith|EndsWith, texto)`. `LIKE` escapa `!`, `%` e `_` no valor e sempre emite `ESCAPE '!'`; a diferenciação de maiúsculas segue a collation do banco. `In()` vazio renderiza `FALSE`. Operando `nil` é erro: use `IsNull`/`IsNotNull`.
+- Valores Go viram parâmetros; `krios.Column` é renderizado como identificador qualificado, o que cobre comparações entre colunas.
+- `Build()` retorna SQL e argumentos sem executar, com parâmetros na ordem textual (junções antes do `WHERE`). Falhas de construção retornam `ErrInvalidQuery` antes de chegar ao driver.
+- `Rows`/`Row` executam e devolvem os wrappers de E03 (`Close`, `Err`, `Scan`); `All` mapeia por nome e `One` usa o mapeamento posicional de um registro.
+
+As decisões estão em [E05-P01](.specs/E05-P01_decisions.md); `Example_selectQueries` demonstra `Build`, filtros e execução.
+
 ## Erros e propriedade dos resultados
 
 - Tratar erros com `errors.Is`/`errors.As`. Erros do driver são preservados.
@@ -104,6 +130,7 @@ O exemplo `Example_mappingValidation` reúne o fluxo completo de E04 (leitura de
 - Wrappers de acesso e resultados são obtidos por `Open`, `Begin` e consultas; seus valores zero não representam recursos prontos para uso.
 - `ErrInvalidEntity` indica struct/tag/`TableName` inválidos na derivação ou destino de mapeamento malformado. Erros de mapeamento preservam a causa do driver.
 - `ErrValidation` e `ErrFormat` indicam campo reprovado por `Validate()` ou falha em `Format()`, com tabela e coluna no contexto.
+- `ErrInvalidQuery` indica construção inválida de consulta (coluna/entidade desconhecida, operando `nil`, junção inválida, grupo vazio); é detectado em `Build()` e antes da execução.
 
 ## Transações e concorrência
 
@@ -119,12 +146,14 @@ O contexto passado a `Begin` controla toda a vida da transação e seu cancelame
 
 | Arquivo | Responsabilidade |
 | --- | --- |
-| `krios.go` | Fachada pública: aliases de tipos, constantes, erros e delegação de `Open` e `EntityOf` |
+| `krios.go` | Fachada pública: aliases de tipos, constantes, erros e delegação de `Open`, `EntityOf`, `And` e `Or` |
 | `internal/errs/errors.go` | Erros sentinela compartilhados e normalização de erros nativos |
 | `internal/config/config.go`, `dsn.go` | Configuração, validações e DSNs |
-| `internal/entity/entity.go`, `validation.go` | Entidades por reflexão (tags, cache) e validação/formatação por campo |
-| `internal/access/db.go` | Conexão (`Open`, `Close`) e contrato interno `executor` |
-| `internal/transaction/tx.go` | Transação (`Begin`, `Commit`, `Rollback`) e registro de erro tardio |
+| `internal/dialect/dialect.go`, `migration.go` | Interface `Dialect`, seleção por `Config.Type` e capacidades de migração |
+| `internal/entity/entity.go`, `validation.go`, `expression.go` | Entidades por reflexão, validação/formatação e AST de condições |
+| `internal/query/query.go` | Construtor `Select` (`Only`/`Where`/`Join`), `Build` e execução |
+| `internal/access/db.go` | Conexão (`Open`, `Close`), dialeto retido e `Select` |
+| `internal/transaction/tx.go` | Transação (`Begin`, `Commit`, `Rollback`), dialeto retido e `Select` |
 | `internal/execute/execution.go` | Delegação nativa compartilhada (contexto, chamada, wrapper) |
 | `internal/scan/rows.go`, `mapping.go` | Recursos de leitura (`Row`/`Rows`, `All`) e mapeamento para `*T`/`*[]T` |
 | `internal/result/result.go` | Resultado de escrita com flags de disponibilidade |
@@ -166,6 +195,7 @@ MySQL/PostgreSQL aguardam execução do [roteiro manual](.specs/E09_manual_valid
 - [Implementação do mapeamento — E04-P02](.specs/E04-P02_decisions.md)
 - [Validação e formatação — E04-P03](.specs/E04-P03_decisions.md)
 - [Validação do mapeamento — E04-P04](.specs/E04-P04_decisions.md)
+- [Seleção, filtros e junções — E05-P01](.specs/E05-P01_decisions.md)
 - [Reorganização dos pacotes internos](.specs/0004_reorganization.md)
 
 ## Licença

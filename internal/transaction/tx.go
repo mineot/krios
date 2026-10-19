@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/mineot/krios/internal/dialect"
+	"github.com/mineot/krios/internal/entity"
 	"github.com/mineot/krios/internal/errs"
 	"github.com/mineot/krios/internal/execute"
+	"github.com/mineot/krios/internal/query"
 	"github.com/mineot/krios/internal/result"
 	"github.com/mineot/krios/internal/scan"
 )
@@ -21,16 +24,25 @@ import (
 // an immediate ExecContext/QueryContext error or a late read failure from
 // Row.Scan or Rows iteration — is remembered and blocks Commit (see Commit).
 type Tx struct {
-	tx   *sql.Tx
-	mu   sync.Mutex // serialize execution calls on this transaction
-	done bool
-	err  error // first statement or late read failure; blocks Commit (see Commit)
+	tx      *sql.Tx
+	dialect dialect.Dialect
+	mu      sync.Mutex // serialize execution calls on this transaction
+	done    bool
+	err     error // first statement or late read failure; blocks Commit (see Commit)
 }
 
-// New wraps a native *sql.Tx. It is used by the connection layer after
-// beginning a transaction.
-func New(tx *sql.Tx) *Tx {
-	return &Tx{tx: tx}
+// New wraps a native *sql.Tx and the dialect used to render queries. It is
+// used by the connection layer after beginning a transaction.
+func New(tx *sql.Tx, d dialect.Dialect) *Tx {
+	return &Tx{tx: tx, dialect: d}
+}
+
+// Select starts a SELECT builder for ent, rendered with the transaction
+// dialect and executed through this transaction. Statement failures recorded
+// by the execution calls block Commit as usual; construction failures are
+// reported before execution with errs.ErrInvalidQuery.
+func (tx *Tx) Select(ent *entity.Entity) *query.Select {
+	return query.New(tx, tx.dialect, ent)
 }
 
 // ExecContext executes a query without returning rows on this transaction.
