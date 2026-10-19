@@ -1,4 +1,4 @@
-package krios
+package core
 
 import (
 	"errors"

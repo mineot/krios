@@ -10,7 +10,7 @@ import (
 )
 
 // TestSQLiteEnvironment verifies the test driver and its file-backed database.
-// It does not exercise Krios features, which are not implemented yet.
+// It checks the driver directly; Krios integration lives in the other tests.
 func TestSQLiteEnvironment(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "test.db")

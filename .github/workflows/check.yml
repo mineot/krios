@@ -38,3 +38,30 @@ jobs:
         run: go mod download && go mod verify
       - name: Formatar, compilar, analisar e testar
         run: make check
+
+  race:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.26.x', '1.27.x']
+    env:
+      GOTOOLCHAIN: local
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+          cache: false
+      - name: Verificar compilador C
+        run: gcc --version
+      - name: Verificar dependências
+        run: go mod download && go mod verify
+      - name: Detectar corridas de dados
+        run: make race

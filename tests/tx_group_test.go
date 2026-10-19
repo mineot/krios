@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"sync"
 	"testing"
@@ -74,6 +73,7 @@ func TestGroupOfThreeInsertsCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)
 	}
+	defer tx.Rollback(context.Background())
 	insertGroup(t, tx)
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Commit() = %v", err)
@@ -98,9 +98,10 @@ func TestGroupRollsBackWhenOneInsertFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)
 	}
+	defer tx.Rollback(context.Background())
 	insertGroup(t, tx)
 
-	// Third statement fails: primary key of accounts already taken.
+	// A fourth statement fails: primary key of accounts already taken.
 	if _, err := tx.ExecContext(ctx, "INSERT INTO accounts (id, name) VALUES (?, ?)", 1, "dup"); err == nil {
 		t.Fatalf("tx INSERT duplicate = nil, want constraint error")
 	}
@@ -128,6 +129,7 @@ func TestCommitBlockedAfterStatementFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)
 	}
+	defer tx.Rollback(context.Background())
 	insertGroup(t, tx)
 
 	// The failing statement: its error must be the one returned by Commit.
@@ -180,6 +182,7 @@ func TestOperationsOutsideGroupAreIndependent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)
 	}
+	defer tx.Rollback(context.Background())
 	if _, err := tx.ExecContext(ctx, "INSERT INTO accounts (id, name) VALUES (?, ?)", 1, "group"); err != nil {
 		t.Fatalf("tx INSERT = %v", err)
 	}
@@ -214,6 +217,7 @@ func TestDBReadsWhileTxOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)
 	}
+	defer tx.Rollback(context.Background())
 	if _, err := tx.ExecContext(ctx, "INSERT INTO accounts (id, name) VALUES (?, ?)", 1, "uncommitted"); err != nil {
 		t.Fatalf("tx INSERT = %v", err)
 	}
@@ -246,7 +250,6 @@ func TestTxRejectsAllMethodsAfterDone(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -257,6 +260,7 @@ func TestTxRejectsAllMethodsAfterDone(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Begin() = %v", err)
 			}
+			defer tx.Rollback(context.Background())
 			if err := tc.end(tx); err != nil {
 				t.Fatalf("end = %v", err)
 			}
@@ -268,8 +272,8 @@ func TestTxRejectsAllMethodsAfterDone(t *testing.T) {
 				t.Fatalf("QueryContext() = %v, want ErrTxDone", err)
 			}
 			var v int
-			if err := tx.QueryRowContext(ctx, "SELECT 1").Scan(&v); !errors.Is(err, sql.ErrNoRows) {
-				t.Fatalf("QueryRowContext().Scan() = %v, want sql.ErrNoRows", err)
+			if err := tx.QueryRowContext(ctx, "SELECT 1").Scan(&v); !errors.Is(err, krios.ErrTxDone) {
+				t.Fatalf("QueryRowContext().Scan() = %v, want ErrTxDone", err)
 			}
 			if err := tx.Commit(ctx); !errors.Is(err, krios.ErrTxDone) {
 				t.Fatalf("Commit() = %v, want ErrTxDone", err)
@@ -294,6 +298,7 @@ func TestConcurrentCallsOnSameTxSerialized(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)
 	}
+	defer tx.Rollback(context.Background())
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, workers)
@@ -371,6 +376,7 @@ func TestConcurrentDBAndDistinctTx(t *testing.T) {
 				errCh <- err
 				return
 			}
+			defer tx.Rollback(context.Background())
 			for range rounds {
 				rows, err := tx.QueryContext(ctx, "SELECT COUNT(*) FROM entries")
 				if err != nil {

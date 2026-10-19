@@ -76,7 +76,7 @@ O consumidor deve poder definir esses valores no código da aplicação e distri
 | MySQL      | Host, usuário, senha e nome do banco de dados |
 | PostgreSQL | Host, usuário, senha e nome do banco de dados |
 
-Os nomes e tipos dos campos de `krios.Config`, sua organização, as unidades de tempo, os valores padrão, a distinção entre valores omitidos e explícitos e as validações serão definidos na especificação de configuração.
+Os campos, padrões, unidades, distinção entre omissão e valor explícito e validações de conexão estão definidos em [E02-P01_decisions.md](E02-P01_decisions.md). O conteúdo de migrações permanece para E08.
 
 ### RF-02 — Gerenciar o ciclo de vida da conexão
 
@@ -87,7 +87,7 @@ A API pública deve disponibilizar:
 
 Se qualquer etapa de `Open` falhar, a biblioteca deve liberar os recursos criados e retornar erro. A verificação de conectividade deve aceitar cancelamento e prazo limite. Seu sucesso confirma o acesso naquele momento, mas não garante a disponibilidade futura do banco nem a existência do esquema esperado.
 
-O cancelamento ou o esgotamento do tempo de espera deve ser comunicado como erro retornado por `Open`, para tratamento pelo consumidor. O mecanismo para solicitar cancelamento, as assinaturas e os tipos de erro serão definidos na especificação da API.
+O cancelamento ou o esgotamento do tempo de espera deve ser comunicado como erro retornado por `Open`, para tratamento pelo consumidor. Contexto, assinaturas e erros de conexão estão definidos em [E02-P01_decisions.md](E02-P01_decisions.md), incluindo o limite de cancelamento em drivers não cooperativos.
 
 ### RF-03 — Controlar transações
 
@@ -107,11 +107,11 @@ Apenas operações executadas por meio do objeto de transação devem participar
 
 O consumidor deve poder executar operações sem abrir explicitamente uma transação, inclusive consultas `SELECT`. Quando precisar confirmar ou desfazer um conjunto de operações como uma unidade, deve associá-las à mesma transação.
 
-Por exemplo, três inserts em tabelas relacionadas devem ser confirmados somente após o sucesso de todos. Se um deles falhar, as alterações ainda não confirmadas desse grupo devem ser revertidas. Operações executadas fora do grupo ou já confirmadas não participam dessa reversão. A responsabilidade por iniciar o rollback após uma falha e a política de execução simultânea dentro do grupo permanecem pendentes.
+Por exemplo, três inserts em tabelas relacionadas devem ser confirmados somente após o sucesso de todos. Se um deles falhar, as alterações ainda não confirmadas desse grupo devem ser revertidas. Operações executadas fora do grupo ou já confirmadas não participam dessa reversão. A responsabilidade pelo rollback e os limites de concorrência estão definidos em [E03-P01_decisions.md](E03-P01_decisions.md): erros imediatos de Exec/Query bloqueiam Commit; erros de leitura tardios exigem rollback do consumidor.
 
 Após `Commit` ou `Rollback`, novas operações na transação devem retornar erro.
 
-As assinaturas do objeto de transação, o comportamento de chamadas concorrentes no mesmo objeto e o tratamento de falhas na confirmação ou reversão serão definidos em uma especificação própria.
+As assinaturas, a serialização das chamadas, o estado terminal após falha de finalização e a limpeza com contexto cancelado estão definidos em [E03-P01_decisions.md](E03-P01_decisions.md). Uma falha de confirmação pode deixar o resultado remoto incerto; não há repetição automática de escrita.
 
 ### RF-04 — Receber arquivos de migração
 
@@ -243,23 +243,21 @@ A estrutura que preservará a ordem das colunas, a correspondência com campos G
 
 ## 6. Definições pendentes
 
-As respostas do consumidor foram incorporadas às seções anteriores. Esta seção reúne somente questões ainda não resolvidas. Os nomes de tipos e métodos propostos expressam a intenção da API, sem constituir assinaturas definitivas. Sugestões apresentadas durante a revisão não são decisões aprovadas automaticamente.
+As respostas do consumidor foram incorporadas às seções anteriores. Esta seção reúne questões de definição e referências às resoluções já registradas; somente os itens identificados como pendentes exigem nova decisão. Os nomes de tipos e métodos propostos expressam a intenção da API, sem constituir assinaturas definitivas. Sugestões apresentadas durante a revisão não são decisões aprovadas automaticamente.
 
 ### 6.1. API pública e configuração
 
-- Quais serão os campos e tipos de `krios.Config`, incluindo a organização das opções específicas de cada banco e das migrações?
-- Quais campos serão obrigatórios e quais serão as portas padrão, as unidades e os valores padrão de tempo de espera?
-- Como distinguir valores omitidos de valores explicitamente definidos, aplicar os padrões e retornar erros de configuração inválida?
-- Como o consumidor solicita cancelamento antecipado de `Open`? Como esse mecanismo interage com o tempo de espera configurado?
-- Quais serão os tipos exportados, as assinaturas e os erros distinguíveis pelo consumidor, incluindo cancelamento e prazo esgotado?
+Campos de conexão, obrigatoriedade, portas, unidades, padrões, valores omitidos, timeout, contexto e erros foram resolvidos em [E02-P01_decisions.md](E02-P01_decisions.md), com revisão M01–M06. A configuração é recebida por valor, e a biblioteca não retém a configuração completa no DB/Tx.
+
+Os tipos e assinaturas de execução e resultados foram resolvidos em [E03-P01_decisions.md](E03-P01_decisions.md). Permanecem pendentes os contratos de entidades/construtores e o conteúdo de `MigrationsConfig`, nas entregas correspondentes.
 
 ### 6.2. Drivers e dialetos
 
-- Como identificar na configuração o driver importado pelo consumidor e o banco correspondente? Como validar incompatibilidades ou ausência de registro?
+- **Resolvido:** `Config.Driver` identifica o registro em `database/sql`; `Type` seleciona o formato do DSN. Ausência gera `ErrDriverNotLoaded`; nomes não são usados para inferir compatibilidade. Ver E02-P01.
 - Qual será a interface dos dialetos e como cada dialeto será selecionado ou associado ao driver?
 - Quais drivers e versões de MySQL e PostgreSQL serão usados na validação manual posterior? Quais capacidades serão garantidas por banco, especialmente retorno de campos e transações em migrações?
 
-A responsabilidade de escolher e importar o driver já está definida como sendo do consumidor. O que permanece pendente é o contrato de integração e a estratégia dos dialetos.
+A responsabilidade de escolher e importar o driver já está definida como sendo do consumidor. Permanecem pendentes os dialetos e a evidência de integração real MySQL/PostgreSQL em E09, conforme o [roteiro manual](E09_manual_validation.md).
 
 Para a validação do projeto, foi escolhido `modernc.org/sqlite` nos testes automatizados com banco. Em 18/10/2026, o consumidor aceitou o SQLite 3.53.4 incorporado pelo driver v1.60.1. A política é usar o SQLite fornecido pela versão estável selecionada do driver, sem exigir coincidência com a versão upstream mais recente; atualizações devem ser deliberadas e validadas. MySQL e PostgreSQL serão validados manualmente pelo consumidor posteriormente, e testes unitários cobrirão as regras e a geração de SQL dos dialetos. O plano de execução registra a preparação do SQLite, o uso local de `dev.db` e os lembretes para as validações restantes.
 
@@ -272,7 +270,7 @@ Para a validação do projeto, foi escolhido `modernc.org/sqlite` nos testes aut
 - Após falha em uma operação do grupo, quem solicita o rollback: o consumidor ou um mecanismo da biblioteca? Como impedir a confirmação de um grupo que deveria ter sido revertido?
   _Resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): `Commit` bloqueado com auto-rollback — a `*Tx` memoriza o primeiro erro de `ExecContext`/`QueryContext` e o `Commit` retorna esse erro sem confirmar (§3.4.5, decidido em E03-P03). Falhas que só aparecem em `Row.Scan` ou na iteração de `Rows` permanecem sob responsabilidade do consumidor._
 - Como comunicar e tratar falhas em `Commit` ou `Rollback`, inclusive quando não for possível confirmar o estado final das alterações?
-  _Parcialmente resolvido: falhas do driver são repassadas sem reembrulho desnecessário; falha anterior bloqueia `Commit` com auto-rollback (§3.4.5). O caso "não foi possível confirmar o estado final" depende de capacidades por banco e permanece para a validação manual de E09._
+  _Resolvido no contrato: falhas nativas de finalização encerram o wrapper; erro original e eventual erro de limpeza são preservados. O resultado remoto pode permanecer incerto, sem repetição automática. A evidência por banco continua pendente em E09._
 
 A intenção já definida é confirmar ou reverter em conjunto operações da mesma transação, preservando a independência das operações executadas fora dela.
 
@@ -323,7 +321,7 @@ As entidades, junções, metadados das colunas, funções fornecidas pelo consum
 ### 6.8. SQL incorporado
 
 - Qual será o tipo público que referencia o arquivo e como ele receberá os recursos incorporados e os parâmetros?
-- Como distinguir execução de escrita e consulta que devolve linhas? Quais tipos de `database/sql` serão expostos e quem encerrará os recursos de leitura?
+- **Parcialmente resolvido em E03:** Exec/Query/QueryRow distinguem execução e leitura, com wrappers Krios e fechamento pelo consumidor. A ligação desses métodos ao arquivo incorporado será definida em E07.
 - Como combinar os resultados nativos com o mapeamento do RF-09 e executar essas operações na transação selecionada?
 
 O consumidor continua responsável pela incorporação dos arquivos durante a compilação. O nome fornecido na configuração apenas seleciona um recurso já incorporado.

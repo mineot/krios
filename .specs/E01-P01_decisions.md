@@ -2,6 +2,8 @@
 
 Data: 2026-10-18
 
+> **Organização vigente:** ver a revisão de fachada pública de 2026-10-19 ao final. As seções anteriores preservam as decisões históricas de arquivo único e consolidação dos testes, posteriormente substituídas.
+
 ## Decisões
 
 | Item | Decisão | Justificativa |
@@ -48,3 +50,17 @@ Observações da revisão:
 - Um arquivo `_test.go` tem uma única cláusula `package`; como `krios_test.go` testa funções não exportadas (`validate`, `timeout`, `port`), ele usa **`package krios`**. O exemplo `ExampleConfig` passa a referenciar `Config` diretamente, **sem importar** `github.com/mineot/krios`; o exemplo continua compilando e executando, mas deixa de demonstrar o import externo.
 - `tests/sqlite_test.go` **permanece** na pasta `tests`, no pacote `tests`, importando o driver. Isso preserva o isolamento do driver decidido em E01-P03 (o driver não entra na compilação normal da biblioteca nem do executável). A centralização recai apenas sobre os testes do pacote.
 - Os testes de detalhes internos do pacote continuam junto ao código, conforme a convenção do Go; não são movidos para `tests/`.
+
+### Revisão (2026-10-19) — M05
+
+A organização adotada originalmente em M05 distribuía responsabilidades em `config.go`, `errors.go`, `db.go`, `dsn.go`, `execution.go`, `rows.go`, `result.go` e `tx.go`; `krios.go` mantém a documentação do pacote. Essa revisão substitui o arquivo único provisório, sem mudar pacote ou caminho de importação. Não foram criados subpacotes.
+
+Os testes de configuração existentes continuam em `krios_test.go`. Novos testes internos são agrupados por contrato em `db_test.go`, `dsn_test.go`, `execution_test.go`, `rows_test.go` e `tx_test.go`, com driver simulado em `driver_test.go`. Isso substitui a concentração provisória de todos os testes internos em um arquivo. Integração SQLite e exemplos com import externo permanecem em `tests/`; os drivers reais continuam exclusivos de `_test.go`.
+
+As decisões anteriores acima permanecem como histórico. O mapa vigente de arquivos está no [README](../README.md), e as evidências desta revisão no [plano de melhorias](0003_improvement_plan.md).
+
+### Revisão (2026-10-19) — fachada pública e implementação interna
+
+A pedido do consumidor, os arquivos de implementação e seus testes foram movidos para `internal/core` (pacote `core`). Esta revisão substitui a distribuição física de M05 na raiz. O pacote público `krios` mantém somente `krios.go`, com aliases dos tipos, constantes, sentinelas de erro e uma função `Open` que delega à implementação. Os métodos de DB/Tx e resultados são disponibilizados pelos aliases, sem wrappers adicionais.
+
+O import do consumidor continua `github.com/mineot/krios`. Os testes de integração e exemplos continuam em `tests/`, usando esse import público. O módulo, os comandos do Makefile e os jobs do CI continuam operando sobre `./...`. O pacote interno contém implementação concreta; não reintroduz os subpacotes apenas documentais descartados na fase inicial.

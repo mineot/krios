@@ -1,87 +1,113 @@
 # Krios
 
-Biblioteca Go em desenvolvimento para acesso a SQLite3, MySQL e PostgreSQL, com configuração em código, transações, consultas e migrações.
+Biblioteca Go em desenvolvimento para acesso a SQLite3, MySQL e PostgreSQL por `database/sql`.
 
-O projeto já oferece configuração em código (`krios.Config`), abertura e encerramento do acesso (`Open`/`Close`) e transações explícitas (`Begin`/`Commit`/`Rollback` com execução em `*DB` e `*Tx`). Consultas encadeadas, SQL incorporado e migrações ainda serão implementados.
+Implementados: configuração em código, abertura/fechamento, SQL parametrizado e transações explícitas. Entidades, consultas encadeadas, SQL incorporado e migrações pertencem às próximas entregas. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN e aguardam integração manual.
 
 ## Desenvolvimento local
 
-- Versão mínima: Go 1.26.0.
-- Ambiente de desenvolvimento previsto: atualização mais recente da linha Go 1.27.
-- Compatibilidade a validar: atualizações mais recentes das linhas Go 1.26 e 1.27.
-- `make` é opcional; os comandos Go também podem ser executados diretamente.
+- Go mínimo: 1.26.0; matriz prevista: linhas 1.26 e 1.27.
+- `make` é opcional. A primeira execução baixa as dependências de teste fixadas em `go.mod`/`go.sum`.
+- Testes normais usam diretórios temporários; não acessam `dev.db` nem exigem servidores externos.
 
-Execute os comandos a partir da raiz do repositório. Não são necessários servidores de banco nem arquivos externos de configuração. O Go baixa o driver e suas dependências de teste conforme `go.mod` e `go.sum` na primeira execução.
+| Comando | Finalidade |
+| --- | --- |
+| `make fmt` | Formatar o código |
+| `make fmt-check` | Rejeitar arquivos fora do padrão, sem alterá-los |
+| `make build` | `go build ./...` |
+| `make vet` | `go vet ./...` |
+| `make test` | `go test ./...` |
+| `make check` ou `make` | Formatação, compilação, análise estática e testes |
+| `make race` | `CGO_ENABLED=1 go test -race -count=1 ./...` |
+| `make dev-db` | Criar/abrir o banco local, preservando dados existentes |
 
-| Comando | Finalidade | Comando Go equivalente |
-| --- | --- | --- |
-| `make fmt` | Formatar o código, alterando os arquivos necessários | `go fmt ./...` |
-| `make fmt-check` | Rejeitar código fora do padrão, sem alterar arquivos | `gofmt -l .` lista os arquivos; o alvo falha se a lista não estiver vazia |
-| `make build` | Compilar todos os pacotes | `go build ./...` |
-| `make vet` | Executar análise estática | `go vet ./...` |
-| `make test` | Executar os testes existentes | `go test ./...` |
-| `make check` | Verificar formatação, compilação, análise estática e testes | Executar as verificações acima, exceto a formatação que altera arquivos |
-| `make dev-db` | Criar ou abrir `dev.db` localmente, preservando os dados existentes | `KRIOS_DEV_DB_PATH="$PWD/dev.db" go test -run '^TestPrepareDevelopmentDatabase$' -count=1 -v ./tests` |
+Para selecionar outra instalação: `make check GO=/caminho/go/bin/go`. O alvo `race` exige compilador C no Linux, embora o driver SQLite continue sendo escrito em Go. Os testes com detector exercitam somente os caminhos executados, não provam ausência de todas as corridas possíveis. Ver [documentação do detector](https://go.dev/doc/articles/race_detector).
 
-Antes de concluir uma alteração, execute:
+## Uso da base implementada
 
-```sh
-make fmt
-make check
+O consumidor importa seu driver e preenche `Config` em código:
+
+```go
+import (
+    "context"
+    "github.com/mineot/krios"
+    _ "modernc.org/sqlite"
+)
+
+// Dentro de uma função que retorna error:
+db, err := krios.Open(context.Background(), krios.Config{
+    Type: krios.DBTypeSQLite,
+    Driver: "sqlite",
+    SQLite: &krios.SQLiteConfig{DBPath: "app.db"},
+})
+if err != nil { return err }
+defer db.Close()
 ```
 
-Executar apenas `make` também chama `check`. Qualquer falha nas verificações faz o comando retornar erro.
+O nome de registro e o formato do DSN devem ser compatíveis com o driver escolhido. MySQL usa o formato de `go-sql-driver/mysql`; PostgreSQL usa URL compatível com `pgx`. Configuração e validações estão em [E02-P01](.specs/E02-P01_decisions.md). Portas explícitas devem estar em 1–65535; zero aplica o padrão. Timeout zero aplica 10 segundos.
 
-`go build ./...` verifica os pacotes do projeto. O exemplo executável está em `cmd/krios` e pode ser executado com `go run ./cmd/krios`. Os testes atuais cobrem o ambiente SQLite (escrita parametrizada e persistência após reabrir o arquivo), a configuração (`krios.Config`), o ciclo de vida (`Open`/`Close`) e as transações: abertura e encerramento, configuração inválida, driver ausente, cancelamento, prazo esgotado, falha de conexão, `Begin`/`Commit`/`Rollback`, rejeição de operações após o fim da transação (`ErrTxDone`), confirmação e reversão de grupo de inserts relacionados, isolamento entre transação e instância principal, `Commit` bloqueado com auto-rollback após falha de statement e concorrência serializada na mesma transação. Consultas encadeadas, SQL incorporado e migrações ainda não estão implementados.
+`Open` inclui preparação e ping no orçamento temporal. Interromper uma chamada bloqueante depende do driver; o Krios não simula cancelamento abandonando recursos em goroutines.
+
+Os [exemplos executáveis](tests/examples_test.go) demonstram abertura, consulta, `Rows.Err`, transações, commit bloqueado e rollback após erro de leitura. Execute `go test -run '^Example' -v ./tests`. Cada exemplo cria seu próprio banco temporário.
+
+## Erros e propriedade dos resultados
+
+- Tratar erros com `errors.Is`/`errors.As`. Erros do driver são preservados.
+- `QueryRowContext(...).Scan(...)` preserva cancelamento, prazo, `ErrClosed` e `ErrTxDone`. `sql.ErrNoRows` significa consulta sem linha.
+- Após `QueryContext`, registrar `defer rows.Close()`, tratar `Scan` e verificar `rows.Err()` depois da iteração. O erro continua disponível após fechar.
+- `Result.RowsAffected()` e `LastInsertId()` retornam valor e disponibilidade; zero com `true` é válido. `false` inclui erro do driver ao obter essa informação, cujo detalhe não é exposto pela interface.
+- Wrappers de acesso e resultados são obtidos por `Open`, `Begin` e consultas; seus valores zero não representam recursos prontos para uso.
+
+## Transações e concorrência
+
+Após `Begin`, registrar `defer tx.Rollback(ctx)` para limpar também retornos antecipados. `Rollback(ctx)` tenta a limpeza mesmo com contexto cancelado; não é interrompido pelo contexto. Depois da finalização, novas chamadas retornam `ErrTxDone`.
+
+`Commit(ctx)` rejeita contexto cancelado antes da tentativa nativa quando não há erro imediato anterior. Se `ExecContext`/`QueryContext` já falhou, o commit é bloqueado e tenta rollback mesmo com contexto cancelado, preservando o primeiro erro e eventual erro de limpeza. Falhas em `Scan` e iteração exigem rollback explícito do consumidor; não bloqueiam commit automaticamente.
+
+O contexto passado a `Begin` controla toda a vida da transação e seu cancelamento provoca reversão nativa. Falha de finalização torna o wrapper inutilizável e pode deixar o estado remoto incerto; não existe repetição automática de escrita.
+
+`DB` permite uso concorrente. Chamadas na mesma `Tx` são serializadas, mas isso não coordena a leitura dos resultados. Use um consumidor por iterador, consuma/feche resultados antes de outra operação na mesma transação e aguarde os consumidores antes de finalizar. Não há ordem garantida entre goroutines.
 
 ## Organização
 
-- `go.mod`: módulo `github.com/mineot/krios` e versão mínima de Go.
-- `krios.go`: pacote público `krios` — documentação, `krios.Config`, tipos por banco, padrões, validações, erros exportados, ciclo de vida (`Open`/`Close`) e transações (`Begin`/`Commit`/`Rollback`, `Result`/`Rows`/`Row`).
-- `krios_test.go`: testes do pacote e exemplo de configuração em Go.
-- `cmd/krios/main.go`: exemplo executável separado da biblioteca.
-- `tests/sqlite_test.go`: validação isolada do driver e preparação opcional do banco local.
-- `tests/lifecycle_test.go`, `tests/lifecycle_three_test.go`: testes de caixa-preta do ciclo de vida.
-- `tests/tx_test.go`, `tests/tx_group_test.go`: testes de transações, grupo de inserts e concorrência.
-- `Makefile`: comandos de desenvolvimento local.
-- `.github/workflows/check.yml`: verificações em pushes e pull requests.
-- `.specs/`: requisitos, plano de execução e decisões técnicas.
+| Arquivo | Responsabilidade |
+| --- | --- |
+| `krios.go` | Fachada pública: aliases de tipos, constantes, erros e delegação de `Open` |
+| `internal/core/config.go`, `dsn.go`, `errors.go` | Configuração, DSNs e erros |
+| `internal/core/db.go`, `tx.go` | Conexão e transação |
+| `internal/core/execution.go` | Contrato interno Krios e delegação nativa |
+| `internal/core/rows.go`, `result.go` | Resultados e recursos de leitura |
+| `internal/core/*_test.go` | Testes internos; driver simulado com contadores/hooks |
+| `tests/` | Integração SQLite e exemplos de consumo externo |
+| `cmd/krios/main.go` | Placeholder que imprime uma saudação; ainda não é exemplo funcional de acesso |
+| `.specs/` | Requisitos, decisões, melhorias e roteiro manual |
 
-Novos arquivos e pacotes serão criados conforme a implementação exigir. Os drivers serão escolhidos e importados pelo consumidor; a biblioteca não os importará automaticamente. A configuração é fornecida em código pela struct `krios.Config` e entregue a `Open`.
+Drivers são importados somente nos testes do repositório; não entram na compilação normal da biblioteca nem do placeholder. `DB`/`Tx` não retêm a configuração completa sem uso. O pacote público permanece na raiz e delega à implementação em `internal/core`, que não é importada pelo consumidor. Os aliases preservam os tipos e métodos disponíveis pelo import `github.com/mineot/krios`; a fachada não duplica a lógica.
 
-## SQLite local e testes
+## SQLite local
 
-Os testes usam `modernc.org/sqlite v1.60.1`, resolvido por `@latest` em 18/10/2026 e fixado no módulo. O driver incorpora SQLite **3.53.4**, confirmado por `SELECT sqlite_version()`. O uso dessa versão foi aceito pelo consumidor em 18/10/2026. A política é acompanhar a versão estável do driver, usando o SQLite incorporado por ela, sem exigir coincidência com a versão upstream mais recente. As atualizações da dependência devem ser deliberadas e validadas.
+Os testes usam `modernc.org/sqlite v1.60.1`, fixado no módulo. A seleção original e aceitação do SQLite incorporado foram registradas em E01-P03 em 18/10/2026. Atualizações são deliberadas; não há exigência de coincidir com a versão upstream mais recente.
 
-Para preparar o banco local:
+`make dev-db` habilita um auxiliar de teste para criar/abrir `dev.db`; esse auxiliar é ignorado em testes normais e rejeita execução com `CI` definido. O banco e seus arquivos auxiliares estão no `.gitignore`. Não executar esse comando para validar uma alteração: use os bancos temporários da suíte.
 
-```sh
-make dev-db
-```
+## Integração contínua e evidências
 
-O comando cria ou abre `dev.db` na raiz, sem apagar nem reinicializar dados existentes. O banco e seus arquivos auxiliares estão no `.gitignore`. A preparação é feita por um auxiliar em `_test.go`, habilitado apenas por esse comando, para manter o driver fora da compilação normal.
+O workflow possui jobs `check` (sem CGO) e `race` (CGO habilitado e compilador C), ambos nas linhas Go 1.26/1.27. Usa `ubuntu-latest`, permissões de leitura, timeout de 15 minutos por job e cancelamento de execuções antigas da mesma referência. Não publica artefatos nem utiliza cache persistente do Actions.
 
-`make test` e `make check` usam `t.TempDir()` para criar bancos temporários próprios. Não abrem nem removem `dev.db`. O auxiliar de preparação local é ignorado normalmente e rejeita execução quando a variável `CI` está definida.
+Os jobs executam somente quando o repositório é público, preservando a condição de gratuidade adotada pelo projeto. Em repositório privado são ignorados. Não há mudança de visibilidade ou faturamento; consulte a [política do GitHub Actions](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
 
-O driver aparece no `go.mod`, mas seu único import está em `_test.go`. Ele não faz parte das dependências compiladas da biblioteca ou do exemplo executável. O consumidor continua escolhendo o driver da sua aplicação.
+A revisão M01–M06 passou localmente por `make check CGO_ENABLED=0` e `make race` em Go **1.26.8** e **1.27.1**. As versões locais não são apresentadas como as últimas disponíveis. A execução remota do workflow atualizado permanece pendente. O relato de sucesso remoto em 18/10 é evidência histórica, anterior a estas alterações.
 
-## Integração contínua
-
-O GitHub Actions executa `make check` em pushes e pull requests, nas atualizações mais recentes das linhas Go 1.26 e 1.27, usando `ubuntu-latest` e SQLite sem CGO. O workflow tem permissões somente de leitura, tempo máximo de 15 minutos por job e cancela execuções anteriores da mesma referência. Não publica artefatos nem utiliza cache persistente do Actions.
-
-Para respeitar a condição de gratuidade, os jobs executam **somente quando o repositório é público**. Em repositórios privados, são ignorados: a franquia gratuita e a eventual cobrança dependem da conta. Não há alteração automática de visibilidade ou faturamento. Consulte a [política de cobrança do GitHub Actions](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
-
-Em 18/10/2026, o consumidor confirmou o sucesso dos checks remotos nas linhas Go 1.26 e 1.27 após enviar os arquivos ao GitHub. O ambiente remoto não acessa o `dev.db` do seu computador.
-
-MySQL e PostgreSQL serão testados manualmente pelo consumidor posteriormente; testes unitários também cobrirão as regras e a geração de SQL dos dialetos.
+MySQL/PostgreSQL aguardam execução do [roteiro manual](.specs/E09_manual_validation.md). Testar DSNs e falhas simuladas não comprova conexão real. E04 pode avançar sobre a base corrigida; as evidências manuais continuam obrigatórias para concluir E09.
 
 ## Documentação do projeto
 
 - [Planejamento e requisitos](.specs/0001_planning.md)
 - [Plano de execução e progresso](.specs/0002_execution_plan.md)
-- [Decisões da base técnica — E01-P01](.specs/E01-P01_decisions.md)
-- [Decisões da configuração — E02-P01](.specs/E02-P01_decisions.md)
-- [Decisões dos contratos de execução — E03-P01](.specs/E03-P01_decisions.md)
+- [Plano de melhorias e evidências M01–M06](.specs/0003_improvement_plan.md)
+- [Base técnica — E01-P01](.specs/E01-P01_decisions.md)
+- [Configuração — E02-P01](.specs/E02-P01_decisions.md)
+- [Execução e transações — E03-P01](.specs/E03-P01_decisions.md)
 
 ## Licença
 

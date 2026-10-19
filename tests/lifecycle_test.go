@@ -98,21 +98,3 @@ func TestOpenDeadlineExceeded(t *testing.T) {
 		t.Errorf("Open() = %v, must not wrap ErrConnectionFailed on deadline", err)
 	}
 }
-
-func TestOpenConnectionFailure(t *testing.T) {
-	t.Parallel()
-
-	cfg := krios.Config{
-		Type:   krios.DBTypeMySQL,
-		Driver: "krios_fail",
-		MySQL: &krios.MySQLConfig{
-			Host:     "127.0.0.1",
-			User:     "app",
-			Password: "secret",
-			DBName:   "app_db",
-		},
-	}
-	if _, err := krios.Open(context.Background(), cfg); !errors.Is(err, krios.ErrConnectionFailed) {
-		t.Fatalf("Open() = %v, want ErrConnectionFailed", err)
-	}
-}

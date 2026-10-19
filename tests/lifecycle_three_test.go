@@ -11,19 +11,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func sqliteValidNoMigrations() krios.Config {
-	return krios.Config{
-		Type:   krios.DBTypeSQLite,
-		Driver: "sqlite",
-		SQLite: &krios.SQLiteConfig{DBPath: filepath.Join(tTempDir(), "krios_nomig.db")},
-	}
-}
-
-func tTempDir() string {
-	// tests use t.TempDir; helper not parallel safe but called inside tests
-	return ""
-}
-
 func TestOpenMySQLWithFailingDriverReturnsConnectionFailed(t *testing.T) {
 	t.Parallel()
 
@@ -45,7 +32,7 @@ func TestOpenMySQLWithFailingDriverReturnsConnectionFailed(t *testing.T) {
 		_ = db.Close()
 		t.Fatal("expected db to be nil")
 	}
-	if !isErrConnectionFailed(err) {
+	if !errors.Is(err, krios.ErrConnectionFailed) {
 		t.Fatalf("Open(MySQL) = %v, want ErrConnectionFailed", err)
 	}
 }
@@ -71,7 +58,7 @@ func TestOpenPostgresWithFailingDriverReturnsConnectionFailed(t *testing.T) {
 		_ = db.Close()
 		t.Fatal("expected db to be nil")
 	}
-	if !isErrConnectionFailed(err) {
+	if !errors.Is(err, krios.ErrConnectionFailed) {
 		t.Fatalf("Open(Postgres) = %v, want ErrConnectionFailed", err)
 	}
 }
@@ -119,7 +106,7 @@ func TestOpenMySQLInvalidConfigReturnsInvalidConfig(t *testing.T) {
 
 	for i, fn := range cases {
 		cfg := fn()
-		if _, err := krios.Open(context.Background(), cfg); !isErrInvalidConfig(err) {
+		if _, err := krios.Open(context.Background(), cfg); !errors.Is(err, krios.ErrInvalidConfig) {
 			t.Errorf("case %d Open(MySQL invalid) = %v, want ErrInvalidConfig", i, err)
 		}
 	}
@@ -153,7 +140,7 @@ func TestOpenPostgresInvalidConfigReturnsInvalidConfig(t *testing.T) {
 
 	for i, fn := range cases {
 		cfg := fn()
-		if _, err := krios.Open(context.Background(), cfg); !isErrInvalidConfig(err) {
+		if _, err := krios.Open(context.Background(), cfg); !errors.Is(err, krios.ErrInvalidConfig) {
 			t.Errorf("case %d Open(Postgres invalid) = %v, want ErrInvalidConfig", i, err)
 		}
 	}
@@ -202,12 +189,4 @@ func basePostgres() krios.Config {
 			DBName:   "app_db",
 		},
 	}
-}
-
-func isErrConnectionFailed(err error) bool {
-	return errors.Is(err, krios.ErrConnectionFailed)
-}
-
-func isErrInvalidConfig(err error) bool {
-	return errors.Is(err, krios.ErrInvalidConfig)
 }

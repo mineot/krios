@@ -33,6 +33,7 @@ func TestBeginCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v, want nil", err)
 	}
+	defer tx.Rollback(context.Background())
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Commit() = %v, want nil", err)
 	}
@@ -48,6 +49,7 @@ func TestBeginRollback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v, want nil", err)
 	}
+	defer tx.Rollback(context.Background())
 	if err := tx.Rollback(ctx); err != nil {
 		t.Fatalf("Rollback() = %v, want nil", err)
 	}
@@ -67,6 +69,7 @@ func TestTransactionPersistsDataOnCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)
 	}
+	defer tx.Rollback(context.Background())
 	if _, err := tx.ExecContext(ctx, "INSERT INTO t (v) VALUES (?)", "a"); err != nil {
 		t.Fatalf("tx INSERT = %v", err)
 	}
@@ -112,6 +115,7 @@ func TestTransactionDiscardsDataOnRollback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)
 	}
+	defer tx.Rollback(context.Background())
 	if _, err := tx.ExecContext(ctx, "INSERT INTO t (v) VALUES (?)", "x"); err != nil {
 		t.Fatalf("tx INSERT = %v", err)
 	}
@@ -150,6 +154,7 @@ func TestTxRejectsOperationsAfterDone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)
 	}
+	defer tx.Rollback(context.Background())
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Commit() = %v", err)
 	}
@@ -182,7 +187,7 @@ func TestTxQueryRowNoRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(context.Background())
 
 	row := tx.QueryRowContext(ctx, "SELECT id FROM t WHERE id = ?", 999)
 	var id int
@@ -230,6 +235,7 @@ func TestCommitCanceledContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() = %v", err)
 	}
+	defer tx.Rollback(context.Background())
 
 	cancelCtx, cancel := context.WithCancel(ctx)
 	cancel()
