@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"testing"
@@ -147,33 +148,91 @@ func TestBeginCancellationNormalizesNativeTerminalState(t *testing.T) {
 	}
 }
 
-func TestLateReadFailureRequiresConsumerRollback(t *testing.T) {
+func TestLateReadFailureBlocksCommit(t *testing.T) {
 	for _, row := range []bool{false, true} {
-		d := &testDriver{query: func() (driver.Rows, error) { return &testRows{nextErr: &readFailure{}}, nil }}
-		tx := beginDriver(t, openDriver(t, d), context.Background())
+		name := "iteration"
 		if row {
-			var value int
-			if tx.QueryRowContext(context.Background(), "read").Scan(&value) == nil {
-				t.Fatal("missing read error")
-			}
-		} else {
-			rows, err := tx.QueryContext(context.Background(), "read")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if rows.Next() || rows.Err() == nil {
-				t.Fatal("missing iteration error")
-			}
-			_ = rows.Close()
+			name = "scan"
 		}
-		// Demonstrate the documented boundary: ignoring a late error does not
-		// poison Commit. Consumers must explicitly roll back instead.
-		if err := tx.Commit(context.Background()); err != nil {
-			t.Fatal(err)
-		}
-		if d.commits.Load() != 1 {
-			t.Fatal("late error unexpectedly blocked commit")
-		}
+		t.Run(name, func(t *testing.T) {
+			d := &testDriver{query: func() (driver.Rows, error) { return &testRows{nextErr: &readFailure{}}, nil }}
+			tx := beginDriver(t, openDriver(t, d), context.Background())
+
+			var lateErr error
+			if row {
+				var value int
+				lateErr = tx.QueryRowContext(context.Background(), "read").Scan(&value)
+			} else {
+				rows, err := tx.QueryContext(context.Background(), "read")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if rows.Next() {
+					t.Fatal("unexpected row")
+				}
+				lateErr = rows.Err()
+				_ = rows.Close()
+			}
+			if lateErr == nil {
+				t.Fatal("missing late read error")
+			}
+
+			// The late failure poisons Commit: rollback runs and the class of
+			// error stays inspectable by the consumer.
+			err := tx.Commit(context.Background())
+			var typed *readFailure
+			if err == nil || !errors.As(err, &typed) {
+				t.Fatalf("Commit = %v, want a blocked commit preserving the read failure", err)
+			}
+			if d.commits.Load() != 0 || d.rollbacks.Load() != 1 {
+				t.Fatal("wrong native finalization")
+			}
+			assertTxDone(t, tx)
+		})
+	}
+}
+
+func TestErrNoRowsDoesNotBlockCommit(t *testing.T) {
+	d := &testDriver{query: func() (driver.Rows, error) { return &testRows{}, nil }}
+	tx := beginDriver(t, openDriver(t, d), context.Background())
+
+	var value int
+	if err := tx.QueryRowContext(context.Background(), "read").Scan(&value); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("Scan = %v, want sql.ErrNoRows", err)
+	}
+	// An empty result is a legitimate outcome: the existence-check pattern
+	// must still be able to commit.
+	if err := tx.Commit(context.Background()); err != nil {
+		t.Fatalf("Commit = %v, want nil", err)
+	}
+	if d.commits.Load() != 1 {
+		t.Fatal("commit did not reach driver")
+	}
+}
+
+func TestLateReadFailureOnDBNotRecorded(t *testing.T) {
+	d := &testDriver{query: func() (driver.Rows, error) { return &testRows{nextErr: &readFailure{}}, nil }}
+	db := openDriver(t, d)
+
+	row := db.QueryRowContext(context.Background(), "read")
+	if row.tx != nil {
+		t.Fatal("row from DB should not retain a transaction")
+	}
+	var value int
+	if err := row.Scan(&value); err == nil {
+		t.Fatal("missing read error")
+	}
+
+	rows, err := db.QueryContext(context.Background(), "read")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if rows.tx != nil {
+		t.Fatal("rows from DB should not retain a transaction")
+	}
+	if rows.Next() || rows.Err() == nil {
+		t.Fatal("missing iteration error")
 	}
 }
 

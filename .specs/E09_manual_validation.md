@@ -133,8 +133,22 @@ Executar `go mod tidy`, `go run .` e guardar o resultado e versões. Usar soment
 | V09 | Enquanto Tx contém insert ainda não confirmado, consultar via DB; depois rollback | Operação no DB não participa do grupo nem enxerga escrita não confirmada no isolamento configurado; registrar bloqueios/isolamento |
 | V10 | Consumir/fechar resultados e finalizar; repetir todos os métodos na Tx | `ErrTxDone`, inclusive em `Row.Scan` |
 | V11 | Em ambiente descartável, interromper a conexão durante confirmação, se houver infraestrutura para controle | Erro preservado; objeto terminal; estado remoto registrado como incerto até consulta independente |
+| V12 | Dentro de Tx, executar escrita e depois leitura com erro de conversão (ex.: texto em `int`) ou erro de iteração; tentar `Commit` sem rollback explícito | `Commit` bloqueado com auto-rollback (E03-P04): erro original recuperável por `errors.Is`, escrita não persistida, Tx terminal. Repetir com consulta sem linhas (`ErrNoRows`) → `Commit` **não** bloqueado |
 
 V11 não autoriza repetir automaticamente a escrita: confirmar a situação por outra conexão. Se o ambiente não permitir injeção controlada, registrar o cenário como não executado; os testes simulados continuam sendo evidência somente do contrato local.
+
+### 3.1 Cenários de migrações — estado parcial (E08)
+
+Aplicam-se quando E08 estiver implementado; ver [E08-P01_decisions.md](E08-P01_decisions.md).
+
+| ID | Procedimento | Resultado esperado |
+| --- | --- | --- |
+| M01 | MySQL: migração com DDL não-transacional seguido de comando que falha no meio do arquivo | Arquivo registrado com `in_progress`/`failed`; erro com contexto; `applied_at` não preenchido para o arquivo falho |
+| M02 | Após M01, chamar `RunMigrations` novamente | Bloqueio com `ErrPartialMigration` (`Direction`, `TargetVersion`, `LastVersion`, `LastFile`, `Status`); nenhuma execução automática |
+| M03 | Após M01, inspecionar o banco | DDL já executado **não** revertido (sem rollback de commit implícito); estado real registrado como evidência |
+| M04 | Recuperar conforme política: concluir manualmente e marcar registro como `applied` (ou reverter manualmente e limpar registro); repetir `RunMigrations` | Execução segue da versão correta até a desejada |
+| M05 | PostgreSQL e SQLite: sequência com falha deliberada em arquivo | Rollback integral do percurso; nenhum registro `in_progress` remanescente; banco como antes da execução |
+| M06 | Estado `0` e ausência de versão desejada | Reversão total apenas em versão `0` explícita; versão ausente retorna erro antes de executar |
 
 ## 4. Registro de evidências
 

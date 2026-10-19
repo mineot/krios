@@ -176,7 +176,7 @@ Antes das correções, a suíte nova falhou nos erros de `QueryRowContext`, pres
 | Close apagava erro de leitura | `rows.go` | `TestRowsLifecycle` |
 | Estado divergente após falha de finalização | `tx.go`, `errors.go` | `TestTxFinalizationFailureIsTerminal`, `TestBeginCancellationNormalizesNativeTerminalState` |
 | Cancelamento impedia limpeza | `tx.go` | `TestRollbackIgnoresCanceledContext`, `TestBlockedCommitPreservesBothErrors` |
-| Política de erros tardios e concorrência | Contrato E03 e `tx.go` | `TestLateReadFailureRequiresConsumerRollback`, `TestFinalizationClosesOpenResults`, `TestConcurrentFinalizationWaitsForExecution`, exemplos |
+| Política de erros tardios e concorrência | Contrato E03 e `tx.go` | `TestLateReadFailureBlocksCommit` (renomeado de `...RequiresConsumerRollback` em E03-P04), `TestErrNoRowsDoesNotBlockCommit`, `TestFinalizationClosesOpenResults`, `TestConcurrentFinalizationWaitsForExecution`, exemplos |
 | DSN e limite de portas | `dsn.go`, `config.go` | `TestMySQLDSN`, `TestPostgresDSN`, `TestConnectionPortRange` |
 | Timeout só começava após preparação | `db.go` | `TestOpenBudgetIncludesDriverPreparation`, `TestOpenUsesShortestDeadline` |
 | Falta de evidência de liberação/cancelamento | `db.go`, contrato executor | `TestOpenReleasesConnectionOnPingFailure`, `TestOpenCancellationDuringPing`, `TestExecutionCancellationInFlight` |

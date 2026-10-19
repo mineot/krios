@@ -62,7 +62,7 @@ Os [exemplos executáveis](tests/examples_test.go) demonstram abertura, consulta
 
 Após `Begin`, registrar `defer tx.Rollback(ctx)` para limpar também retornos antecipados. `Rollback(ctx)` tenta a limpeza mesmo com contexto cancelado; não é interrompido pelo contexto. Depois da finalização, novas chamadas retornam `ErrTxDone`.
 
-`Commit(ctx)` rejeita contexto cancelado antes da tentativa nativa quando não há erro imediato anterior. Se `ExecContext`/`QueryContext` já falhou, o commit é bloqueado e tenta rollback mesmo com contexto cancelado, preservando o primeiro erro e eventual erro de limpeza. Falhas em `Scan` e iteração exigem rollback explícito do consumidor; não bloqueiam commit automaticamente.
+`Commit(ctx)` rejeita contexto cancelado antes da tentativa nativa quando não há erro registrado anterior. A transação memoriza o primeiro erro observado — falha imediata de `ExecContext`/`QueryContext` ou erro tardio de leitura (`Row.Scan`, `Rows.Scan`, iteração e fechamento) — e, nesse caso, o commit é bloqueado e tenta rollback mesmo com contexto cancelado, preservando o primeiro erro e eventual erro de limpeza. `sql.ErrNoRows` não bloqueia o commit, para preservar o padrão de verificação de existência. O rollback explícito no primeiro erro continua sendo o comportamento recomendado; o bloqueio do commit é uma proteção adicional.
 
 O contexto passado a `Begin` controla toda a vida da transação e seu cancelamento provoca reversão nativa. Falha de finalização torna o wrapper inutilizável e pode deixar o estado remoto incerto; não existe repetição automática de escrita.
 

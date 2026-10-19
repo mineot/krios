@@ -107,7 +107,7 @@ Apenas operações executadas por meio do objeto de transação devem participar
 
 O consumidor deve poder executar operações sem abrir explicitamente uma transação, inclusive consultas `SELECT`. Quando precisar confirmar ou desfazer um conjunto de operações como uma unidade, deve associá-las à mesma transação.
 
-Por exemplo, três inserts em tabelas relacionadas devem ser confirmados somente após o sucesso de todos. Se um deles falhar, as alterações ainda não confirmadas desse grupo devem ser revertidas. Operações executadas fora do grupo ou já confirmadas não participam dessa reversão. A responsabilidade pelo rollback e os limites de concorrência estão definidos em [E03-P01_decisions.md](E03-P01_decisions.md): erros imediatos de Exec/Query bloqueiam Commit; erros de leitura tardios exigem rollback do consumidor.
+Por exemplo, três inserts em tabelas relacionadas devem ser confirmados somente após o sucesso de todos. Se um deles falhar, as alterações ainda não confirmadas desse grupo devem ser revertidas. Operações executadas fora do grupo ou já confirmadas não participam dessa reversão. A responsabilidade pelo rollback e os limites de concorrência estão definidos em [E03-P01_decisions.md](E03-P01_decisions.md): erros imediatos de Exec/Query **e** erros de leitura tardios (`Row.Scan`, iteração) bloqueiam Commit com auto-rollback; o rollback explícito no primeiro erro permanece a prática recomendada.
 
 Após `Commit` ou `Rollback`, novas operações na transação devem retornar erro.
 
@@ -135,7 +135,7 @@ Ao chamar `RunMigrations()`, o consumidor deve ter informado explicitamente a ve
 
 A versão `0` representa o estado anterior à primeira migração. Informar explicitamente essa versão deve solicitar a reversão de todas as migrações aplicadas.
 
-O Krios deve gerenciar uma tabela chamada `migrations`, responsável por registrar a versão aplicada e a data de aplicação.
+O Krios deve gerenciar uma tabela chamada `migrations`, responsável por registrar o histórico de aplicação: versão, nome do arquivo, direção (`up`/`down`), status (`applied`|`failed`|`in_progress`), checksum opcional, data de aplicação e eventual mensagem de erro. Os detalhes exatos da estrutura, chaves e regras de transição são definidos em [E08-P01_decisions.md](E08-P01_decisions.md).
 
 Na ausência de histórico de migrações, a inicialização automática somente será permitida quando não existirem objetos de aplicação no esquema gerenciado. Caso existam, a biblioteca deve retornar erro antes de executar migrações. A adoção de esquemas preexistentes sem esse histórico não faz parte do escopo inicial.
 
@@ -151,9 +151,11 @@ A execução deve comparar a versão atual do banco com a versão desejada:
 
 A estrutura da tabela, o registro do estado na versão `0`, a delimitação do esquema gerenciado, os objetos considerados na verificação inicial, a ordem de execução e o tratamento de falhas serão definidos na especificação de migrações.
 
-A intenção é executar migrações em transações, revertendo as alterações do grupo em caso de falha e retornando um erro ao consumidor. Essa garantia depende do suporte transacional do banco e dos comandos executados. No MySQL, operações de definição de estrutura podem causar confirmação implícita e não ser desfeitas pelo rollback da aplicação, conforme a [documentação do MySQL](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html).
+A execução deve ocorrer com o **escopo transacional máximo viável** conforme o dialeto configurado. Quando houver suporte transacional integral para o conjunto de comandos executados, as alterações devem ser revertidas em caso de falha. Quando não houver suporte transacional integral (ex.: MySQL com DDL que cause commit implícito), **não** deve ser prometido rollback total.
 
-O alcance de cada transação, o registro de falhas e a recuperação de migrações parcialmente aplicadas devem ser definidos antes da implementação. Não se deve prometer rollback integral para comandos que não o suportem.
+No MySQL, muitas operações de definição de estrutura causam confirmação implícita e não podem ser desfeitas pelo rollback da aplicação, conforme a [documentação do MySQL](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html). Mesmo com "Atomic DDL" no MySQL 8.0, esse recurso não é universal. Por segurança, a biblioteca deve tratar o MySQL como não tendo garantia universal de DDL transacional, a menos que a análise por comando demonstre o contrário.
+
+O alcance transacional (por versão, por arquivo ou sem transação), a detecção de comandos não-transacionais, o registro de falhas e a recuperação de migrações parcialmente aplicadas são definidos em [E08-P01_decisions.md](E08-P01_decisions.md).
 
 ### RF-06 — Construir consultas de seleção
 
@@ -255,7 +257,9 @@ Os tipos e assinaturas de execução e resultados foram resolvidos em [E03-P01_d
 
 - **Resolvido:** `Config.Driver` identifica o registro em `database/sql`; `Type` seleciona o formato do DSN. Ausência gera `ErrDriverNotLoaded`; nomes não são usados para inferir compatibilidade. Ver E02-P01.
 - Qual será a interface dos dialetos e como cada dialeto será selecionado ou associado ao driver?
+  _Parcialmente resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): contrato mínimo de capacidades transacionais para migrações (`SupportsTransactionalDDL`, `IsTransactionalStatement`) por dialeto, selecionado por `Config.Type`. A interface completa dos dialetos (geração de SQL, construtores) permanece para E05-P01._
 - Quais drivers e versões de MySQL e PostgreSQL serão usados na validação manual posterior? Quais capacidades serão garantidas por banco, especialmente retorno de campos e transações em migrações?
+  _Transações em migrações resolvidas em [E08-P01_decisions.md](E08-P01_decisions.md) (escopo condicional por dialeto); retorno de campos em escritas continua para E06-P01; drivers/versões de validação permanecem para E09._
 
 A responsabilidade de escolher e importar o driver já está definida como sendo do consumidor. Permanecem pendentes os dialetos e a evidência de integração real MySQL/PostgreSQL em E09, conforme o [roteiro manual](E09_manual_validation.md).
 
@@ -268,7 +272,7 @@ Para a validação do projeto, foi escolhido `modernc.org/sqlite` nos testes aut
 - Operações na mesma transação devem ser sequenciais, serializadas pela biblioteca ou poderão ser solicitadas simultaneamente? Qual será o comportamento nesses casos?
   _Resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): chamadas no mesmo `*Tx` são serializadas com `sync.Mutex`; a expectativa de concorrência é documentada na API (§3.4.3)._
 - Após falha em uma operação do grupo, quem solicita o rollback: o consumidor ou um mecanismo da biblioteca? Como impedir a confirmação de um grupo que deveria ter sido revertido?
-  _Resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): `Commit` bloqueado com auto-rollback — a `*Tx` memoriza o primeiro erro de `ExecContext`/`QueryContext` e o `Commit` retorna esse erro sem confirmar (§3.4.5, decidido em E03-P03). Falhas que só aparecem em `Row.Scan` ou na iteração de `Rows` permanecem sob responsabilidade do consumidor._
+  _Resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): `Commit` bloqueado com auto-rollback — a `*Tx` memoriza o primeiro erro de `ExecContext`/`QueryContext` **e de leitura tardia** (`Row.Scan`, `Rows.Scan`, iteração) e o `Commit` retorna esse erro sem confirmar (§3.4.5–§3.4.6, decidido em E03-P03 e revisto em E03-P04). `sql.ErrNoRows` e observações de estado terminal são excluídos._
 - Como comunicar e tratar falhas em `Commit` ou `Rollback`, inclusive quando não for possível confirmar o estado final das alterações?
   _Resolvido no contrato: falhas nativas de finalização encerram o wrapper; erro original e eventual erro de limpeza são preservados. O resultado remoto pode permanecer incerto, sem repetição automática. A evidência por banco continua pendente em E09._
 
@@ -280,12 +284,15 @@ A intenção já definida é confirmar ou reverter em conjunto operações da me
 - Qual será o papel do prefixo numérico dos arquivos diante dessa associação? Como tratar divergências, arquivos ausentes ou duplicados e pares `up`/`down` incompletos?
 - Em qual ordem os arquivos de uma versão serão executados no avanço e na reversão?
 - A transação abrangerá um arquivo, uma versão ou todo o percurso até a versão desejada?
+  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): escopo máximo viável — por versão em PostgreSQL/SQLite, por arquivo no MySQL quando 100% transacional, sem transação quando contiver DDL com commit implícito._
 - Como agir quando o banco ou os comandos não permitirem rollback integral? Como registrar falha, impedir que uma aplicação parcial seja considerada concluída e permitir recuperação?
+  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): histórico com `status` (`in_progress`|`failed`|`applied`), bloqueio por `ErrPartialMigration`, nunca tentar reverter DDL já confirmado e recuperação guiada pelo consumidor._
 - Qual será a estrutura da tabela `migrations`, incluindo histórico, datas e registro da versão `0`?
+  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): `version`, `filename`, `direction`, `status`, `checksum`, `applied_at`, `error`, com chave única `(version, filename, direction)`; versão `0` continua sendo estado antes da primeira migração aplicada._
 - Como delimitar o esquema gerenciado e quais objetos serão considerados na verificação de um banco sem histórico?
 - Como `krios.Config` receberá ou referenciará os recursos incorporados pelo consumidor e como a biblioteca localizará os arquivos configurados?
 
-O padrão de nomes, a associação de arquivos a versões por `krios.Config`, a execução explícita e a intenção de rollback em caso de falha já foram registrados nos RF-04 e RF-05. A garantia efetiva de reversão depende das limitações descritas nesses requisitos.
+O padrão de nomes, a associação de arquivos a versões por `krios.Config`, a execução explícita e a execução com escopo transacional máximo viável já foram registrados nos RF-04 e RF-05. A garantia efetiva de reversão depende do dialeto e das limitações descritas nesses requisitos; o contrato de capacidades transacionais está em [E08-P01_decisions.md](E08-P01_decisions.md). A interface completa dos dialetos continua para E05-P01.
 
 ### 6.5. Consultas e paginação
 

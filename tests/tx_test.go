@@ -196,6 +196,43 @@ func TestTxQueryRowNoRows(t *testing.T) {
 	}
 }
 
+func TestCommitBlockedByLateReadError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := openTestDB(t)
+
+	if _, err := db.ExecContext(ctx, "CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)"); err != nil {
+		t.Fatalf("CREATE TABLE = %v", err)
+	}
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		t.Fatalf("Begin() = %v", err)
+	}
+	defer tx.Rollback(context.Background())
+	if _, err := tx.ExecContext(ctx, "INSERT INTO t (v) VALUES (?)", "kept"); err != nil {
+		t.Fatalf("tx INSERT = %v", err)
+	}
+
+	var number int
+	readErr := tx.QueryRowContext(ctx, "SELECT v FROM t").Scan(&number)
+	if readErr == nil {
+		t.Fatal("Scan() = nil, want a conversion error")
+	}
+	if err := tx.Commit(ctx); err == nil {
+		t.Fatal("Commit() = nil, want it blocked by the late read error")
+	}
+
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM t").Scan(&count); err != nil {
+		t.Fatalf("count query = %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("count = %d, want 0 (insert must not persist)", count)
+	}
+}
+
 func TestBeginRespectsContextCanceled(t *testing.T) {
 	t.Parallel()
 

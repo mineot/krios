@@ -133,7 +133,8 @@ func Example_rollbackAfterReadError() {
 	if err == nil {
 		panic("expected conversion error")
 	}
-	// Scan errors are not remembered by Commit: the consumer chooses rollback.
+	// Rollback is the recommended response to a read error. Commit would also
+	// be blocked: the late error is remembered by the transaction.
 	cancel()
 	fmt.Println("rollback com contexto cancelado:", tx.Rollback(ctx) == nil)
 	// Output:

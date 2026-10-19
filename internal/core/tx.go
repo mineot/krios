@@ -12,13 +12,14 @@ import (
 // serialized, without guaranteeing order between goroutines. This does not
 // serialize consumption of returned Row/Rows: consume or close results before
 // the next operation and wait for consumers before finalizing the transaction.
-// Operations after finalization return ErrTxDone. An immediate ExecContext or
-// QueryContext failure blocks Commit; late read errors require caller rollback.
+// Operations after finalization return ErrTxDone. The first failure observed —
+// an immediate ExecContext/QueryContext error or a late read failure from
+// Row.Scan or Rows iteration — is remembered and blocks Commit (see Commit).
 type Tx struct {
 	tx   *sql.Tx
 	mu   sync.Mutex // serialize execution calls on this transaction
 	done bool
-	err  error // first statement failure; blocks Commit (see Commit)
+	err  error // first statement or late read failure; blocks Commit (see Commit)
 }
 
 // ExecContext executes a query without returning rows on this transaction.
@@ -46,6 +47,9 @@ func (tx *Tx) QueryContext(ctx context.Context, query string, args ...any) (*Row
 	}
 
 	r, err := queryWith(ctx, tx.tx, "tx query", query, args...)
+	if r != nil {
+		r.tx = tx
+	}
 	return r, tx.recordError(err)
 }
 
@@ -60,22 +64,26 @@ func (tx *Tx) QueryRowContext(ctx context.Context, query string, args ...any) Ro
 	}
 
 	row := queryRowWith(ctx, tx.tx, query, args...)
+	row.tx = tx
 	if row.r != nil && errors.Is(row.r.Err(), sql.ErrTxDone) {
 		tx.done = true
 	}
 	return row
 }
 
-// Commit attempts confirmation unless an immediate ExecContext/QueryContext
-// failure was recorded. In that case it attempts rollback even if ctx is
-// canceled and preserves both the first error and any rollback error.
+// Commit attempts confirmation unless a failure was recorded. Recorded
+// failures are the first immediate ExecContext/QueryContext error and the
+// first late read failure (Row.Scan, Rows.Scan, iteration, close). In that
+// case it attempts rollback even if ctx is canceled and preserves both the
+// first error and any rollback error.
 //
 // Without a recorded failure, a canceled ctx rejects Commit before the native
 // call and allows a later attempt if the transaction is still active. Context
 // cannot interrupt native finalization. After a native attempt the wrapper is
 // terminal, even on failure; a failure does not establish the remote outcome
-// or make retrying writes safe. Row.Scan/Rows iteration errors do not block
-// Commit: the caller must roll back after these errors.
+// or make retrying writes safe. sql.ErrNoRows and terminal state observations
+// are not recorded. The consumer should still roll back explicitly at the
+// first error; blocking Commit is the safety net.
 func (tx *Tx) Commit(ctx context.Context) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
@@ -128,4 +136,24 @@ func (tx *Tx) recordError(err error) error {
 		tx.err = err
 	}
 	return normalizeTxError(err)
+}
+
+// recordLate memorizes a late read failure observed on a result produced by
+// this transaction (Row.Scan, Rows.Scan, iteration or close). It is called
+// with tx.mu free. nil and sql.ErrNoRows are ignored; after the transaction is
+// terminal the observation has no effect. The first recorded failure blocks
+// Commit.
+func (tx *Tx) recordLate(err error) {
+	if err == nil || errors.Is(err, sql.ErrNoRows) {
+		return
+	}
+
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	if tx.done {
+		return
+	}
+
+	tx.recordError(err)
 }

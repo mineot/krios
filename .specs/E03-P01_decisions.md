@@ -1,6 +1,6 @@
 # E03-P01 – Decisões sobre Contratos de Execução
 
-Data original: 2026-10-19. Revisão vigente: M01–M06, na mesma data.
+Data original: 2026-10-19. Revisão vigente: M01–M06, na mesma data; revisão de erro tardio (§3.4.6) em E03-P04.
 
 ## 1. Objetivo
 
@@ -79,7 +79,19 @@ Sem falha imediata registrada, `Commit` verifica o contexto antes de chamar o m�
 
 A transação memoriza o primeiro erro imediato de `ExecContext`/`QueryContext`. Se o consumidor tentar `Commit`, a biblioteca executa rollback mesmo com o contexto dessa chamada cancelado, encerra o wrapper e retorna o erro original. Havendo falha de rollback, ambos os erros permanecem inspecionáveis por `errors.Is`/`errors.As`. Estado terminal nativo é tratado como término, não como novo statement que precise ser revertido.
 
-A garantia é limitada a erros imediatos desses dois métodos. Erros de `Row.Scan` e iteração não são registrados automaticamente e exigem rollback explícito do consumidor. Ausência de linhas e falhas de conversão não ganham políticas implícitas de abortar transações. A biblioteca não garante rollback de comandos que o banco confirme implicitamente.
+#### 3.4.6. Erros de leitura tardios e Commit (revisão 2026-10-19)
+
+A garantia foi estendida aos erros de leitura tardios. `Row.Scan`, `Rows.Scan`, a iteração (`Rows.Next`/`Rows.Err`) e o fechamento de resultados pertencentes a uma `Tx` memorizam seu primeiro erro da mesma forma que erros imediatos: um `Commit` subsequente executa rollback, encerra o wrapper e retorna o erro original preservado por `errors.Is`.
+
+Exclusões (não memorizam):
+
+- `sql.ErrNoRows` em `Row.Scan`: resultado legítimo de consulta sem linha; preserva o padrão verificar-existência → escrita → `Commit`.
+- `ErrTxDone`/`sql.ErrTxDone`: observação de estado terminal, não falha de statement (regra de `recordError`).
+- Resultados originados no `DB`: sem back-reference à transação, nenhum efeito.
+
+Não há mecanismo para limpar um erro memorizado e liberar o `Commit`; a política é consistente com a de erros imediatos (E03-P03). Conversões incompatíveis em `Scan` são memorizadas junto com falhas de driver, pois não são tecnicamente distinguíveis (não há sentinela pública no Go). Ausência de linhas não gera política implícita de abortar transações. O rollback explícito no primeiro erro permanece o padrão recomendado; o bloqueio de `Commit` é a rede de segurança para o consumidor que ignore o erro. A biblioteca não garante rollback de comandos que o banco confirme implicitamente.
+
+Registro fora do consumo: `Row`/`Rows` carregam referência interna à `Tx` e o registro adquire `tx.mu` brevemente, sem reentrância; o consumo de um iterador segue não serializado em relação a outras chamadas da transação.
 
 ## 4. Histórico e compatibilidade
 
@@ -92,7 +104,7 @@ A garantia é limitada a erros imediatos desses dois métodos. Erros de `Row.Sca
 | Commit/Rollback verificavam contexto antes de tudo | Superada: limpeza tem precedência; rejeição prévia de commit sem erro registrado continua |
 | Preservação de `sql.ErrNoRows` | Mantida somente para consulta vazia; teste que mascarava encerramento foi corrigido |
 | E03-P02: finalização marcava done apenas no sucesso | Superada: tentativas nativas são terminais mesmo quando falham |
-| E03-P03: commit bloqueado por primeiro erro imediato | Mantida; erro duplo preservado e contexto cancelado não impede a limpeza |
+| E03-P03: commit bloqueado por primeiro erro imediato | Mantida e estendida: erros tardios de leitura também bloqueiam (§3.4.6); erro duplo preservado e contexto cancelado não impede a limpeza |
 
 Código que usava `ErrNoRows` para detectar encerramento deve usar `ErrClosed`/`ErrTxDone`. Código que esperava cancelamento de `Rollback` deve tratar o resultado da limpeza. A assinatura de nenhum método público mudou.
 
@@ -101,9 +113,9 @@ Código que usava `ErrNoRows` para detectar encerramento deve usar `ErrClosed`/`
 Os nomes de testes internos abaixo são relativos a `internal/core/`; integração e exemplos continuam em `tests/`.
 
 - `rows_test.go`: ausência de linhas, erros pendentes e de driver, conversão, propriedade e erro após fechamento, disponibilidade de Result.
-- `tx_test.go` e `driver_test.go`: finalização que falha, limpeza cancelada, erro duplo, término por contexto, resultados abertos e finalizações concorrentes.
+- `tx_test.go` e `driver_test.go`: finalização que falha, limpeza cancelada, erro duplo, término por contexto, resultados abertos e finalizações concorrentes; erro tardio bloqueia `Commit` (§3.4.6), `sql.ErrNoRows` não bloqueia e erro tardio originado no `DB` não afeta nada.
 - `execution_test.go`: contrato interno preserva guards/política transacional e cancelamento em operações em andamento.
 - `tests/tx_test.go` e `tests/tx_group_test.go`: persistência/reversão em SQLite, grupo, independência e concorrência.
-- `tests/examples_test.go`: consumo externo, consulta, rollback registrado, commit bloqueado e erro tardio tratado pelo consumidor.
+- `tests/examples_test.go`: consumo externo, consulta, rollback registrado, commit bloqueado e erro tardio tratado pelo consumidor (com bloqueio de `Commit` também previsto).
 
 Resultados das verificações estão no [plano de melhorias](0003_improvement_plan.md). Integração real MySQL/PostgreSQL segue o [roteiro E09](E09_manual_validation.md) e permanece pendente.
