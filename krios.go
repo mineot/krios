@@ -319,17 +319,21 @@ type resultAdapter struct {
 
 func (ra resultAdapter) RowsAffected() (int64, bool) {
 	n, err := ra.r.RowsAffected()
+
 	if err != nil {
 		return 0, false
 	}
+
 	return n, true
 }
 
 func (ra resultAdapter) LastInsertId() (int64, bool) {
 	id, err := ra.r.LastInsertId()
+
 	if err != nil {
 		return 0, false
 	}
+
 	return id, true
 }
 
@@ -337,6 +341,7 @@ func wrapResult(r sql.Result) Result {
 	if r == nil {
 		return resultAdapter{}
 	}
+
 	return resultAdapter{r: r}
 }
 
@@ -352,6 +357,7 @@ func (rw Row) Scan(dest ...any) error {
 	if rw.r == nil {
 		return sql.ErrNoRows
 	}
+
 	return rw.r.Scan(dest...)
 }
 
@@ -373,6 +379,7 @@ func (rw *Rows) Next() bool {
 	if rw == nil || rw.r == nil {
 		return false
 	}
+
 	return rw.r.Next()
 }
 
@@ -381,6 +388,7 @@ func (rw *Rows) Scan(dest ...any) error {
 	if rw == nil || rw.r == nil {
 		return errors.New("krios: rows are closed or invalid")
 	}
+
 	return rw.r.Scan(dest...)
 }
 
@@ -389,6 +397,7 @@ func (rw *Rows) Err() error {
 	if rw == nil || rw.r == nil {
 		return nil
 	}
+
 	return rw.r.Err()
 }
 
@@ -397,17 +406,25 @@ func (rw *Rows) Close() error {
 	if rw == nil {
 		return nil
 	}
+
 	rw.mu.Lock()
+
 	defer rw.mu.Unlock()
+
 	if rw.closed {
 		return nil
 	}
+
 	rw.closed = true
+
 	var err error
+
 	if rw.r != nil {
 		err = rw.r.Close()
 	}
+
 	rw.r = nil
+
 	return err
 }
 
@@ -415,14 +432,66 @@ func wrapRows(r *sql.Rows) *Rows {
 	if r == nil {
 		return nil
 	}
+
 	return &Rows{r: r}
 }
 
-// executor is an internal execution contract shared by DB and Tx.
+// executor is the internal execution contract satisfied by the underlying
+// *sql.DB and *sql.Tx. The public methods of DB and Tx validate their own
+// state (open or tx done) and then delegate through these helpers, which
+// check the context, call the underlying database/sql object and apply the
+// public wrappers.
 type executor interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+var (
+	_ executor = (*sql.DB)(nil)
+	_ executor = (*sql.Tx)(nil)
+)
+
+// execWith validates ctx, executes the query on ex and wraps the result.
+// op identifies the operation in context errors ("exec" or "tx exec").
+func execWith(ctx context.Context, ex executor, op, query string, args ...any) (Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("krios: %s: %w", op, err)
+	}
+
+	res, err := ex.ExecContext(ctx, query, args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return wrapResult(res), nil
+}
+
+// queryWith validates ctx, executes the query on ex and wraps the rows.
+// op identifies the operation in context errors ("query" or "tx query").
+func queryWith(ctx context.Context, ex executor, op, query string, args ...any) (*Rows, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("krios: %s: %w", op, err)
+	}
+
+	r, err := ex.QueryContext(ctx, query, args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return wrapRows(r), nil
+}
+
+// queryRowWith validates ctx, executes the query on ex and wraps the row.
+// A canceled or expired context yields a Row whose Scan reports sql.ErrNoRows.
+func queryRowWith(ctx context.Context, ex executor, query string, args ...any) Row {
+	if err := ctx.Err(); err != nil {
+		return Row{r: nil}
+	}
+
+	return wrapRow(ex.QueryRowContext(ctx, query, args...))
 }
 
 // Tx represents an explicit transaction. Calls on the same Tx are serialized
@@ -440,14 +509,8 @@ func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (Resul
 	if err := db.ensureOpen(); err != nil {
 		return nil, err
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("krios: exec: %w", err)
-	}
-	res, err := db.sqlDB.ExecContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	return wrapResult(res), nil
+
+	return execWith(ctx, db.sqlDB, "exec", query, args...)
 }
 
 // QueryContext executes a query that returns rows.
@@ -455,14 +518,8 @@ func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (*Row
 	if err := db.ensureOpen(); err != nil {
 		return nil, err
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("krios: query: %w", err)
-	}
-	r, err := db.sqlDB.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	return wrapRows(r), nil
+
+	return queryWith(ctx, db.sqlDB, "query", query, args...)
 }
 
 // QueryRowContext executes a query that is expected to return at most one row.
@@ -470,10 +527,8 @@ func (db *DB) QueryRowContext(ctx context.Context, query string, args ...any) Ro
 	if err := db.ensureOpen(); err != nil {
 		return Row{r: nil}
 	}
-	if err := ctx.Err(); err != nil {
-		return Row{r: nil}
-	}
-	return wrapRow(db.sqlDB.QueryRowContext(ctx, query, args...))
+
+	return queryRowWith(ctx, db.sqlDB, query, args...)
 }
 
 // Begin starts a transaction.
@@ -481,13 +536,17 @@ func (db *DB) Begin(ctx context.Context) (*Tx, error) {
 	if err := db.ensureOpen(); err != nil {
 		return nil, err
 	}
+
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("krios: begin: %w", err)
 	}
+
 	stx, err := db.sqlDB.BeginTx(ctx, nil)
+
 	if err != nil {
 		return nil, err
 	}
+
 	return &Tx{
 		tx:  stx,
 		cfg: db.cfg,
@@ -502,14 +561,8 @@ func (tx *Tx) ExecContext(ctx context.Context, query string, args ...any) (Resul
 	if tx.done {
 		return nil, ErrTxDone
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("krios: tx exec: %w", err)
-	}
-	res, err := tx.tx.ExecContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	return wrapResult(res), nil
+
+	return execWith(ctx, tx.tx, "tx exec", query, args...)
 }
 
 // QueryContext executes a query that returns rows on this transaction.
@@ -520,14 +573,8 @@ func (tx *Tx) QueryContext(ctx context.Context, query string, args ...any) (*Row
 	if tx.done {
 		return nil, ErrTxDone
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("krios: tx query: %w", err)
-	}
-	r, err := tx.tx.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	return wrapRows(r), nil
+
+	return queryWith(ctx, tx.tx, "tx query", query, args...)
 }
 
 // QueryRowContext executes a query that is expected to return at most one row
@@ -539,10 +586,8 @@ func (tx *Tx) QueryRowContext(ctx context.Context, query string, args ...any) Ro
 	if tx.done {
 		return Row{r: nil}
 	}
-	if err := ctx.Err(); err != nil {
-		return Row{r: nil}
-	}
-	return wrapRow(tx.tx.QueryRowContext(ctx, query, args...))
+
+	return queryRowWith(ctx, tx.tx, query, args...)
 }
 
 // Commit commits the transaction.
@@ -553,12 +598,15 @@ func (tx *Tx) Commit(ctx context.Context) error {
 	if tx.done {
 		return ErrTxDone
 	}
+
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("krios: tx commit: %w", err)
 	}
+
 	if err := tx.tx.Commit(); err != nil {
 		return err
 	}
+
 	tx.done = true
 	return nil
 }
@@ -571,12 +619,15 @@ func (tx *Tx) Rollback(ctx context.Context) error {
 	if tx.done {
 		return ErrTxDone
 	}
+
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("krios: tx rollback: %w", err)
 	}
+
 	if err := tx.tx.Rollback(); err != nil {
 		return err
 	}
+
 	tx.done = true
 	return nil
 }
