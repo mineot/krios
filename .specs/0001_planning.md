@@ -255,7 +255,7 @@ Os tipos e assinaturas de execução e resultados foram resolvidos em [E03-P01_d
 
 - **Resolvido:** `Config.Driver` identifica o registro em `database/sql`; `Type` seleciona o formato do DSN. Ausência gera `ErrDriverNotLoaded`; nomes não são usados para inferir compatibilidade. Ver E02-P01.
 - Qual será a interface dos dialetos e como cada dialeto será selecionado ou associado ao driver?
-  _Parcialmente resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): contrato mínimo de capacidades transacionais para migrações (`SupportsTransactionalDDL`, `IsTransactionalStatement`) por dialeto, selecionado por `Config.Type`. A interface completa dos dialetos (geração de SQL, construtores) permanece para E05-P01._
+  _Parcialmente resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): contrato mínimo de capacidades transacionais para migrações (`SupportsTransactionalDDL`, `IsTransactionalStatement`) por dialeto, selecionado por `Config.Type`. Interface completa resolvida em [E05-P01_decisions.md](E05-P01_decisions.md): pacote `internal/dialect` com a interface `Dialect` (nome, marcador de parâmetro, aspas de identificador) e a `MigrationDialect` no mesmo tipo concreto; seleção por `Config.Type`, retenção do dialeto em `DB`/`Tx` e renderizador único compartilhado. Sem extensão pública de dialetos nesta versão._
 - Quais drivers e versões de MySQL e PostgreSQL serão usados na validação manual posterior? Quais capacidades serão garantidas por banco, especialmente retorno de campos e transações em migrações?
   _Transações em migrações resolvidas em [E08-P01_decisions.md](E08-P01_decisions.md) (escopo condicional por dialeto); retorno de campos em escritas continua para E06-P01; drivers/versões de validação permanecem para E09._
 
@@ -266,7 +266,7 @@ Para a validação do projeto, foi escolhido `modernc.org/sqlite` nos testes aut
 ### 6.3. Transações
 
 - Como associar um construtor ou um arquivo SQL ao objeto de transação retornado por `Begin`? A entidade, por ser um tipo struct mapeado por reflexão ([E04-P01_decisions.md](E04-P01_decisions.md)), não retém conexão.
-  _Parcialmente resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): `*DB` e `*Tx` implementam o mesmo contrato de execução (§3.4); a associação de construtores e de SQL incorporado fica para E05 e E07._
+  _Parcialmente resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): `*DB` e `*Tx` implementam o mesmo contrato de execução (§3.4). Construtores resolvidos em [E05-P01_decisions.md](E05-P01_decisions.md): receptor `db.Select(ent)`/`tx.Select(ent)` guarda o executor interno e o dialeto; a associação de SQL incorporado fica para E07._
 - Operações na mesma transação devem ser sequenciais, serializadas pela biblioteca ou poderão ser solicitadas simultaneamente? Qual será o comportamento nesses casos?
   _Resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): chamadas no mesmo `*Tx` são serializadas com `sync.Mutex`; a expectativa de concorrência é documentada na API (§3.4.3)._
 - Após falha em uma operação do grupo, quem solicita o rollback: o consumidor ou um mecanismo da biblioteca? Como impedir a confirmação de um grupo que deveria ter sido revertido?
@@ -290,15 +290,20 @@ A intenção já definida é confirmar ou reverter em conjunto operações da me
 - Como delimitar o esquema gerenciado e quais objetos serão considerados na verificação de um banco sem histórico?
 - Como `krios.Config` receberá ou referenciará os recursos incorporados pelo consumidor e como a biblioteca localizará os arquivos configurados?
 
-O padrão de nomes, a associação de arquivos a versões por `krios.Config`, a execução explícita e a execução com escopo transacional máximo viável já foram registrados nos RF-04 e RF-05. A garantia efetiva de reversão depende do dialeto e das limitações descritas nesses requisitos; o contrato de capacidades transacionais está em [E08-P01_decisions.md](E08-P01_decisions.md). A interface completa dos dialetos continua para E05-P01.
+O padrão de nomes, a associação de arquivos a versões por `krios.Config`, a execução explícita e a execução com escopo transacional máximo viável já foram registrados nos RF-04 e RF-05. A garantia efetiva de reversão depende do dialeto e das limitações descritas nesses requisitos; o contrato de capacidades transacionais está em [E08-P01_decisions.md](E08-P01_decisions.md). A interface completa dos dialetos foi resolvida em [E05-P01_decisions.md](E05-P01_decisions.md).
 
 ### 6.5. Consultas e paginação
 
 - Quais serão as assinaturas e quais métodos apenas constroem a consulta ou efetivamente a executam? Como obter os resultados e erros?
+  _Resolvido em [E05-P01_decisions.md](E05-P01_decisions.md): `db.Select(ent)`/`tx.Select(ent)` criam o construtor; `Only`/`Where`/`Join` constroem, `Build()` renderiza sem executar, `Rows`/`Row`/`All`/`One` executam pelo contrato de E03._
 - Condições passadas juntas a `Where` serão combinadas com `AND`? Como expressar grupos lógicos aninhados?
+  _Resolvido em [E05-P01_decisions.md](E05-P01_decisions.md): `Where` variádico combina com `AND`; grupos aninháveis com `krios.And`/`krios.Or`._
 - Como diferenciar referências a colunas e valores de parâmetros, especialmente nas comparações de `JOIN`?
+  _Resolvido em [E05-P01_decisions.md](E05-P01_decisions.md): colunas só por construtores ancorados na entidade (`ent.Col`); demais valores Go viram parâmetros separados; coluna × coluna cobre junções._
 - Quais tipos de junção, operadores, funções e regras de busca textual serão suportados?
+  _Resolvido em [E05-P01_decisions.md](E05-P01_decisions.md): junções `INNER`/`LEFT` (`RIGHT`/`FULL` como extensão futura); operadores `=`, `<>`, `<`, `<=`, `>`, `>=`, `IS [NOT] NULL`, `IN` e `LIKE` com modos contém/começa/termina, escape literal e sensibilidade à collation do banco; agregações (`Count`/`Sum`/`Max`/`Min`) e demais cláusulas em E05-P03._
 - Quais campos e estatísticas estarão presentes em `krios.Paginate`? Como validar limite e deslocamento e calcular o total com filtros, agrupamentos e `DISTINCT`?
+  _Pendente; destino em E05-P03._
 
 O encadeamento, a seleção de todas as colunas mapeadas por padrão, sua ordem de declaração dos campos do struct e os recursos listados no RF-06 já fazem parte do escopo.
 
