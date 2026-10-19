@@ -219,6 +219,20 @@ func TestConfigMigrationsAreOptional(t *testing.T) {
 	}
 }
 
+func TestDBEnsureOpenReportsClosed(t *testing.T) {
+	t.Parallel()
+
+	open := &DB{}
+	if err := open.ensureOpen(); err != nil {
+		t.Errorf("ensureOpen() before Close = %v, want nil", err)
+	}
+
+	closed := &DB{closed: true}
+	if err := closed.ensureOpen(); !errors.Is(err, ErrClosed) {
+		t.Errorf("ensureOpen() after Close = %v, want ErrClosed", err)
+	}
+}
+
 // ExampleConfig shows how to fill Config for the three supported databases.
 // Port 0 applies the default (3306 for MySQL, 5432 for PostgreSQL) and
 // Timeout 0 applies the default of 10 seconds. The credentials are

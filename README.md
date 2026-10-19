@@ -32,7 +32,7 @@ make check
 
 Executar apenas `make` também chama `check`. Qualquer falha nas verificações faz o comando retornar erro.
 
-`go build ./...` verifica os pacotes do projeto. O exemplo executável está em `cmd/krios` e pode ser executado com `go run ./cmd/krios`. Os testes atuais validam o ambiente SQLite (escrita parametrizada e persistência após reabrir o arquivo) e a configuração (`krios.Config`): padrões de `Port` e `Timeout`, valores explícitos e as validações que retornam `ErrInvalidConfig`. O ciclo de vida (`Open`/`Close`) ainda não está implementado.
+`go build ./...` verifica os pacotes do projeto. O exemplo executável está em `cmd/krios` e pode ser executado com `go run ./cmd/krios`. Os testes atuais cobrem o ambiente SQLite (escrita parametrizada e persistência após reabrir o arquivo), a configuração (`krios.Config`) e o ciclo de vida (`Open`/`Close`): abertura e encerramento, configuração inválida, driver ausente, cancelamento, prazo esgotado e falha de conexão. Transações, consultas e migrações ainda não estão implementadas.
 
 ## Organização
 

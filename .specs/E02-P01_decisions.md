@@ -48,6 +48,9 @@ var (
 	// Falha de conexão (rede, arquivo, permissão, recusa do banco).
 	// Encadeia o erro original do driver.
 	ErrConnectionFailed = errors.New("krios: failed to connect to database")
+
+	// Operação tentada após Close. Adicionado em E02-P03 (ver adendo abaixo).
+	ErrClosed = errors.New("krios: database access is closed")
 )
 ```
 
@@ -327,3 +330,13 @@ if err != nil {
 _ = db.Close()
 _ = db.Close() // idempotente
 ```
+
+## Adendo — E02-P03 (2026-10-18)
+
+Decisões tomadas ao implementar `Open` e `Close`, complementando esta especificação:
+
+- **Operações após `Close`:** qualquer operação futura no objeto retorna `ErrClosed`. `Close` marca o acesso como encerrado de forma protegida por mutex; `Open`/`Close` são seguros para uso concorrente. O helper interno `ensureOpen` verifica esse estado e será usado pelas operações das próximas entregas.
+- **Detecção de cancelamento e prazo:** além do `context.WithTimeout(ctx, cfg.Timeout)` interno, `Open` verifica `ctx.Err()` **antes** de abrir a conexão. Isso garante o respeito ao cancelamento mesmo em drivers cujo `Ping` não interprete o contexto (caso do SQLite modernc). Cancelamento e prazo retornam `context.Canceled`/`context.DeadlineExceeded` sem encadear `ErrConnectionFailed`.
+- **DSN:** montado por banco conforme já especificado — SQLite usa o caminho; MySQL usa `user:password@tcp(host:port)/dbname`; PostgreSQL usa URL (`net/url`), com host e porta unidos por `net.JoinHostPort`, preservando IPv6.
+- **Liberação de recursos:** quando o `Ping` falha, a conexão criada é fechada antes de retornar o erro, atendendo ao RF-02.
+- **Testes:** o ciclo de vida é validado por testes de caixa-preta em `tests/lifecycle_test.go` (abertura/encerramento, configuração inválida, driver ausente, cancelamento, prazo e falha de conexão com um driver registrado que sempre falha); o guard de encerramento é testado em `krios_test.go`.
