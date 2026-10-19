@@ -134,6 +134,20 @@ As versões públicas (`ExecContext`/`QueryContext`/`QueryRowContext`) delegam a
 
 **Decisão proposta:** `Commit(ctx context.Context) error` e `Rollback(ctx context.Context) error` devem aceitar `context.Context`. Nesta etapa, pelo menos validar `ctx.Err()` no início. A adoção de `context.Context` com deadline para as chamadas nativas pode ser refinada em E03-P02, porém a assinatura já deve ser definida aqui.
 
+#### 3.4.5. Falha de statement e Commit (decidido em E03-P03)
+
+O RF-03 deixa em aberto quem inicia o rollback após a falha de uma operação do grupo e como impedir a confirmação de um grupo que deveria ter sido revertido. Com a semântica nativa de `database/sql`, um `Commit` após um statement falho confirmaria o grupo parcial.
+
+**Decisão (2026-10-19): Commit bloqueado com auto-rollback.**
+
+- `*Tx` memoriza o **primeiro** erro retornado por `ExecContext` ou `QueryContext` (erros já verificados em `Scan`/iteração de `Rows` não são observáveis pela transação e ficam fora desta regra).
+- `Commit` detecta esse erro e, em vez de confirmar: executa `Rollback` na transação nativa, marca a transação como encerrada e retorna o erro original embrulhado com `%w` — recuperável via `errors.Is`.
+- Após esse auto-rollback, novas operações (inclusive `Commit`/`Rollback`) retornam `ErrTxDone`.
+- `Rollback` explícito do consumidor continua funcionando normalmente após uma falha (caminho preferido: falha → `Rollback`).
+- Se o auto-rollback interno falhar, o erro retornado preserva o erro original por `%w` e anota a falha do rollback.
+
+Garantia: um grupo com falha **nunca** é confirmado por `Commit`. Limitação documentada: erros que só aparecem após o retorno de `QueryRowContext` (em `Scan`) ou durante a iteração de `Rows` não bloqueiam `Commit`; nesses casos a responsabilidade pelo `Rollback` é do consumidor, como no `database/sql`.
+
 ## 4. Perguntas para Validação
 
 | #   | Pergunta                                                                                         | Opções                                           | Recomendado                                                                                                                                                 |

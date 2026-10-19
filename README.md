@@ -2,7 +2,7 @@
 
 Biblioteca Go em desenvolvimento para acesso a SQLite3, MySQL e PostgreSQL, com configuração em código, transações, consultas e migrações.
 
-O projeto possui apenas a base do módulo. A API funcional ainda será implementada; os tipos e métodos descritos no planejamento não estão disponíveis para uso.
+O projeto já oferece configuração em código (`krios.Config`), abertura e encerramento do acesso (`Open`/`Close`) e transações explícitas (`Begin`/`Commit`/`Rollback` com execução em `*DB` e `*Tx`). Consultas encadeadas, SQL incorporado e migrações ainda serão implementados.
 
 ## Desenvolvimento local
 
@@ -32,20 +32,22 @@ make check
 
 Executar apenas `make` também chama `check`. Qualquer falha nas verificações faz o comando retornar erro.
 
-`go build ./...` verifica os pacotes do projeto. O exemplo executável está em `cmd/krios` e pode ser executado com `go run ./cmd/krios`. Os testes atuais cobrem o ambiente SQLite (escrita parametrizada e persistência após reabrir o arquivo), a configuração (`krios.Config`) e o ciclo de vida (`Open`/`Close`): abertura e encerramento, configuração inválida, driver ausente, cancelamento, prazo esgotado e falha de conexão. Transações, consultas e migrações ainda não estão implementadas.
+`go build ./...` verifica os pacotes do projeto. O exemplo executável está em `cmd/krios` e pode ser executado com `go run ./cmd/krios`. Os testes atuais cobrem o ambiente SQLite (escrita parametrizada e persistência após reabrir o arquivo), a configuração (`krios.Config`), o ciclo de vida (`Open`/`Close`) e as transações: abertura e encerramento, configuração inválida, driver ausente, cancelamento, prazo esgotado, falha de conexão, `Begin`/`Commit`/`Rollback`, rejeição de operações após o fim da transação (`ErrTxDone`), confirmação e reversão de grupo de inserts relacionados, isolamento entre transação e instância principal, `Commit` bloqueado com auto-rollback após falha de statement e concorrência serializada na mesma transação. Consultas encadeadas, SQL incorporado e migrações ainda não estão implementados.
 
 ## Organização
 
 - `go.mod`: módulo `github.com/mineot/krios` e versão mínima de Go.
-- `krios.go`: pacote público `krios` — documentação, `krios.Config`, tipos por banco, padrões, validações e erros exportados.
+- `krios.go`: pacote público `krios` — documentação, `krios.Config`, tipos por banco, padrões, validações, erros exportados, ciclo de vida (`Open`/`Close`) e transações (`Begin`/`Commit`/`Rollback`, `Result`/`Rows`/`Row`).
 - `krios_test.go`: testes do pacote e exemplo de configuração em Go.
 - `cmd/krios/main.go`: exemplo executável separado da biblioteca.
 - `tests/sqlite_test.go`: validação isolada do driver e preparação opcional do banco local.
+- `tests/lifecycle_test.go`, `tests/lifecycle_three_test.go`: testes de caixa-preta do ciclo de vida.
+- `tests/tx_test.go`, `tests/tx_group_test.go`: testes de transações, grupo de inserts e concorrência.
 - `Makefile`: comandos de desenvolvimento local.
 - `.github/workflows/check.yml`: verificações em pushes e pull requests.
 - `.specs/`: requisitos, plano de execução e decisões técnicas.
 
-Novos arquivos e pacotes serão criados conforme a implementação exigir. Os drivers serão escolhidos e importados pelo consumidor; a biblioteca não os importará automaticamente. A configuração é fornecida em código pela struct `krios.Config`; `Open` e `Close` ainda serão implementados.
+Novos arquivos e pacotes serão criados conforme a implementação exigir. Os drivers serão escolhidos e importados pelo consumidor; a biblioteca não os importará automaticamente. A configuração é fornecida em código pela struct `krios.Config` e entregue a `Open`.
 
 ## SQLite local e testes
 
@@ -78,6 +80,8 @@ MySQL e PostgreSQL serão testados manualmente pelo consumidor posteriormente; t
 - [Planejamento e requisitos](.specs/0001_planning.md)
 - [Plano de execução e progresso](.specs/0002_execution_plan.md)
 - [Decisões da base técnica — E01-P01](.specs/E01-P01_decisions.md)
+- [Decisões da configuração — E02-P01](.specs/E02-P01_decisions.md)
+- [Decisões dos contratos de execução — E03-P01](.specs/E03-P01_decisions.md)
 
 ## Licença
 

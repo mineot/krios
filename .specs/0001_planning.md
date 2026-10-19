@@ -266,9 +266,13 @@ Para a validação do projeto, foi escolhido `modernc.org/sqlite` nos testes aut
 ### 6.3. Transações
 
 - Como associar uma entidade, um construtor ou um arquivo SQL ao objeto de transação retornado por `Begin`?
+  _Parcialmente resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): `*DB` e `*Tx` implementam o mesmo contrato de execução (§3.4); a associação de construtores e de SQL incorporado fica para E05 e E07._
 - Operações na mesma transação devem ser sequenciais, serializadas pela biblioteca ou poderão ser solicitadas simultaneamente? Qual será o comportamento nesses casos?
+  _Resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): chamadas no mesmo `*Tx` são serializadas com `sync.Mutex`; a expectativa de concorrência é documentada na API (§3.4.3)._
 - Após falha em uma operação do grupo, quem solicita o rollback: o consumidor ou um mecanismo da biblioteca? Como impedir a confirmação de um grupo que deveria ter sido revertido?
+  _Resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): `Commit` bloqueado com auto-rollback — a `*Tx` memoriza o primeiro erro de `ExecContext`/`QueryContext` e o `Commit` retorna esse erro sem confirmar (§3.4.5, decidido em E03-P03). Falhas que só aparecem em `Row.Scan` ou na iteração de `Rows` permanecem sob responsabilidade do consumidor._
 - Como comunicar e tratar falhas em `Commit` ou `Rollback`, inclusive quando não for possível confirmar o estado final das alterações?
+  _Parcialmente resolvido: falhas do driver são repassadas sem reembrulho desnecessário; falha anterior bloqueia `Commit` com auto-rollback (§3.4.5). O caso "não foi possível confirmar o estado final" depende de capacidades por banco e permanece para a validação manual de E09._
 
 A intenção já definida é confirmar ou reverter em conjunto operações da mesma transação, preservando a independência das operações executadas fora dela.
 

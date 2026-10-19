@@ -496,11 +496,14 @@ func queryRowWith(ctx context.Context, ex executor, query string, args ...any) R
 
 // Tx represents an explicit transaction. Calls on the same Tx are serialized
 // (not safe for concurrent use by multiple goroutines). Operations on Tx
-// after Commit or Rollback return ErrTxDone.
+// after Commit or Rollback return ErrTxDone. The first statement failure is
+// remembered and blocks Commit: Commit rolls the transaction back and returns
+// that error instead of confirming a partial group.
 type Tx struct {
 	tx   *sql.Tx
 	mu   sync.Mutex // serialize execution calls on this transaction
 	done bool
+	err  error  // first statement failure; blocks Commit (see Commit)
 	cfg  Config // optional: may be useful later (dialect); kept for consistency
 }
 
@@ -554,6 +557,7 @@ func (db *DB) Begin(ctx context.Context) (*Tx, error) {
 }
 
 // ExecContext executes a query without returning rows on this transaction.
+// The first error is remembered and blocks Commit (see Commit).
 func (tx *Tx) ExecContext(ctx context.Context, query string, args ...any) (Result, error) {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
@@ -562,10 +566,17 @@ func (tx *Tx) ExecContext(ctx context.Context, query string, args ...any) (Resul
 		return nil, ErrTxDone
 	}
 
-	return execWith(ctx, tx.tx, "tx exec", query, args...)
+	res, err := execWith(ctx, tx.tx, "tx exec", query, args...)
+
+	if err != nil && tx.err == nil {
+		tx.err = err
+	}
+
+	return res, err
 }
 
 // QueryContext executes a query that returns rows on this transaction.
+// The first error is remembered and blocks Commit (see Commit).
 func (tx *Tx) QueryContext(ctx context.Context, query string, args ...any) (*Rows, error) {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
@@ -574,7 +585,13 @@ func (tx *Tx) QueryContext(ctx context.Context, query string, args ...any) (*Row
 		return nil, ErrTxDone
 	}
 
-	return queryWith(ctx, tx.tx, "tx query", query, args...)
+	r, err := queryWith(ctx, tx.tx, "tx query", query, args...)
+
+	if err != nil && tx.err == nil {
+		tx.err = err
+	}
+
+	return r, err
 }
 
 // QueryRowContext executes a query that is expected to return at most one row
@@ -590,7 +607,14 @@ func (tx *Tx) QueryRowContext(ctx context.Context, query string, args ...any) Ro
 	return queryRowWith(ctx, tx.tx, query, args...)
 }
 
-// Commit commits the transaction.
+// Commit commits the transaction. If a previous ExecContext or QueryContext
+// on this transaction failed, Commit does not confirm anything: it rolls the
+// transaction back, marks it done and returns the original error (retrievable
+// with errors.Is), so a partial group can never be confirmed. Subsequent
+// calls then return ErrTxDone.
+//
+// Errors reported only after the fact — by Row.Scan or during Rows iteration
+// from QueryRowContext — are not observable here and do not block Commit.
 func (tx *Tx) Commit(ctx context.Context) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
@@ -601,6 +625,19 @@ func (tx *Tx) Commit(ctx context.Context) error {
 
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("krios: tx commit: %w", err)
+	}
+
+	if tx.err != nil {
+		err := tx.err
+		tx.err = nil
+
+		if rbErr := tx.tx.Rollback(); rbErr != nil {
+			tx.done = true
+			return fmt.Errorf("krios: tx commit blocked by previous error: %w (rollback failed: %v)", err, rbErr)
+		}
+
+		tx.done = true
+		return fmt.Errorf("krios: tx commit blocked by previous error: %w", err)
 	}
 
 	if err := tx.tx.Commit(); err != nil {
