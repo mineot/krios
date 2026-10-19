@@ -28,7 +28,7 @@ A primeira versão deve contemplar:
 - Migrações de avanço (`up`) e reversão (`down`).
 - Construção encadeada de consultas `SELECT`, `INSERT`, `UPDATE` e `DELETE`, incluindo paginação.
 - Execução de SQL fornecido pelo consumidor da biblioteca.
-- Mapeamento de entidades, tabelas, junções e colunas, com acesso tipado aos valores, validação e formatação configuráveis.
+- Mapeamento de entidades, tabelas, junções e colunas por reflexão sobre structs Go, com acesso tipado aos campos, validação e formatação configuráveis.
 - Distribuição como módulo Go hospedado no GitHub.
 
 A adoção de esquemas preexistentes sem histórico de migrações do Krios não faz parte do escopo inicial.
@@ -175,7 +175,7 @@ A biblioteca deve oferecer um construtor de consultas `SELECT`, permitindo repre
 
 O construtor deve utilizar o dialeto do banco configurado para gerar o SQL correspondente.
 
-A construção deve partir de uma entidade mapeada e permitir encadear seleção de campos, filtros, ordenação e agrupamento. Sem seleção explícita de campos, devem ser selecionadas todas as colunas mapeadas, na ordem definida no mapeamento. A estrutura usada para guardar essa ordem ainda será definida.
+A construção deve partir de uma entidade derivada por reflexão de um struct Go e permitir encadear seleção de campos, filtros, ordenação e agrupamento. Sem seleção explícita de campos, devem ser selecionadas todas as colunas mapeadas, na ordem de declaração dos campos do struct. A estrutura usada para guardar essa ordem é o próprio mapeamento da entidade, conforme [E04-P01_decisions.md](E04-P01_decisions.md).
 
 Os nomes conceituais propostos incluem `Select`, `Only`, `Where`, `OrderBy`, `GroupBy`, `Distinct`, `Limit`, `Page`, `Count`, `Sum`, `Max` e `Min`. `Page(limit, offset)` deve produzir um resultado de paginação, proposto como `krios.Paginate`. Os campos desse resultado e o cálculo do total em consultas agrupadas ou com `DISTINCT` permanecem pendentes.
 
@@ -183,8 +183,8 @@ O exemplo abaixo expressa os recursos desejados e não representa uma assinatura
 
 ```text
 SELECT
-  entidade: definição de tabela, junções e colunas
-  resultado: representação de registros a definir no RF-09
+  entidade: struct Go mapeado por reflexão (tabela, junções e colunas)
+  resultado: struct do consumidor, slice por ponteiro ou wrappers nativos (RF-09)
   campos: id, name e funções de agregação, conforme a consulta
   origem: tabela
   junções: lista de junções
@@ -205,13 +205,13 @@ No escopo inicial:
 - `UPDATE` deve receber valores associados aos nomes dos campos e exigir filtros com `Where`, podendo atingir várias linhas.
 - `DELETE` deve exigir filtros com `Where`, podendo atingir várias linhas.
 
-Os construtores devem partir da entidade mapeada e permitir encadeamento. A operação conceitual `SetValues` deve atribuir os valores para inserção e atualização. Seu formato em Go e a manutenção da entrada por struct, prevista anteriormente, permanecem pendentes. Operações de `UPDATE` ou `DELETE` sem `Where` devem ser rejeitadas antes da execução.
+Os construtores devem partir da entidade derivada por reflexão de um struct Go e permitir encadeamento. A operação conceitual `SetValues` deve atribuir os valores para inserção e atualização a partir de um struct. O formato exato em Go e a política de campos `nil`/omitidos permanecem para E06-P01 (ver [0002_execution_plan.md](0002_execution_plan.md)). Operações de `UPDATE` ou `DELETE` sem `Where` devem ser rejeitadas antes da execução.
 
 Operações de escrita devem retornar informações sobre sua execução, incluindo a quantidade de linhas afetadas quando disponível.
 
 O preenchimento de structs com campos gerados ou alterados pelo banco deve ser solicitado explicitamente e ter suporte documentado por banco. Quando solicitado e não suportado, deve produzir erro antes de executar a escrita.
 
-A especificação dessas operações deve definir os campos cujo retorno é garantido e os destinos de resultados para escritas de uma ou de múltiplas linhas. Também deve distinguir campos omitidos de valores intencionais como `0`, `false` e `NULL` em atualizações.
+A especificação dessas operações deve definir os campos cujo retorno é garantido e os destinos de resultados para escritas de uma ou de múltiplas linhas. Também deve distinguir campos omitidos de valores intencionais como `0`, `false` e `NULL` em atualizações, apoiando-se na representação por ponteiros e tipos anuláveis adotada em [E04-P01_decisions.md](E04-P01_decisions.md).
 
 ### RF-08 — Executar SQL fornecido pelo consumidor
 
@@ -229,19 +229,17 @@ A preferência é disponibilizar resultados compatíveis com `database/sql`. Os 
 
 ### RF-09 — Mapear entidades, colunas e resultados
 
-O consumidor deve poder descrever o mapeamento por meio de uma entidade, proposta como `krios.Entity`, contendo:
+O mapeamento deve ser feito por **reflexão sobre structs Go**. O consumidor descreve a entidade por meio de um struct e tags; a biblioteca deriva tabela, colunas e metadados em tempo de execução. A decisão que troca a antiga proposta de entidade explícita por este modelo está em [E04-P01_decisions.md](E04-P01_decisions.md).
 
-- Tabela de origem, com esquema e alias opcionais.
-- Junções, cada uma identificando uma tabela e um ou mais critérios de associação.
-- Colunas identificáveis por nome, com referências opcionais a esquema, tabela e alias. Na referência da coluna, somente seu nome é obrigatório.
-- Função de validação por coluna, fornecida pelo consumidor, com indicação de validade e erro.
-- Função de formatação por coluna, fornecida pelo consumidor, com retorno de texto e erro para apresentação do valor.
+- Tabela de origem derivada de tag de struct, com esquema e alias opcionais.
+- Colunas correspondentes aos campos exportados, com nome por tag de campo; somente o nome é obrigatório. Um marcador identifica a chave primária e outro ignora o campo.
+- Junções, cada uma referenciando outra tabela ou struct e um ou mais critérios de associação.
+- Função de validação por campo, fornecida pelo consumidor, com indicação de validade e erro.
+- Função de formatação por campo, fornecida pelo consumidor, com retorno de texto e erro para apresentação do valor.
 
-O acesso aos valores das colunas deve oferecer operações tipadas de leitura e atribuição, como texto e data/hora, além da leitura do valor formatado. Os nomes conceituais incluem `Column`, `GetString`, `SetString`, `GetTime`, `SetTime` e `GetFormatted`; as assinaturas definitivas serão especificadas posteriormente.
+O acesso aos valores é feito pelos campos do struct, em tipos Go idiomáticos. `NULL` é representado por ponteiro (`*T`) ou por tipos `sql.Null*`; um `NULL` lido em campo não anulável é erro de conversão. A ordem das colunas é a ordem de declaração dos campos. Os resultados podem ser lidos para um struct (`*T`) ou para um slice recebido por ponteiro (`*[]T`), complementando os wrappers nativos de [E03-P01_decisions.md](E03-P01_decisions.md) para SQL ad-hoc.
 
-A proposta ainda não define onde os valores de cada registro são armazenados, como selecionar uma linha entre múltiplos resultados ou como representar `NULL`. Também permanece pendente se esse modelo substituirá ou complementará o requisito anterior de mapeamento automático para structs do consumidor, incluindo slices recebidos por ponteiro.
-
-A estrutura que preservará a ordem das colunas, a correspondência com campos Go, as conversões de tipos, o momento de execução da validação e da formatação e os destinos de resultados de escrita serão definidos na especificação de mapeamento.
+O nome conceitual `krios.Entity` passa a designar o descritor derivado por reflexão de um tipo struct, e não uma DSL declarativa de colunas. A sintaxe definitiva das tags, as regras de conversão de tipos, a representação de `NULL`/omitido e o momento de execução da validação e da formatação são detalhados em [E04-P01_decisions.md](E04-P01_decisions.md) e nas especificações seguintes de mapeamento.
 
 ## 6. Definições pendentes
 
@@ -251,7 +249,7 @@ As respostas do consumidor foram incorporadas às seções anteriores. Esta seç
 
 Campos de conexão, obrigatoriedade, portas, unidades, padrões, valores omitidos, timeout, contexto e erros foram resolvidos em [E02-P01_decisions.md](E02-P01_decisions.md), com revisão M01–M06. A configuração é recebida por valor, e a biblioteca não retém a configuração completa no DB/Tx.
 
-Os tipos e assinaturas de execução e resultados foram resolvidos em [E03-P01_decisions.md](E03-P01_decisions.md). Permanecem pendentes os contratos de entidades/construtores e o conteúdo de `MigrationsConfig`, nas entregas correspondentes.
+Os tipos e assinaturas de execução e resultados foram resolvidos em [E03-P01_decisions.md](E03-P01_decisions.md). O modelo de entidades foi resolvido por reflexão em [E04-P01_decisions.md](E04-P01_decisions.md). Permanecem pendentes os contratos dos construtores e o conteúdo de `MigrationsConfig`, nas entregas correspondentes.
 
 ### 6.2. Drivers e dialetos
 
@@ -267,7 +265,7 @@ Para a validação do projeto, foi escolhido `modernc.org/sqlite` nos testes aut
 
 ### 6.3. Transações
 
-- Como associar uma entidade, um construtor ou um arquivo SQL ao objeto de transação retornado por `Begin`?
+- Como associar um construtor ou um arquivo SQL ao objeto de transação retornado por `Begin`? A entidade, por ser um tipo struct mapeado por reflexão ([E04-P01_decisions.md](E04-P01_decisions.md)), não retém conexão.
   _Parcialmente resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): `*DB` e `*Tx` implementam o mesmo contrato de execução (§3.4); a associação de construtores e de SQL incorporado fica para E05 e E07._
 - Operações na mesma transação devem ser sequenciais, serializadas pela biblioteca ou poderão ser solicitadas simultaneamente? Qual será o comportamento nesses casos?
   _Resolvido em [E03-P01_decisions.md](E03-P01_decisions.md): chamadas no mesmo `*Tx` são serializadas com `sync.Mutex`; a expectativa de concorrência é documentada na API (§3.4.3)._
@@ -302,12 +300,12 @@ O padrão de nomes, a associação de arquivos a versões por `krios.Config`, a 
 - Quais tipos de junção, operadores, funções e regras de busca textual serão suportados?
 - Quais campos e estatísticas estarão presentes em `krios.Paginate`? Como validar limite e deslocamento e calcular o total com filtros, agrupamentos e `DISTINCT`?
 
-O encadeamento, a seleção de todas as colunas mapeadas por padrão, sua ordem definida no mapeamento e os recursos listados no RF-06 já fazem parte do escopo.
+O encadeamento, a seleção de todas as colunas mapeadas por padrão, sua ordem de declaração dos campos do struct e os recursos listados no RF-06 já fazem parte do escopo.
 
 ### 6.6. Escritas
 
-- Qual será o formato de `SetValues` em Go? A entrada por struct continuará disponível além da atribuição por nome de campo?
-- Como distinguir campo omitido, valor zero, `false` e `NULL`? Como representar explicitamente a intenção de gravar cada um deles?
+- Qual será o formato de `SetValues` em Go? _Parcialmente resolvido em [E04-P01_decisions.md](E04-P01_decisions.md): a entrada por struct/ponteiro é o modelo adotado; a assinatura exata fica para E06-P01._
+- Como distinguir campo omitido, valor zero, `false` e `NULL`? Como representar explicitamente a intenção de gravar cada um deles? _Direção definida em [E04-P01_decisions.md](E04-P01_decisions.md) (ponteiro `nil` × tipo anulável não-`nil`); a política de escrita fica para E06-P01._
 - O que será considerado um `Where` válido para autorizar `UPDATE` e `DELETE`, inclusive diante de um grupo de condições vazio?
 - Quais informações serão retornadas pela execução e como indicar que a quantidade de linhas afetadas não está disponível?
 - Como solicitar campos gerados ou alterados, quais bancos oferecerão esse retorno e quais destinos receberão resultados de uma ou de múltiplas linhas?
@@ -317,13 +315,18 @@ A exigência de `Where` em atualizações e exclusões e o retorno de campos ape
 ### 6.7. Mapeamento, validação e formatação
 
 - Como representar a definição da entidade e os valores de cada registro? Como acessar um registro específico entre vários resultados?
+  _Resolvido em [E04-P01_decisions.md](E04-P01_decisions.md): a entidade é um struct Go derivado por reflexão; os valores ficam nos campos, e os resultados são lidos para `*T` ou `*[]T`._
 - O modelo de entidades substituirá ou complementará o mapeamento automático para structs do consumidor? Caso esse suporte permaneça, quais serão as regras de tags, correspondência de campos e preenchimento de slices por ponteiro?
-- Como representar `NULL`, diferenciar coluna não selecionada de valor nulo e tratar conversões incompatíveis nos acessos tipados?
+  _Resolvido em [E04-P01_decisions.md](E04-P01_decisions.md): o mapeamento por reflexão para structs é o modelo principal; a sintaxe das tags é detalhada em E04-P02._
+- Como representar `NULL`, diferenciar coluna não selecionada de valor nulo e tratar conversões incompatíveis?
+  _Direção definida em [E04-P01_decisions.md](E04-P01_decisions.md): ponteiro/tipos `sql.Null*` para `NULL`, campo não selecionado inalterado e erro de conversão por coluna. As regras finas ficam para E04-P02/E04-P03._
 - Qual estrutura preservará a ordem das colunas e permitirá sua busca por nome? Um `map` isolado não garante ordem de iteração, conforme a [especificação de Go](https://go.dev/ref/spec#For_statements).
+  _Resolvido em [E04-P01_decisions.md](E04-P01_decisions.md): a ordem é a de declaração dos campos do struct, preservada por `reflect`; a busca por nome usa um índice derivado._
 - Quando a validação será executada: na atribuição, antes da escrita ou também na leitura? Como comunicar valor inválido e erro da função de validação?
 - Quando a formatação será executada e como seu resultado se relacionará com o valor original utilizado nas operações de banco?
+  _Ambas permanecem para E04-P03, com as funções associadas a campos conforme [E04-P01_decisions.md](E04-P01_decisions.md)._
 
-As entidades, junções, metadados das colunas, funções fornecidas pelo consumidor e operações tipadas já estão definidos como capacidades no RF-09.
+O modelo de entidades por reflexão, a ordem das colunas, a representação de `NULL`, as junções e as operações tipadas nos campos estão definidos em [E04-P01_decisions.md](E04-P01_decisions.md); as regras restantes de validação/formatação e de tags dependem de E04-P02/E04-P03.
 
 ### 6.8. SQL incorporado
 
@@ -349,11 +352,11 @@ O escopo descrito neste documento será atendido quando for possível:
 3. Abrir o acesso com verificação de conectividade, cancelamento e prazo limite, receber erro em caso de cancelamento ou prazo esgotado, liberar recursos em falhas e encerrar o acesso pela API pública.
 4. Executar operações por meio de um objeto de transação, confirmar ou reverter o grupo, manter operações externas independentes e rejeitar novas operações na transação encerrada.
 5. Utilizar a biblioteca sem configurar migrações e, ao executá-las, exigir uma versão desejada explícita, receber a associação de arquivos às versões por `krios.Config` e avançar ou reverter até a versão desejada, inclusive `0`, usando arquivos incorporados pelo consumidor.
-6. Construir operações de leitura e escrita por encadeamento a partir de entidades mapeadas, utilizando o dialeto correspondente ao banco configurado.
-7. Selecionar campos, filtrar, ordenar, agrupar, agregar, eliminar duplicatas e paginar consultas com total e estatísticas, preservando a ordem definida das colunas quando não houver seleção explícita.
+6. Construir operações de leitura e escrita por encadeamento a partir de entidades derivadas por reflexão de structs Go, utilizando o dialeto correspondente ao banco configurado.
+7. Selecionar campos, filtrar, ordenar, agrupar, agregar, eliminar duplicatas e paginar consultas com total e estatísticas, preservando a ordem de declaração dos campos do struct quando não houver seleção explícita.
 8. Fornecer valores por nome de campo para inserções e atualizações, permitir atualizações e exclusões de múltiplas linhas e rejeitar `UPDATE` e `DELETE` sem `Where` antes da execução.
 9. Executar SQL personalizado compatível com o banco a partir de recursos incorporados, recebendo parâmetros separadamente e disponibilizando os resultados conforme os contratos de consulta, execução e mapeamento a definir.
-10. Definir entidades, tabelas, junções e colunas, oferecer acesso tipado aos valores e aplicar validação e formatação fornecidas pelo consumidor conforme os contratos a definir.
+10. Descrever entidades, tabelas, junções e colunas por structs Go mapeados por reflexão, oferecer acesso tipado pelos campos e aplicar validação e formatação fornecidas pelo consumidor conforme os contratos a definir.
 11. Inicializar migrações sem histórico somente na ausência de objetos de aplicação no esquema gerenciado e rejeitar esquemas preexistentes sem histórico antes de executar migrações.
 12. Retornar erro quando uma migração falhar e reverter as alterações quando houver suporte transacional, tratando aplicações parciais conforme a política de recuperação a definir.
 13. Retornar informações sobre linhas afetadas quando disponíveis, permitir a solicitação explícita de campos gerados ou alterados em escritas e rejeitar solicitações não suportadas antes da execução.

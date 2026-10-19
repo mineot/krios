@@ -150,23 +150,23 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 ### E04 — Definir entidades e mapear os resultados
 
-**Entrega:** tabelas e colunas podem ser descritas por entidades, e resultados podem ser consumidos sem confundir valores de registros distintos.
+**Entrega:** tabelas e colunas podem ser descritas por structs Go mapeados por reflexão, e resultados podem ser preenchidos sem confundir valores de registros distintos.
 
-- [ ] **E04-P01 — Especificar entidades e registros.** Definir tabela, esquema, alias, junções, colunas, ordem do mapeamento e representação de uma ou de múltiplas linhas. Decidir como o modelo se relaciona com structs do consumidor.
+- [x] **E04-P01 — Especificar entidades e registros.** Definido o mapeamento por reflexão sobre structs Go: a entidade é derivada do struct e das tags; a ordem das colunas é a de declaração dos campos; resultados são lidos para `*T` ou `*[]T`; `NULL` usa ponteiro/tipos `sql.Null*`. A troca da entidade explícita por reflexão está registrada em [E04-P01_decisions.md](E04-P01_decisions.md).
 
-  > **Pendências:** resolver a separação entre definição da entidade e valores, preservação da ordem das colunas, acesso a linhas e manutenção ou substituição do mapeamento automático para structs (§6.7).
+  > **Pendências:** detalhar a sintaxe das tags (E04-P02) e o momento de validação/formatação (E04-P03), conforme §6.7.
 
-- [ ] **E04-P02 — Implementar o mapeamento e o acesso tipado.** Converter resultados obtidos pela execução básica em registros, disponibilizar operações tipadas de leitura e atribuição e tratar valores nulos e conversões incompatíveis.
+- [ ] **E04-P02 — Implementar o mapeamento e o acesso tipado.** Derivar os metadados do struct por reflexão (tabela, colunas, ordem, chave primária), preencher `*T` e `*[]T` e tratar valores nulos e conversões incompatíveis.
 
-  > **Pendências:** definir `NULL`, coluna não selecionada, conversões e, caso o suporte a structs seja mantido, tags e correspondência entre colunas e campos (§6.7).
+  > **Pendências:** definir a sintaxe das tags, a correspondência entre colunas e campos, o tratamento de coluna não selecionada e as conversões, conforme [E04-P01_decisions.md](E04-P01_decisions.md) e §6.7.
 
-- [ ] **E04-P03 — Implementar validação e formatação por coluna.** Receber as funções fornecidas pelo consumidor e integrar seus resultados e erros ao fluxo definido para atribuição, leitura ou escrita.
+- [ ] **E04-P03 — Implementar validação e formatação por campo.** Receber as funções fornecidas pelo consumidor, associadas a campos do struct, e integrar seus resultados e erros ao fluxo definido para atribuição, leitura ou escrita.
 
   > **Pendências:** decidir o momento de execução dessas funções e a relação entre o valor formatado para apresentação e o valor utilizado no banco (§6.7).
 
 - [ ] **E04-P04 — Validar o mapeamento.** Cobrir múltiplos registros, ordem das colunas, aliases, nulos, tipos incompatíveis, erros de validação e formatação. Usar consultas pela base de E03, sem depender do construtor de E05.
 
-**Critério de conclusão:** um exemplo consegue ler e modificar valores de registros distintos por meio do modelo escolhido; a representação dos resultados está definida e demonstrada.
+**Critério de conclusão:** um exemplo consegue ler e modificar valores de registros distintos por meio do mapeamento por reflexão; a representação dos resultados está definida e demonstrada.
 
 ### E05 — Construir consultas de leitura e paginação
 
@@ -190,11 +190,11 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 ### E06 — Implementar operações de escrita
 
-**Entrega:** `INSERT`, `UPDATE` e `DELETE` por entidade, com valores explícitos, filtros obrigatórios onde definidos e retorno documentado por banco.
+**Entrega:** `INSERT`, `UPDATE` e `DELETE` por entidade (struct mapeado por reflexão), com valores explícitos, filtros obrigatórios onde definidos e retorno documentado por banco.
 
 - [ ] **E06-P01 — Especificar valores e resultados de escrita.** Definir `SetValues`, campos omitidos, valores zero, `false`, `NULL`, informações de execução e solicitação de campos gerados ou alterados.
 
-  > **Pendências:** decidir a manutenção da entrada por struct, a validade de um `Where` vazio, os retornos disponíveis por banco e os destinos de resultados de uma ou de múltiplas linhas (§6.6). Conciliar esses destinos com o modelo de E04.
+  > **Pendências:** definir a assinatura de `SetValues` e a política de `nil`/omitido/`NULL` sobre o modelo de reflexão de [E04-P01_decisions.md](E04-P01_decisions.md), a validade de um `Where` vazio, os retornos disponíveis por banco e os destinos de resultados de uma ou de múltiplas linhas (§6.6).
 
 - [ ] **E06-P02 — Implementar os construtores de escrita.** Gerar SQL parametrizado pelos dialetos, exigir `Where` em atualizações e exclusões e integrar a validação de valores e a execução na conexão ou na transação selecionada.
 

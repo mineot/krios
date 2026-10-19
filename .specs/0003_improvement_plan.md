@@ -142,7 +142,7 @@ E04 pode iniciar sua implementação quando M01–M05 e os exemplos/regressões 
 
 A integração real com MySQL/PostgreSQL permanece obrigatória antes de concluir E09. O roteiro deve cobrir conexão, parâmetros especiais, confirmação/reversão, falha de statement, resultados abertos, contexto e independência das operações externas. Registrar resultado incerto de confirmação como tal; não adotar repetição automática de escrita.
 
-Na especificação de E04, avaliar a necessidade de metadados de colunas (`Columns`/`ColumnTypes`) para mapeamento, especialmente SQL arbitrário e aliases. Essa decisão deve partir dos casos de uso de E04/E07; não adicionar métodos públicos antecipadamente nesta revisão.
+Na especificação de E04 foi adotado o mapeamento por reflexão sobre structs ([E04-P01_decisions.md](E04-P01_decisions.md)). Ainda assim, permanece em avaliação a necessidade de metadados de colunas (`Columns`/`ColumnTypes`) para SQL arbitrário e aliases. Essa decisão deve partir dos casos de uso de E04/E07; não adicionar métodos públicos antecipadamente nesta revisão.
 
 ## 6. Registro de progresso
 

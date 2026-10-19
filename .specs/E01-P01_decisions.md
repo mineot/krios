@@ -18,7 +18,7 @@ Data: 2026-10-18
 
 - Não criamos assinaturas completas agora; apenas estrutura compilável.
 - A pasta `internal/` e os pacotes que continham apenas documentação foram removidos. Subpacotes internos serão criados somente quando a implementação justificar essa separação; sua existência não é requisito para concluir E01-P01.
-- O uso de reflexão para mapeamento não foi decidido. Sua necessidade será avaliada em E04, junto ao modelo de entidades e resultados; não há pacote reservado para esse mecanismo.
+- O uso de reflexão para mapeamento não foi decidido nesta entrega. **Decidido em E04**: a reflexão sobre structs Go foi adotada como modelo de entidades, não havendo pacote reservado para o mecanismo; ver [E04-P01_decisions.md](E04-P01_decisions.md).
 - Não há imports automáticos de drivers (regra já definida).
 - Próximos passos seguem E01-P02 (rotinas locais) e validação.
 

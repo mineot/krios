@@ -2,7 +2,7 @@
 
 Biblioteca Go em desenvolvimento para acesso a SQLite3, MySQL e PostgreSQL por `database/sql`.
 
-Implementados: configuração em código, abertura/fechamento, SQL parametrizado e transações explícitas. Entidades, consultas encadeadas, SQL incorporado e migrações pertencem às próximas entregas. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN e aguardam integração manual.
+Implementados: configuração em código, abertura/fechamento, SQL parametrizado e transações explícitas. O mapeamento de entidades por reflexão sobre structs, as consultas encadeadas, o SQL incorporado e as migrações pertencem às próximas entregas. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN e aguardam integração manual.
 
 ## Desenvolvimento local
 
