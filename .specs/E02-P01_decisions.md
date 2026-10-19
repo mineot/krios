@@ -4,15 +4,19 @@ Data: 2026-10-18
 
 ## Organização do código
 
-Seguir a organização definida em [E01-P01_decisions.md](E01-P01_decisions.md): pacote público `krios` na raiz do módulo (`github.com/mineot/krios`), com os desta entrega nos arquivos `errs.go`, `config.go` e `database.go`. Não criar pasta `core` nem antecipar subpacotes; subpacotes internos serão criados somente quando uma separação concreta da implementação justificar, conforme já registrado em E01-P01.
+Seguir a organização definida em [E01-P01_decisions.md](E01-P01_decisions.md): pacote público `krios` na raiz do módulo (`github.com/mineot/krios`). Não criar pasta `core` nem antecipar subpacotes; subpacotes internos serão criados somente quando uma separação concreta da implementação justificar, conforme já registrado em E01-P01.
+
+**Revisão (2026-10-18):** o código desta fase foi consolidado em um **único arquivo `krios.go`** (documentação do pacote, configuração e erros), em vez de `errs.go` e `config.go` separados. A mudança é intencional e está registrada em [E01-P01_decisions.md](E01-P01_decisions.md#revisão-2026-10-18); o caminho de import permanece `github.com/mineot/krios`. Em E02-P03, `Open` e `Close` também serão adicionados a `krios.go`.
 
 A definição da interface de dialetos e sua seleção **não** fazem parte desta entrega: permanecem adiadas para E05-P01, conforme [0002_execution_plan.md](0002_execution_plan.md).
+
+Os testes do pacote ficam concentrados em `krios_test.go` (`package krios`), conforme a revisão registrada em [E01-P01_decisions.md](E01-P01_decisions.md#revisão-2026-10-18--testes); o teste de ambiente SQLite permanece isolado em `tests/`.
 
 ## Tabela de decisões
 
 | Item | Decisão | Justificativa |
 |-----|---------|---------------|
-| Organização | Pacote `krios` na raiz; arquivos `errs.go`, `config.go`, `database.go`; sem pasta `core` | Consistente com E01-P01 e com os exemplos de importação |
+| Organização | Pacote `krios` na raiz; código desta fase em `krios.go` (revisão de 2026-10-18); sem pasta `core` | Consistente com E01-P01 revisado e com os exemplos de importação |
 | Identificação do driver | Campo obrigatório `Config.Driver string` com o nome sob o qual o driver se registrou em `database/sql` | O RF-01/§4.1 exige informar a seleção do driver na configuração; nenhum mapeamento `DBType`→nome é universal (`sqlite`/`sqlite3`, `postgres`/`pgx`) |
 | Detecção de driver ausente | Em `Open`, comparar `Config.Driver` com `sql.Drivers()` | Permite distinguir "driver não importado" de falha de conexão |
 | Relação driver × banco | Não validar nome contra `DBType`; o dialeto segue `Type` e incompatibilidade se manifesta como falha de conexão | Evita regras frágeis contra a diversidade de drivers |

@@ -32,19 +32,20 @@ make check
 
 Executar apenas `make` também chama `check`. Qualquer falha nas verificações faz o comando retornar erro.
 
-`go build ./...` verifica os pacotes do projeto. O exemplo executável está em `cmd/krios` e pode ser executado com `go run ./cmd/krios`. O teste atual valida apenas o ambiente SQLite, a escrita parametrizada e a persistência após reabrir o arquivo; ainda não valida funcionalidades do Krios.
+`go build ./...` verifica os pacotes do projeto. O exemplo executável está em `cmd/krios` e pode ser executado com `go run ./cmd/krios`. Os testes atuais validam o ambiente SQLite (escrita parametrizada e persistência após reabrir o arquivo) e a configuração (`krios.Config`): padrões de `Port` e `Timeout`, valores explícitos e as validações que retornam `ErrInvalidConfig`. O ciclo de vida (`Open`/`Close`) ainda não está implementado.
 
 ## Organização
 
 - `go.mod`: módulo `github.com/mineot/krios` e versão mínima de Go.
-- `doc.go`: documentação do pacote público `krios`.
+- `krios.go`: pacote público `krios` — documentação, `krios.Config`, tipos por banco, padrões, validações e erros exportados.
+- `krios_test.go`: testes do pacote e exemplo de configuração em Go.
 - `cmd/krios/main.go`: exemplo executável separado da biblioteca.
 - `tests/sqlite_test.go`: validação isolada do driver e preparação opcional do banco local.
 - `Makefile`: comandos de desenvolvimento local.
 - `.github/workflows/check.yml`: verificações em pushes e pull requests.
 - `.specs/`: requisitos, plano de execução e decisões técnicas.
 
-Novos arquivos e pacotes serão criados conforme a implementação exigir. Os drivers serão escolhidos e importados pelo consumidor; a biblioteca não os importará automaticamente. A configuração será fornecida pela struct `krios.Config`, ainda a implementar.
+Novos arquivos e pacotes serão criados conforme a implementação exigir. Os drivers serão escolhidos e importados pelo consumidor; a biblioteca não os importará automaticamente. A configuração é fornecida em código pela struct `krios.Config`; `Open` e `Close` ainda serão implementados.
 
 ## SQLite local e testes
 
