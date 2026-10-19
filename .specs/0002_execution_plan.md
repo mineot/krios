@@ -84,9 +84,11 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 **Entrega:** consumidor configura o banco por `krios.Config`, sem arquivo externo de configuração, importa seu driver e consegue abrir e encerrar o acesso.
 
-- [ ] **E02-P01 — Especificar a configuração e o ciclo de vida.** Definir os campos e tipos da struct pública `krios.Config`, sua passagem à biblioteca, as assinaturas de `Open` e `Close`, o cancelamento e os erros relevantes. Produzir um exemplo mínimo de uso antes de implementar o contrato.
+- [x] **E02-P01 — Especificar a configuração e o ciclo de vida.** Definir os campos e tipos da struct pública `krios.Config`, sua passagem à biblioteca, as assinaturas de `Open` e `Close`, o cancelamento e os erros relevantes. Produzir um exemplo mínimo de uso antes de implementar o contrato.
 
   > **Pendências:** definir organização e tipos dos campos de `krios.Config`, valores omitidos e explícitos, padrões, validações, unidades de tempo, cancelamento e erros (§6.1). Definir como identificar o driver importado e sua relação com o banco (§6.2).
+
+  > **Decisões registradas (2026-10-18) em [E02-P01_decisions.md](E02-P01_decisions.md):** organização e tipos de `krios.Config`, incluindo campo obrigatório `Driver` e structs por banco (§6.1); valores omitidos por zero (`Port == 0`, `Timeout == 0`) e valores negativos inválidos; `Timeout` default de 10 s e precedência = menor prazo entre `ctx` e `Timeout`, com `context.WithTimeout` interno (§6.1); contrato de erros com `ErrInvalidConfig`, `ErrDriverNotLoaded`, `ErrConnectionFailed`, erros de contexto e preservação do original por `%w` (§6.1); lista fechada de validações (§6.1); assinaturas de `Open(ctx, Config)` e `Close` idempotente, com exemplos mínimos para os três bancos. Identificação do driver por `sql.Drivers()` e formatos de DSN documentados por banco (§6.2). A interface dos dialetos permanece adiada para E05-P01. Nenhuma pendência restante desta tarefa.
 
 - [ ] **E02-P02 — Implementar o fluxo de configuração.** Receber `krios.Config` preenchida pelo consumidor, aplicar os padrões, validar os dados de cada banco e disponibilizar um exemplo de configuração em Go com valores ilustrativos, sem credenciais reais. Manter a configuração de migrações opcional.
 
@@ -94,7 +96,7 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 - [ ] **E02-P03 — Implementar `Open` e `Close`.** Integrar `database/sql` ao driver informado, verificar conectividade, respeitar cancelamento e tempo de espera e liberar recursos criados quando a abertura falhar.
 
-  > **Pendências:** definir o comportamento de chamadas repetidas a `Close` e de operações após o encerramento, junto ao contrato de ciclo de vida (§6.1).
+  > **Pendências:** definir o comportamento de chamadas repetidas a `Close` e de operações após o encerramento, junto ao contrato de ciclo de vida (§6.1). A idempotência de `Close` já está definida em [E02-P01_decisions.md](E02-P01_decisions.md); resta definir o comportamento de operações após o encerramento.
 
 - [ ] **E02-P04 — Validar o ciclo de vida nos três bancos.** Cobrir configuração válida e inválida, driver indisponível, falha de conexão, cancelamento, prazo esgotado e encerramento. Demonstrar que abrir o banco não exige configurar nem executar migrações e que a configuração em código funciona sem arquivos externos ou variáveis de ambiente obrigatórias.
 
