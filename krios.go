@@ -79,6 +79,9 @@ type (
 	Aggregate = entity.Aggregate
 	// Sort is one ORDER BY criterion built with Asc or Desc.
 	Sort = entity.Sort
+	// WriteValue is the disposition of one mapped column for a write operation,
+	// as returned by Entity.WriteValues.
+	WriteValue = entity.WriteValue
 	// Paginate describes one page returned by Select.Paginate.
 	Paginate = query.Paginate
 	// JoinKind selects the join operation of Select.Join.

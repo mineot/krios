@@ -353,7 +353,7 @@ func (e Email) Format() (string, error) {
 
 ### Valores de escrita
 
-`Entity.WriteValues(record any)` retorna `([]WriteValue, error)` em ordem de declaração. `WriteValue` é um tipo interno exposto pelo retorno, sem alias `krios.WriteValue`; seus campos acessíveis são `Column string`, `Value any` e `Absent bool`. Use inferência de tipo.
+`Entity.WriteValues(record any)` retorna `([]krios.WriteValue, error)` em ordem de declaração. `krios.WriteValue` expõe os campos `Column string`, `Value any` e `Absent bool`. Use inferência de tipo quando conveniente.
 
 | Valor do campo                                                     | `Insert`                      | `Update`               |
 | ------------------------------------------------------------------ | ----------------------------- | ---------------------- |

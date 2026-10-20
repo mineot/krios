@@ -150,3 +150,21 @@ A movimentação preserva cada cenário; `TestResultAvailability` e a fixture
 
 A execução remota do workflow e a integração real MySQL/PostgreSQL continuam
 pendentes, conforme o escopo herdado de [E09_manual_validation.md](E09_manual_validation.md).
+
+## 8. Adendo (2026-10-20) — pacotes acrescentados por E05–E08
+
+Esta nota registra a reorganização de 2026-10-19, quando `internal/` tinha nove
+pacotes. As entregas seguintes acrescentaram pacotes sem alterar os existentes
+nem a API pública:
+
+```
+internal/
+├── dialect/      package dialect      — Dialect, For(config.DBType) e MigrationDialect (E05/E08)
+├── query/        package query        — builder Select, Paginate e JoinKind (E05)
+├── write/        package write        — builders Insert/Update/Delete (E06)
+├── sqlfile/      package sqlfile      — SQLFile/NewSQLFile e runner File (E07)
+└── migrate/      package migrate      — Prepare/Apply, Plan/Step e Beginner/Tx (E08)
+```
+
+A estrutura descrita em §2 permanece válida para os pacotes originais; hoje o
+nível `internal/` reúne catorze pacotes.

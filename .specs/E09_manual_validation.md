@@ -2,7 +2,7 @@
 
 Data: 2026-10-19. **Estado: preparado; MySQL e PostgreSQL ainda não executados.**
 
-Este roteiro coleta evidência real de conexão, transações e consultas encadeadas. DSNs e drivers simulados já têm testes locais, mas não substituem este roteiro. SQL incorporado e migrações serão acrescentados quando E07–E08 estiverem implementados.
+Este roteiro coleta evidência real de conexão, transações e consultas encadeadas. DSNs e drivers simulados já têm testes locais, mas não substituem este roteiro. As migrações (E08) já contam com os cenários M01–M07 em §4.1; faltam os cenários de escritas (E06) e de SQL incorporado (E07), a ampliar nesta entrega.
 
 ## 1. Preparar e registrar o ambiente
 
@@ -472,7 +472,7 @@ V11 não autoriza repetir automaticamente a escrita: confirmar a situação por 
 
 ### 4.1 Cenários de migrações — estado parcial (E08)
 
-Aplicam-se quando E08 estiver implementado; ver [E08-P01_decisions.md](E08-P01_decisions.md), que fixa `MigrationsConfig{FS, TargetVersion, Versions, ManagedObjects}` e `RunMigrations(ctx)`. As migrações são configuradas em código: `ManagedObjects` deve listar as tabelas geridas pelo cenário para a verificação de banco sem histórico (§6 de E08-P01). A verificação simulada de E08-P04 (testes em [tests/migrations_test.go](../tests/migrations_test.go) e [internal/migrate/apply_test.go](../internal/migrate/apply_test.go)) cobre o contrato local dos percursos e do estado parcial; os cenários abaixo pedem a evidência real em MySQL/PostgreSQL.
+Aplicam-se a E08, já implementado localmente; falta a evidência real. Ver [E08-P01_decisions.md](E08-P01_decisions.md), que fixa `MigrationsConfig{FS, TargetVersion, Versions, ManagedObjects}` e `RunMigrations(ctx)`. As migrações são configuradas em código: `ManagedObjects` deve listar as tabelas geridas pelo cenário para a verificação de banco sem histórico (§6 de E08-P01). A verificação simulada de E08-P04 (testes em [tests/migrations_test.go](../tests/migrations_test.go) e [internal/migrate/apply_test.go](../internal/migrate/apply_test.go)) cobre o contrato local dos percursos e do estado parcial; os cenários abaixo pedem a evidência real em MySQL/PostgreSQL.
 
 | ID  | Procedimento                                                                                                                                            | Resultado esperado                                                                                                                  |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
