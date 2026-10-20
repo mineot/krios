@@ -247,6 +247,7 @@ MySQL/PostgreSQL aguardam execução do [roteiro manual](.specs/E09_manual_valid
 
 ## Documentação do projeto
 
+- [Manual de uso](MANUAL.md)
 - [Planejamento e requisitos](.specs/0001_planning.md)
 - [Plano de execução e progresso](.specs/0002_execution_plan.md)
 - [Plano de melhorias e evidências M01–M06](.specs/0003_improvement_plan.md)

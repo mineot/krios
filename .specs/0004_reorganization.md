@@ -30,17 +30,17 @@ internal/
 └── testutil/     package testutil     — driver simulador dos testes
 ```
 
-| Pacote | Arquivos | Responsabilidade |
-| --- | --- | --- |
-| `internal/errs` | `errors.go` | Os oito sentinelas `Err*` e `NormalizeTxError` |
-| `internal/config` | `config.go`, `dsn.go` | `DBType`, `*Config`, `Config`, `Validate`, `EffectiveTimeout`, `BuildDSN` |
-| `internal/entity` | `entity.go`, `validation.go` | `Entity`, `EntityOf`/`OfType`, derivação por reflexão, `Validator`/`Formatter` e os métodos `Validate`/`ValidateAll`/`Format` |
-| `internal/result` | `result.go` | `Result`, `Wrap` |
-| `internal/scan` | `rows.go`, `mapping.go` | `Row`, `Rows`, `All`, mapeamento para `*T`/`*[]T`, `WrapRow`/`WrapRows`/`BindRow`/`BindRows`/`ErrorRow`/`NativeRowError` |
-| `internal/execute` | `execution.go` | `sqlExecutor` e `ExecWith`/`QueryWith`/`QueryRowWith` |
-| `internal/transaction` | `tx.go` | `Tx`, `New`, `Commit`/`Rollback`, `recordError`/`recordLate` |
-| `internal/access` | `db.go` | `DB`, `Open`, `Close`, `Begin` e o contrato interno `executor` |
-| `internal/testutil` | `driver.go` | `Driver`, `Config`, `Rows`, `ReadFailure` |
+| Pacote                 | Arquivos                     | Responsabilidade                                                                                                              |
+| ---------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `internal/errs`        | `errors.go`                  | Os oito sentinelas `Err*` e `NormalizeTxError`                                                                                |
+| `internal/config`      | `config.go`, `dsn.go`        | `DBType`, `*Config`, `Config`, `Validate`, `EffectiveTimeout`, `BuildDSN`                                                     |
+| `internal/entity`      | `entity.go`, `validation.go` | `Entity`, `EntityOf`/`OfType`, derivação por reflexão, `Validator`/`Formatter` e os métodos `Validate`/`ValidateAll`/`Format` |
+| `internal/result`      | `result.go`                  | `Result`, `Wrap`                                                                                                              |
+| `internal/scan`        | `rows.go`, `mapping.go`      | `Row`, `Rows`, `All`, mapeamento para `*T`/`*[]T`, `WrapRow`/`WrapRows`/`BindRow`/`BindRows`/`ErrorRow`/`NativeRowError`      |
+| `internal/execute`     | `execution.go`               | `sqlExecutor` e `ExecWith`/`QueryWith`/`QueryRowWith`                                                                         |
+| `internal/transaction` | `tx.go`                      | `Tx`, `New`, `Commit`/`Rollback`, `recordError`/`recordLate`                                                                  |
+| `internal/access`      | `db.go`                      | `DB`, `Open`, `Close`, `Begin` e o contrato interno `executor`                                                                |
+| `internal/testutil`    | `driver.go`                  | `Driver`, `Config`, `Rows`, `ReadFailure`                                                                                     |
 
 A fachada `krios.go` permanece a única superfície pública e passa a importar os
 pacotes internos (`access`, `config`, `entity`, `errs`, `result`, `scan`,
@@ -98,19 +98,19 @@ as asserções `_ executor = (*access.DB)(nil)` e
 
 ## 5. Mapa de arquivos (antes → depois)
 
-| Antes | Depois |
-| --- | --- |
-| `internal/core/errors.go` | `internal/errs/errors.go` |
-| `internal/core/config.go` | `internal/config/config.go` |
-| `internal/core/dsn.go` | `internal/config/dsn.go` |
-| `internal/core/entity.go` | `internal/entity/entity.go` |
-| `internal/core/validation.go` | `internal/entity/validation.go` |
-| `internal/core/result.go` | `internal/result/result.go` |
-| `internal/core/rows.go`, `mapping.go` | `internal/scan/rows.go`, `mapping.go` |
-| `internal/core/execution.go` | `internal/execute/execution.go` |
-| `internal/core/tx.go` | `internal/transaction/tx.go` |
-| `internal/core/db.go` | `internal/access/db.go` |
-| `internal/core/driver_test.go` | `internal/testutil/driver.go` (fixtures com campos/hooks exportados) |
+| Antes                                 | Depois                                                               |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| `internal/core/errors.go`             | `internal/errs/errors.go`                                            |
+| `internal/core/config.go`             | `internal/config/config.go`                                          |
+| `internal/core/dsn.go`                | `internal/config/dsn.go`                                             |
+| `internal/core/entity.go`             | `internal/entity/entity.go`                                          |
+| `internal/core/validation.go`         | `internal/entity/validation.go`                                      |
+| `internal/core/result.go`             | `internal/result/result.go`                                          |
+| `internal/core/rows.go`, `mapping.go` | `internal/scan/rows.go`, `mapping.go`                                |
+| `internal/core/execution.go`          | `internal/execute/execution.go`                                      |
+| `internal/core/tx.go`                 | `internal/transaction/tx.go`                                         |
+| `internal/core/db.go`                 | `internal/access/db.go`                                              |
+| `internal/core/driver_test.go`        | `internal/testutil/driver.go` (fixtures com campos/hooks exportados) |
 
 Além da repartição em pacotes, o nível intermediário `core` foi removido: os
 pacotes ficam diretamente sob `internal/` (`internal/access`, `internal/scan`,
