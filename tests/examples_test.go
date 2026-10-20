@@ -295,6 +295,146 @@ func Example_selectQueries() {
 	// 1 alice
 }
 
+
+func Example_insert() {
+	db, cleanup := exampleDatabase()
+	defer cleanup()
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, bio TEXT)"); err != nil {
+		panic(err)
+	}
+
+	users, err := krios.EntityOf[exampleEntity]()
+	if err != nil {
+		panic(err)
+	}
+
+	res, err := db.Insert(users).
+		SetValues(&exampleEntity{ID: 1, Name: "alice", Bio: nil}).
+		Exec(ctx)
+	if err != nil {
+		panic(err)
+	}
+	n, _ := res.RowsAffected()
+	fmt.Println("rows:", n)
+
+	var bio sql.NullString
+	if err := db.QueryRowContext(ctx, "SELECT bio FROM users WHERE id = 1").Scan(&bio); err != nil {
+		panic(err)
+	}
+	fmt.Println("bio valid:", bio.Valid)
+	// Output:
+	// rows: 1
+	// bio valid: false
+}
+
+func Example_update() {
+	db, cleanup := exampleDatabase()
+	defer cleanup()
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, bio TEXT)"); err != nil {
+		panic(err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO users (id, name, bio) VALUES (1, 'alice', 'reader')"); err != nil {
+		panic(err)
+	}
+
+	users, err := krios.EntityOf[exampleEntity]()
+	if err != nil {
+		panic(err)
+	}
+
+	res, err := db.Update(users).
+		SetValues(&exampleEntity{Name: "alice2", Bio: nil}).
+		Omit("id").
+		Where(users.Col("id").Eq(1)).
+		Exec(ctx)
+	if err != nil {
+		panic(err)
+	}
+	n, _ := res.RowsAffected()
+	fmt.Println("rows:", n)
+
+	var bio sql.NullString
+	if err := db.QueryRowContext(ctx, "SELECT bio FROM users WHERE id = 1").Scan(&bio); err != nil {
+		panic(err)
+	}
+	fmt.Println("bio valid:", bio.Valid)
+
+	var name string
+	if err := db.QueryRowContext(ctx, "SELECT name FROM users WHERE id = 1").Scan(&name); err != nil {
+		panic(err)
+	}
+	fmt.Println(name)
+	// Output:
+	// rows: 1
+	// bio valid: true
+	// alice2
+}
+
+func Example_delete() {
+	db, cleanup := exampleDatabase()
+	defer cleanup()
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, bio TEXT)"); err != nil {
+		panic(err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO users (id, name, bio) VALUES (1, 'alice', 'reader')"); err != nil {
+		panic(err)
+	}
+
+	users, err := krios.EntityOf[exampleEntity]()
+	if err != nil {
+		panic(err)
+	}
+
+	res, err := db.Delete(users).Where(users.Col("id").Eq(1)).Exec(ctx)
+	if err != nil {
+		panic(err)
+	}
+	n, _ := res.RowsAffected()
+	fmt.Println("rows:", n)
+	// Output:
+	// rows: 1
+}
+
+func Example_writeReturning() {
+	db, cleanup := exampleDatabase()
+	defer cleanup()
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, bio TEXT)"); err != nil {
+		panic(err)
+	}
+
+	users, err := krios.EntityOf[exampleEntity]()
+	if err != nil {
+		panic(err)
+	}
+
+	var ins exampleEntity
+	if err := db.Insert(users).SetValues(&exampleEntity{ID: 10, Name: "zoe"}).Returning().One(ctx, &ins); err != nil {
+		panic(err)
+	}
+	fmt.Println(ins.ID, ins.Name)
+
+	var upd []exampleEntity
+	if err := db.Update(users).SetValues(&exampleEntity{Name: "zoe2"}).Omit("id", "bio").Where(users.Col("id").Eq(10)).Returning().All(ctx, &upd); err != nil {
+		panic(err)
+	}
+	fmt.Println(len(upd), upd[0].Name)
+
+	var del []exampleEntity
+	if err := db.Delete(users).Where(users.Col("id").Eq(10)).Returning().All(ctx, &del); err != nil {
+		panic(err)
+	}
+	fmt.Println(len(del))
+	// Output:
+	// 10 zoe
+	// 1 zoe2
+	// 1
+}
+
+
 // exampleStatus validates and formats its own text through the field-level
 // interfaces detected by EntityOf.
 type exampleStatus string

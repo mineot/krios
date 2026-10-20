@@ -60,16 +60,13 @@ func (s *Store) CreateSchema(ctx context.Context) error {
 	return nil
 }
 
-// CreateUser validates user, inserts it and stores the generated id. The
-// placeholders follow the SQLite/MySQL style ("?"); PostgreSQL consumer SQL
-// uses "$1", "$2", ... because Krios never rewrites it.
+// CreateUser validates user, inserts it with the entity write builder and
+// stores the generated id.
 func (s *Store) CreateUser(ctx context.Context, user *User) error {
 	if err := userEntity.Validate(user); err != nil {
 		return err
 	}
-	res, err := s.db.ExecContext(ctx,
-		"INSERT INTO users (name, email, bio, status) VALUES (?, ?, ?, ?)",
-		user.Name, user.Email, user.Bio, user.Status)
+	res, err := s.db.Insert(userEntity).SetValues(user).Omit("id").Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -79,14 +76,13 @@ func (s *Store) CreateUser(ctx context.Context, user *User) error {
 	return nil
 }
 
-// CreateTask inserts one task owned by task.OwnerID.
+// CreateTask inserts one task owned by task.OwnerID with the entity write
+// builder.
 func (s *Store) CreateTask(ctx context.Context, task *Task) error {
 	if err := taskEntity.Validate(task); err != nil {
 		return err
 	}
-	res, err := s.db.ExecContext(ctx,
-		"INSERT INTO tasks (title, owner_id, done) VALUES (?, ?, ?)",
-		task.Title, task.OwnerID, task.Done)
+	res, err := s.db.Insert(taskEntity).SetValues(task).Omit("id").Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -97,8 +93,9 @@ func (s *Store) CreateTask(ctx context.Context, task *Task) error {
 }
 
 // CreateUserWithFirstTasks registers a user and seeds their first tasks inside
-// one transaction. Any failure rolls the whole group back through the deferred
-// Rollback, so the user is never persisted without its tasks.
+// one transaction using the entity write builders. Any failure rolls the whole
+// group back through the deferred Rollback, so the user is never persisted
+// without its tasks.
 func (s *Store) CreateUserWithFirstTasks(ctx context.Context, user *User, titles ...string) error {
 	if err := userEntity.Validate(user); err != nil {
 		return err
@@ -110,9 +107,7 @@ func (s *Store) CreateUserWithFirstTasks(ctx context.Context, user *User, titles
 	// Covers every early return; Rollback after a successful Commit is a no-op.
 	defer tx.Rollback(ctx)
 
-	res, err := tx.ExecContext(ctx,
-		"INSERT INTO users (name, email, bio, status) VALUES (?, ?, ?, ?)",
-		user.Name, user.Email, user.Bio, user.Status)
+	res, err := tx.Insert(userEntity).SetValues(user).Omit("id").Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -123,17 +118,19 @@ func (s *Store) CreateUserWithFirstTasks(ctx context.Context, user *User, titles
 		if title == "" {
 			return errors.New("task title must not be empty")
 		}
-		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO tasks (title, owner_id, done) VALUES (?, ?, ?)",
-			title, user.ID, false); err != nil {
+		task := &Task{Title: title, OwnerID: user.ID, Done: false}
+		if err := taskEntity.Validate(task); err != nil {
 			return err
 		}
+	if _, err := tx.Insert(taskEntity).SetValues(task).Omit("id").Exec(ctx); err != nil {
+		return err
+	}
 	}
 	return tx.Commit(ctx)
 }
 
 // TransferTasks reassigns every open task of one owner to another inside a
-// transaction and reports how many rows moved.
+// transaction using the UPDATE builder and reports how many rows moved.
 func (s *Store) TransferTasks(ctx context.Context, from, to int64) (int64, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -150,9 +147,11 @@ func (s *Store) TransferTasks(ctx context.Context, from, to int64) (int64, error
 		return 0, err
 	}
 
-	res, err := tx.ExecContext(ctx,
-		"UPDATE tasks SET owner_id = ? WHERE owner_id = ? AND done = ?",
-		to, from, false)
+	res, err := tx.Update(taskEntity).
+		SetValues(&Task{OwnerID: to}).
+		Omit("id", "title", "done").
+		Where(taskEntity.Col("owner_id").Eq(from), taskEntity.Col("done").Eq(false)).
+		Exec(ctx)
 	if err != nil {
 		return 0, err
 	}
