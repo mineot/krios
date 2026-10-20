@@ -3,8 +3,9 @@
 // Configuration, the connection lifecycle (Open and Close), explicit
 // transactions (Begin, Commit, Rollback with execution on DB and Tx),
 // reflection-based entity mapping with per-field validation and formatting,
-// and chained SELECT building with filters and joins are implemented;
-// migrations are not implemented yet.
+// chained SELECT building with filters, joins, aggregates, ordering and
+// limit/offset pagination are implemented; migrations are not implemented
+// yet.
 //
 // Drivers are chosen and imported by the consumer; Krios does not import them.
 package krios
@@ -56,6 +57,14 @@ type (
 	LikeMode = entity.LikeMode
 	// Select is the chained SELECT builder created by DB.Select or Tx.Select.
 	Select = query.Select
+	// Expr is a selectable expression: a Column or an Aggregate.
+	Expr = entity.Expr
+	// Aggregate is an aggregate expression such as COUNT or SUM.
+	Aggregate = entity.Aggregate
+	// Sort is one ORDER BY criterion built with Asc or Desc.
+	Sort = entity.Sort
+	// Paginate describes one page returned by Select.Paginate.
+	Paginate = query.Paginate
 	// JoinKind selects the join operation of Select.Join.
 	JoinKind = query.JoinKind
 	// Validator is implemented by field types that validate their own value.
@@ -134,4 +143,10 @@ func And(conditions ...Condition) Condition {
 // empty group is invalid and fails rendering with ErrInvalidQuery.
 func Or(conditions ...Condition) Condition {
 	return entity.Or(conditions...)
+}
+
+// Count returns the COUNT(*) aggregate, used in Select.Fields to count rows.
+// Use Column.Count for COUNT(column), which skips NULL values.
+func Count() Aggregate {
+	return entity.Count()
 }

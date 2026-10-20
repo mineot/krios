@@ -177,7 +177,7 @@ O construtor deve utilizar o dialeto do banco configurado para gerar o SQL corre
 
 A construção deve partir de uma entidade derivada por reflexão de um struct Go e permitir encadear seleção de campos, filtros, ordenação e agrupamento. Sem seleção explícita de campos, devem ser selecionadas todas as colunas mapeadas, na ordem de declaração dos campos do struct. A estrutura usada para guardar essa ordem é o próprio mapeamento da entidade, conforme [E04-P01_decisions.md](E04-P01_decisions.md).
 
-Os nomes conceituais propostos incluem `Select`, `Only`, `Where`, `OrderBy`, `GroupBy`, `Distinct`, `Limit`, `Page`, `Count`, `Sum`, `Max` e `Min`. `Page(limit, offset)` deve produzir um resultado de paginação, proposto como `krios.Paginate`. Os campos desse resultado e o cálculo do total em consultas agrupadas ou com `DISTINCT` permanecem pendentes.
+Os nomes conceituais propostos incluem `Select`, `Only`, `Where`, `OrderBy`, `GroupBy`, `Distinct`, `Limit`, `Page`, `Count`, `Sum`, `Max` e `Min`. A API implementada expõe agregações via `Fields` (`Count`/`Sum`/`Max`/`Min` como expressões) e a paginação como `Paginate(ctx, limit, offset, dest)`, que devolve `krios.Paginate`. Os campos desse resultado e o cálculo do total em consultas agrupadas ou com `DISTINCT` foram resolvidos em [E05-P03_decisions.md](E05-P03_decisions.md).
 
 O exemplo abaixo expressa os recursos desejados e não representa uma assinatura definitiva da API Go:
 
@@ -303,7 +303,7 @@ O padrão de nomes, a associação de arquivos a versões por `krios.Config`, a 
 - Quais tipos de junção, operadores, funções e regras de busca textual serão suportados?
   _Resolvido em [E05-P01_decisions.md](E05-P01_decisions.md): junções `INNER`/`LEFT` (`RIGHT`/`FULL` como extensão futura); operadores `=`, `<>`, `<`, `<=`, `>`, `>=`, `IS [NOT] NULL`, `IN` e `LIKE` com modos contém/começa/termina, escape literal e sensibilidade à collation do banco; agregações (`Count`/`Sum`/`Max`/`Min`) e demais cláusulas em E05-P03._
 - Quais campos e estatísticas estarão presentes em `krios.Paginate`? Como validar limite e deslocamento e calcular o total com filtros, agrupamentos e `DISTINCT`?
-  _Pendente; destino em E05-P03._
+  _Resolvido em [E05-P03_decisions.md](E05-P03_decisions.md): `Paginate{Total, Limit, Offset, Page, Pages, HasNext, HasPrev}`; `limit > 0` e `offset >= 0`; total por subconsulta `COUNT(*)` sobre a consulta sem ordenação/limite, exato com `DISTINCT` e `GROUP BY`; na `Tx` as duas consultas compartilham a transação e no `DB` não são atômicas._
 
 O encadeamento, a seleção de todas as colunas mapeadas por padrão, sua ordem de declaração dos campos do struct e os recursos listados no RF-06 já fazem parte do escopo.
 

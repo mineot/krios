@@ -152,6 +152,63 @@ type exampleEntity struct {
 
 func (exampleEntity) TableName() string { return "users" }
 
+// exampleNameCount receives grouped query results mapped by output label.
+type exampleNameCount struct {
+	Name  string `krios:"name"`
+	Total int64  `krios:"total"`
+}
+
+func Example_aggregationsAndPagination() {
+	db, cleanup := exampleDatabase()
+	defer cleanup()
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, bio TEXT)"); err != nil {
+		panic(err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO users (id, name, bio) VALUES (1, 'alice', 'reader'), (2, 'bob', NULL), (3, 'carol', NULL)"); err != nil {
+		panic(err)
+	}
+
+	users, err := krios.EntityOf[exampleEntity]()
+	if err != nil {
+		panic(err)
+	}
+
+	// Aggregates are expressions with an output alias for mapping by name.
+	var grouped []exampleNameCount
+	err = db.Select(users).
+		Fields(users.Col("name"), krios.Count().As("total")).
+		GroupBy(users.Col("name")).
+		OrderBy(users.Col("name").Asc()).
+		All(ctx, &grouped)
+	if err != nil {
+		panic(err)
+	}
+	for _, row := range grouped {
+		fmt.Println(row.Name, row.Total)
+	}
+
+	// Paginate returns the page and its totals/navigation statistics.
+	var page []exampleEntity
+	info, err := db.Select(users).
+		OrderBy(users.Col("id").Asc()).
+		Paginate(ctx, 2, 0, &page)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(info.Total, info.Page, info.Pages, info.HasNext)
+	for _, user := range page {
+		fmt.Println(user.ID, user.Name)
+	}
+	// Output:
+	// alice 1
+	// bob 1
+	// carol 1
+	// 3 1 2 true
+	// 1 alice
+	// 2 bob
+}
+
 func Example_structMapping() {
 	db, cleanup := exampleDatabase()
 	defer cleanup()

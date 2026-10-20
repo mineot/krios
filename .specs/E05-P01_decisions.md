@@ -139,7 +139,7 @@ Resolvidos nesta entrega:
 - [x] Tipos de junção, operadores e modos de busca textual (§6.5; agregações em E05-P03).
 - [x] Fronteira construção × execução e vínculo do construtor com conexão/transação (§6.3 e pendência de [E04-P01_decisions.md](E04-P01_decisions.md) §7): receptor `db.Select(ent)`/`tx.Select(ent)`.
 
-Permanecem em outras entregas: `krios.Paginate` e estatísticas, agregações e demais cláusulas (E05-P03); `SetValues` e escritas (E06-P01); retorno de campos e `RETURNING` (E06-P01); alias/esquema públicos, `RIGHT`/`FULL` join e self-join (extensão futura); SQL incorporado (E07); implementação das migrações sobre o dialeto (E08-P02/P03).
+Permanecem em outras entregas: `SetValues` e escritas (E06-P01); retorno de campos e `RETURNING` (E06-P01); alias/esquema públicos, `RIGHT`/`FULL` join e self-join (extensão futura); SQL incorporado (E07); implementação das migrações sobre o dialeto (E08-P02/P03). Agregações, `DISTINCT`/`GROUP BY`/`ORDER BY`, `LIMIT`/`OFFSET` e `krios.Paginate` foram resolvidos em [E05-P03_decisions.md](E05-P03_decisions.md).
 
 ## 12. Referências
 

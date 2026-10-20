@@ -121,6 +121,41 @@ err := db.Select(users).
 
 As decisões estão em [E05-P01](.specs/E05-P01_decisions.md); `Example_selectQueries` demonstra `Build`, filtros e execução.
 
+## Agregações, ordenação e paginação
+
+Agregações são expressões selecionáveis, com alias para mapeamento por nome; `krios.Count()` representa `COUNT(*)`.
+
+```go
+type ownerTotal struct {
+    OwnerID int64 `krios:"owner_id"`
+    Total   int64 `krios:"total"`
+}
+
+var stats []ownerTotal
+
+err := db.Select(tasks).
+    Fields(tasks.Col("owner_id"), krios.Count().As("total")).
+    GroupBy(tasks.Col("owner_id")).
+    OrderBy(tasks.Col("owner_id").Asc()).
+    All(ctx, &stats)
+
+var page []Task
+info, err := db.Select(tasks).
+    Where(tasks.Col("owner_id").Eq(int64(1))).
+    OrderBy(tasks.Col("id").Desc()).
+    Paginate(ctx, 20, 0, &page)
+// info: Total, Limit, Offset, Page, Pages, HasNext, HasPrev
+```
+
+- `Fields(exprs...)` acrescenta colunas ou agregações (`Count`, `Sum`, `Max`, `Min`, com `As(alias)`). Sem `Only`, a seleção contém apenas `Fields`; com `Only`, as colunas vêm primeiro. Alias vazio (só espaços), repetido ou que colida com uma coluna selecionada é erro.
+- `Distinct()`, `GroupBy(cols...)` e `OrderBy(criteria...)` acumulam na ordem das chamadas. Critérios usam `coluna.Asc()/Desc()` ou `agregacao.Asc()/Desc()`. Toda entidade citada precisa participar da consulta.
+- `Limit(n)` e `Offset(n)` são setters (a última chamada vence). `Limit(0)` retorna zero linhas; `Offset > 0` exige `Limit`; valores negativos são erro. Os argumentos seguem o `WHERE` na ordem textual.
+- `Count(ctx)` ignora `ORDER BY`, `LIMIT` e `OFFSET` e conta com `SELECT COUNT(*)` sobre a consulta como tabela derivada, preservando `DISTINCT` e `GROUP BY`.
+- `Paginate(ctx, limit, offset, dest)` valida `limit > 0` e `offset >= 0`, não muta o construtor e retorna total e estatísticas (`Page` base 1, `Pages`, `HasNext`, `HasPrev`). Em `*DB` contagem e página são consultas independentes; em `*Tx` compartilham a transação.
+- `SUM`/`MAX`/`MIN` podem retornar `NULL` e o tipo nativo do driver (use `*T`/`sql.Null*`). `DISTINCT` com `ORDER BY` fora da seleção é rejeitado pelo PostgreSQL; a seleção deve ser coerente com o agrupamento.
+
+As decisões estão em [E05-P03](.specs/E05-P03_decisions.md); `Example_aggregationsAndPagination` demonstra agrupamento e paginação.
+
 ## Erros e propriedade dos resultados
 
 - Tratar erros com `errors.Is`/`errors.As`. Erros do driver são preservados.
@@ -130,7 +165,7 @@ As decisões estão em [E05-P01](.specs/E05-P01_decisions.md); `Example_selectQu
 - Wrappers de acesso e resultados são obtidos por `Open`, `Begin` e consultas; seus valores zero não representam recursos prontos para uso.
 - `ErrInvalidEntity` indica struct/tag/`TableName` inválidos na derivação ou destino de mapeamento malformado. Erros de mapeamento preservam a causa do driver.
 - `ErrValidation` e `ErrFormat` indicam campo reprovado por `Validate()` ou falha em `Format()`, com tabela e coluna no contexto.
-- `ErrInvalidQuery` indica construção inválida de consulta (coluna/entidade desconhecida, operando `nil`, junção inválida, grupo vazio); é detectado em `Build()` e antes da execução.
+- `ErrInvalidQuery` indica construção inválida de consulta (coluna/entidade desconhecida, operando `nil`, junção inválida, grupo vazio, alias de saída inválido, limite/deslocamento inválido); é detectado em `Build()` e antes da execução.
 
 ## Transações e concorrência
 
@@ -196,6 +231,7 @@ MySQL/PostgreSQL aguardam execução do [roteiro manual](.specs/E09_manual_valid
 - [Validação e formatação — E04-P03](.specs/E04-P03_decisions.md)
 - [Validação do mapeamento — E04-P04](.specs/E04-P04_decisions.md)
 - [Seleção, filtros e junções — E05-P01](.specs/E05-P01_decisions.md)
+- [Agregações e paginação — E05-P03](.specs/E05-P03_decisions.md)
 - [Reorganização dos pacotes internos](.specs/0004_reorganization.md)
 
 ## Licença
