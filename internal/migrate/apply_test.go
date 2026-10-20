@@ -439,6 +439,120 @@ func TestApplyMySQLGroupedFileScope(t *testing.T) {
 	}
 }
 
+// TestApplyPartialStateBlockAndGuidedRecovery covers M01-M04 for a MySQL
+// non-transactional file: the first run fails and records "failed" without
+// reverting; the next run is blocked by ErrPartialMigration; after the record
+// is resolved out of band, the run resumes to the target.
+func TestApplyPartialStateBlockAndGuidedRecovery(t *testing.T) {
+	cfg := baseConfig()
+	cfg.TargetVersion = 1
+
+	store := &historyStore{records: map[string]string{}}
+
+	rd := &recordingDriver{Driver: &testutil.Driver{}}
+
+	rd.QueryContext = func(context.Context) (driver.Rows, error) {
+		if strings.Contains(rd.LastQuery(), "migrations") {
+			return store.rows(), nil
+		}
+
+		return &countRows{value: 0}, nil
+	}
+
+	failNext := true
+
+	rd.Exec = func(context.Context) error {
+		q := rd.LastQuery()
+		rd.execs = append(rd.execs, q)
+
+		if strings.Contains(q, "CREATE TABLE") && strings.Contains(q, "migrations") {
+			return nil
+		}
+
+		key := key("m/001_users.sql", migrate.DirectionUp)
+
+		switch {
+		case strings.Contains(q, "INSERT INTO") && strings.Contains(q, "migrations"):
+			store.records[key] = migrate.StatusInProgress
+		case strings.Contains(q, "SET status"):
+			store.records[key] = statusArg(rd.LastArgs())
+		case strings.Contains(q, "UPDATE"):
+			store.records[key] = migrate.StatusApplied
+		default:
+			// The file body fails on the first attempt only.
+			if failNext {
+				failNext = false
+
+				return errors.New("ddl failed")
+			}
+		}
+
+		return nil
+	}
+
+	db := openTypedWithMigrations(t, rd.Driver, cfg, config.DBTypeMySQL)
+
+	// First run: partial failure recorded without reverting (M01/M03).
+	if _, err := db.RunMigrations(context.Background()); !errors.Is(err, errs.ErrPartialMigration) {
+		t.Fatalf("first RunMigrations() = %v, want ErrPartialMigration", err)
+	}
+
+	if rd.Rollbacks.Load() != 0 {
+		t.Errorf("Rollbacks = %d, want 0", rd.Rollbacks.Load())
+	}
+
+	// Second run: blocked before executing (M02).
+	if _, err := db.RunMigrations(context.Background()); !errors.Is(err, errs.ErrPartialMigration) {
+		t.Fatalf("blocked RunMigrations() = %v, want ErrPartialMigration", err)
+	}
+
+	// Guided recovery: resolve the failed record out of band (M04).
+	store.records[key("m/001_users.sql", migrate.DirectionUp)] = migrate.StatusApplied
+
+	plan, err := db.RunMigrations(context.Background())
+	if err != nil {
+		t.Fatalf("recovery RunMigrations() = %v, want nil", err)
+	}
+
+	if plan.CurrentVersion != 1 {
+		t.Fatalf("plan.CurrentVersion = %d, want 1 after recovery", plan.CurrentVersion)
+	}
+}
+
+// historyStore is a minimal in-memory migrations table standing in for the
+// records a real server would hold. It lets a test observe a partial state and
+// then resolve it out of band.
+type historyStore struct {
+	records map[string]string
+}
+
+func key(filename, direction string) string { return filename + "|" + direction }
+
+// statusArg returns the status string bound as the first argument of a history
+// UPDATE, matching the markApplied/markFailed statement shape.
+func statusArg(args []driver.NamedValue) string {
+	if len(args) == 0 {
+		return ""
+	}
+
+	if s, ok := args[0].Value.(string); ok {
+		return s
+	}
+
+	return ""
+}
+
+func (s *historyStore) rows() *historyRows {
+	rows := &historyRows{}
+
+	for k, status := range s.records {
+		parts := strings.SplitN(k, "|", 2)
+		rows.rows = append(rows.rows, []driver.Value{int64(1), parts[0], parts[1], status})
+	}
+
+	return rows
+}
+
 func TestApplyCommitFailureSurfaces(t *testing.T) {
 	begin := &fakeBeginner{commitErr: errors.New("commit failed")}
 	exec := &fakeExecutor{}

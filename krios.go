@@ -41,7 +41,9 @@ type (
 	MySQLConfig = config.MySQLConfig
 	// PostgresConfig holds the PostgreSQL connection settings.
 	PostgresConfig = config.PostgresConfig
-	// MigrationsConfig reserves future migration settings.
+	// MigrationsConfig configures versioned migrations: the embedded
+	// resources, the desired target version, the version/file associations
+	// and the managed objects. It is optional in Config.
 	MigrationsConfig = config.MigrationsConfig
 	// Config describes database access and is passed to Open.
 	Config = config.Config

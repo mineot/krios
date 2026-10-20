@@ -10,7 +10,9 @@
 // joins, aggregates and pagination, entity-scoped INSERT/UPDATE/DELETE
 // builders with value policy, mandatory filters and RETURNING support per
 // database, and execution of SQL files embedded with go:embed (see the schema/
-// directory). Migrations (E08) are not used yet.
+// directory). Versioned migrations (E08) can be configured through
+// Config.Migrations and run with DB.RunMigrations; this example keeps owning its
+// schema directly to stay focused on the query and write builders.
 //
 // Run executes the full narrative against a SQLite file and prints each step.
 // The MySQL and PostgreSQL configurations in config.go differ only in the

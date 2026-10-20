@@ -57,9 +57,10 @@ type Store struct {
 // Close releases the database access. It is idempotent.
 func (s *Store) Close() error { return s.db.Close() }
 
-// CreateSchema creates both tables from the embedded DDL files. Migrations
-// (E08) are not implemented yet, so the consumer owns the DDL; Krios executes
-// the file text without translation between dialects.
+// CreateSchema creates both tables from the embedded DDL files. This example
+// keeps owning its DDL directly instead of using versioned migrations
+// (DB.RunMigrations); Krios executes the file text without translation between
+// dialects.
 func (s *Store) CreateSchema(ctx context.Context) error {
 	for _, schema := range []*krios.SQLFile{usersSchema, tasksSchema} {
 		if _, err := s.db.File(schema).Exec(ctx); err != nil {

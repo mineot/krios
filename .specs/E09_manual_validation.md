@@ -472,7 +472,7 @@ V11 não autoriza repetir automaticamente a escrita: confirmar a situação por 
 
 ### 4.1 Cenários de migrações — estado parcial (E08)
 
-Aplicam-se quando E08 estiver implementado; ver [E08-P01_decisions.md](E08-P01_decisions.md), que fixa `MigrationsConfig{FS, TargetVersion, Versions, ManagedObjects}` e `RunMigrations(ctx)`. As migrações são configuradas em código: `ManagedObjects` deve listar as tabelas geridas pelo cenário para a verificação de banco sem histórico (§6 de E08-P01).
+Aplicam-se quando E08 estiver implementado; ver [E08-P01_decisions.md](E08-P01_decisions.md), que fixa `MigrationsConfig{FS, TargetVersion, Versions, ManagedObjects}` e `RunMigrations(ctx)`. As migrações são configuradas em código: `ManagedObjects` deve listar as tabelas geridas pelo cenário para a verificação de banco sem histórico (§6 de E08-P01). A verificação simulada de E08-P04 (testes em [tests/migrations_test.go](../tests/migrations_test.go) e [internal/migrate/apply_test.go](../internal/migrate/apply_test.go)) cobre o contrato local dos percursos e do estado parcial; os cenários abaixo pedem a evidência real em MySQL/PostgreSQL.
 
 | ID  | Procedimento                                                                                                                                            | Resultado esperado                                                                                                                  |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
