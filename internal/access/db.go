@@ -19,6 +19,7 @@ import (
 	"github.com/mineot/krios/internal/result"
 	"github.com/mineot/krios/internal/scan"
 	"github.com/mineot/krios/internal/transaction"
+	"github.com/mineot/krios/internal/write"
 )
 
 // executor is the Krios contract used by consumers inside the packages,
@@ -186,4 +187,25 @@ func (db *DB) Begin(ctx context.Context) (*transaction.Tx, error) {
 // the first execution call, with the access guards applied unchanged.
 func (db *DB) Select(ent *entity.Entity) *query.Select {
 	return query.New(db, db.dialect, ent)
+}
+
+// Insert starts an INSERT builder for ent, rendered with the access dialect
+// and executed through this access. Construction is validated on Build or on
+// the first execution call, with the access guards applied unchanged.
+func (db *DB) Insert(ent *entity.Entity) *write.Insert {
+	return write.NewInsert(db, db.dialect, ent)
+}
+
+// Update starts an UPDATE builder for ent, rendered with the access dialect
+// and executed through this access. At least one Where condition is required
+// before execution.
+func (db *DB) Update(ent *entity.Entity) *write.Update {
+	return write.NewUpdate(db, db.dialect, ent)
+}
+
+// Delete starts a DELETE builder for ent, rendered with the access dialect
+// and executed through this access. At least one Where condition is required
+// before execution.
+func (db *DB) Delete(ent *entity.Entity) *write.Delete {
+	return write.NewDelete(db, db.dialect, ent)
 }

@@ -1,11 +1,12 @@
-// Package krios provides connection management, transactions, migrations and
-// query building for SQLite3, MySQL and PostgreSQL on top of database/sql.
-// Configuration, the connection lifecycle (Open and Close), explicit
-// transactions (Begin, Commit, Rollback with execution on DB and Tx),
-// reflection-based entity mapping with per-field validation and formatting,
-// chained SELECT building with filters, joins, aggregates, ordering and
-// limit/offset pagination are implemented; migrations are not implemented
-// yet.
+// Package krios provides connection management, transactions, migrations,
+// query building and entity-scoped writes for SQLite3, MySQL and PostgreSQL on
+// top of database/sql. Configuration, the connection lifecycle (Open and
+// Close), explicit transactions (Begin, Commit, Rollback with execution on DB
+// and Tx), reflection-based entity mapping with per-field validation and
+// formatting, chained SELECT building with filters, joins, aggregates,
+// ordering and limit/offset pagination, and chained INSERT/UPDATE/DELETE with
+// the value policy, mandatory filters and per-database RETURNING support are
+// implemented; migrations are not implemented yet.
 //
 // Drivers are chosen and imported by the consumer; Krios does not import them.
 package krios
@@ -21,6 +22,7 @@ import (
 	"github.com/mineot/krios/internal/result"
 	"github.com/mineot/krios/internal/scan"
 	"github.com/mineot/krios/internal/transaction"
+	"github.com/mineot/krios/internal/write"
 )
 
 // Public aliases preserve the consumer API while implementation lives in core.
@@ -57,6 +59,12 @@ type (
 	LikeMode = entity.LikeMode
 	// Select is the chained SELECT builder created by DB.Select or Tx.Select.
 	Select = query.Select
+	// Insert is the chained INSERT builder created by DB.Insert or Tx.Insert.
+	Insert = write.Insert
+	// Update is the chained UPDATE builder created by DB.Update or Tx.Update.
+	Update = write.Update
+	// Delete is the chained DELETE builder created by DB.Delete or Tx.Delete.
+	Delete = write.Delete
 	// Expr is a selectable expression: a Column or an Aggregate.
 	Expr = entity.Expr
 	// Aggregate is an aggregate expression such as COUNT or SUM.

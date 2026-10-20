@@ -14,6 +14,7 @@ import (
 	"github.com/mineot/krios/internal/query"
 	"github.com/mineot/krios/internal/result"
 	"github.com/mineot/krios/internal/scan"
+	"github.com/mineot/krios/internal/write"
 )
 
 // Tx represents an explicit transaction. Execution and finalization calls are
@@ -43,6 +44,28 @@ func New(tx *sql.Tx, d dialect.Dialect) *Tx {
 // reported before execution with errs.ErrInvalidQuery.
 func (tx *Tx) Select(ent *entity.Entity) *query.Select {
 	return query.New(tx, tx.dialect, ent)
+}
+
+// Insert starts an INSERT builder for ent, rendered with the transaction
+// dialect and executed through this transaction. Statement failures recorded
+// by the execution calls block Commit as usual; construction failures are
+// reported before execution with errs.ErrInvalidQuery.
+func (tx *Tx) Insert(ent *entity.Entity) *write.Insert {
+	return write.NewInsert(tx, tx.dialect, ent)
+}
+
+// Update starts an UPDATE builder for ent, rendered with the transaction
+// dialect and executed through this transaction. At least one Where condition
+// is required before execution.
+func (tx *Tx) Update(ent *entity.Entity) *write.Update {
+	return write.NewUpdate(tx, tx.dialect, ent)
+}
+
+// Delete starts a DELETE builder for ent, rendered with the transaction
+// dialect and executed through this transaction. At least one Where condition
+// is required before execution.
+func (tx *Tx) Delete(ent *entity.Entity) *write.Delete {
+	return write.NewDelete(tx, tx.dialect, ent)
 }
 
 // ExecContext executes a query without returning rows on this transaction.
