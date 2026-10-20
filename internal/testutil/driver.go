@@ -33,6 +33,29 @@ type Driver struct {
 	Closes    atomic.Int32
 	Commits   atomic.Int32
 	Rollbacks atomic.Int32
+
+	lastQuery atomic.Value // string
+	lastArgs  atomic.Value // []driver.NamedValue
+}
+
+// LastQuery returns the query text of the most recent ExecContext or
+// QueryContext call, or "" when none happened.
+func (d *Driver) LastQuery() string {
+	if v := d.lastQuery.Load(); v != nil {
+		return v.(string)
+	}
+
+	return ""
+}
+
+// LastArgs returns the bound arguments of the most recent ExecContext or
+// QueryContext call in driver order, or nil when none happened.
+func (d *Driver) LastArgs() []driver.NamedValue {
+	if v := d.lastArgs.Load(); v != nil {
+		return v.([]driver.NamedValue)
+	}
+
+	return nil
 }
 
 var driverSequence atomic.Int64
@@ -85,7 +108,10 @@ func (c *conn) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (c *conn) ExecContext(ctx context.Context, _ string, _ []driver.NamedValue) (driver.Result, error) {
+func (c *conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	c.d.lastQuery.Store(query)
+	c.d.lastArgs.Store(args)
+
 	if c.d.Exec != nil {
 		if err := c.d.Exec(ctx); err != nil {
 			return nil, err
@@ -95,7 +121,10 @@ func (c *conn) ExecContext(ctx context.Context, _ string, _ []driver.NamedValue)
 	return driver.RowsAffected(1), nil
 }
 
-func (c *conn) QueryContext(ctx context.Context, _ string, _ []driver.NamedValue) (driver.Rows, error) {
+func (c *conn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	c.d.lastQuery.Store(query)
+	c.d.lastArgs.Store(args)
+
 	if c.d.QueryContext != nil {
 		return c.d.QueryContext(ctx)
 	}

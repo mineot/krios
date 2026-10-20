@@ -3,6 +3,7 @@ package examples
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 
@@ -24,6 +25,29 @@ func mustEntity[T any]() *krios.Entity {
 	return ent
 }
 
+// schemaFS embeds the DDL files into the executable, so the consumer does not
+// ship or read them at run time. Each file holds a single statement, since
+// Krios does not split multiple statements.
+//
+//go:embed schema/*.sql
+var schemaFS embed.FS
+
+// Schema resources loaded once at startup. Eager loading surfaces a missing or
+// unreadable resource immediately, not on first use.
+var (
+	usersSchema = mustSQLFile(schemaFS, "schema/users.sql")
+	tasksSchema = mustSQLFile(schemaFS, "schema/tasks.sql")
+)
+
+func mustSQLFile(fsys embed.FS, path string) *krios.SQLFile {
+	f, err := krios.NewSQLFile(fsys, path)
+	if err != nil {
+		// A missing embedded resource is a build/packaging error.
+		panic(err)
+	}
+	return f
+}
+
 // Store owns the database access for KriosTasks. A Store is safe for
 // concurrent use and typically serves the whole application.
 type Store struct {
@@ -33,27 +57,12 @@ type Store struct {
 // Close releases the database access. It is idempotent.
 func (s *Store) Close() error { return s.db.Close() }
 
-// CreateSchema creates both tables with raw SQL. Migrations (E08) are not
-// implemented yet, so the consumer owns the DDL; Krios executes it without
-// translation between dialects.
+// CreateSchema creates both tables from the embedded DDL files. Migrations
+// (E08) are not implemented yet, so the consumer owns the DDL; Krios executes
+// the file text without translation between dialects.
 func (s *Store) CreateSchema(ctx context.Context) error {
-	statements := []string{
-		`CREATE TABLE IF NOT EXISTS users (
-			id INTEGER PRIMARY KEY,
-			name TEXT NOT NULL,
-			email TEXT NOT NULL UNIQUE,
-			bio TEXT,
-			status TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS tasks (
-			id INTEGER PRIMARY KEY,
-			title TEXT NOT NULL,
-			owner_id INTEGER NOT NULL,
-			done BOOLEAN NOT NULL DEFAULT FALSE
-		)`,
-	}
-	for _, ddl := range statements {
-		if _, err := s.db.ExecContext(ctx, ddl); err != nil {
+	for _, schema := range []*krios.SQLFile{usersSchema, tasksSchema} {
+		if _, err := s.db.File(schema).Exec(ctx); err != nil {
 			return err
 		}
 	}
@@ -122,9 +131,9 @@ func (s *Store) CreateUserWithFirstTasks(ctx context.Context, user *User, titles
 		if err := taskEntity.Validate(task); err != nil {
 			return err
 		}
-	if _, err := tx.Insert(taskEntity).SetValues(task).Omit("id").Exec(ctx); err != nil {
-		return err
-	}
+		if _, err := tx.Insert(taskEntity).SetValues(task).Omit("id").Exec(ctx); err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx)
 }

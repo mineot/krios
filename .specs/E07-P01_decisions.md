@@ -45,16 +45,17 @@ Mesmo molde de `db.Select(ent)`/`db.Insert(ent)` ([E05-P01_decisions.md](E05-P01
 ```go
 func (db *DB) File(f *SQLFile) *File   // também em *Tx
 
-type File struct { /* executor + dialeto + f + primeiro erro */ }
+type File struct { /* executor + f + primeiro erro */ }
 
 func (b *File) Exec(ctx context.Context, args ...any) (Result, error)
 func (b *File) Query(ctx context.Context, args ...any) (*Rows, error)
 func (b *File) QueryRow(ctx context.Context, args ...any) Row
-func (b *File) One(ctx context.Context, dest any) error  // destino *T
-func (b *File) All(ctx context.Context, dest any) error  // destino *[]T
+func (b *File) One(ctx context.Context, dest any, args ...any) error  // destino *T
+func (b *File) All(ctx context.Context, dest any, args ...any) error  // destino *[]T
 ```
 
 - **Sem etapa de renderização:** não há `Build()` — o texto vem do arquivo e não é gerado pela biblioteca. `File.Text()`/`Name()` cobrem inspeção e log.
+- **Parâmetros em todos os métodos:** `Exec`/`Query`/`QueryRow` recebem `args ...any`; `One`/`All` recebem `dest` primeiro e depois `args ...any`, para manter a ordem uniforme `ctx → dest → args` e permitir consultas parametrizadas mapeadas. O runner não armazena argumentos entre chamadas.
 - **Guards de E03 preservados sem mecanismo novo:** os métodos passam pelo mesmo `executor`, mantendo `ErrClosed`, `ErrTxDone`, validação de contexto, serialização de chamadas na mesma `Tx`, bloqueio de `Commit` por erro imediato e por erro de leitura tardia (§3.4.5–§3.4.6 de E03-P01). `Rows`/`Row` retornados mantêm a back-reference à `Tx`.
 - **Primeiro erro memorizado (first-wins):** `db.File(nil)` não faz panic nem retorna erro na cadeia; o erro é memorizado no runner e devolvido no primeiro método, antes de tocar o executor — mesma filosofia de E05/E06 (§3 de E06-P01).
 - **Ordem das verificações:** erro do runner (arquivo `nil`) → guards do executor → chamada ao driver. Arquivo válido com `DB` fechado produz `ErrClosed`; arquivo `nil` produz o erro memorizado mesmo com o `DB` fechado.

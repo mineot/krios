@@ -51,6 +51,12 @@ var (
 	// duplicate selection, an empty logical group or any other state that
 	// cannot be rendered into SQL. It is produced before execution.
 	ErrInvalidQuery = errors.New("krios: invalid query")
+
+	// ErrFileNotFound indicates that an embedded SQL resource could not be
+	// loaded: a nil file system, an invalid or missing path, a directory
+	// instead of a file, or a blank file. It wraps fs.ErrNotExist when the
+	// path does not exist.
+	ErrFileNotFound = errors.New("krios: embedded SQL file not found or invalid")
 )
 
 // NormalizeTxError maps the native sql.ErrTxDone to ErrTxDone, preserving the

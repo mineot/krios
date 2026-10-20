@@ -4,15 +4,17 @@
 // Close), explicit transactions (Begin, Commit, Rollback with execution on DB
 // and Tx), reflection-based entity mapping with per-field validation and
 // formatting, chained SELECT building with filters, joins, aggregates,
-// ordering and limit/offset pagination, and chained INSERT/UPDATE/DELETE with
-// the value policy, mandatory filters and per-database RETURNING support are
-// implemented; migrations are not implemented yet.
+// ordering and limit/offset pagination, chained INSERT/UPDATE/DELETE with
+// the value policy, mandatory filters and per-database RETURNING support, and
+// execution of consumer-embedded SQL files (NewSQLFile with DB.File or
+// Tx.File) are implemented; migrations are not implemented yet.
 //
 // Drivers are chosen and imported by the consumer; Krios does not import them.
 package krios
 
 import (
 	"context"
+	"io/fs"
 
 	"github.com/mineot/krios/internal/access"
 	"github.com/mineot/krios/internal/config"
@@ -21,6 +23,7 @@ import (
 	"github.com/mineot/krios/internal/query"
 	"github.com/mineot/krios/internal/result"
 	"github.com/mineot/krios/internal/scan"
+	"github.com/mineot/krios/internal/sqlfile"
 	"github.com/mineot/krios/internal/transaction"
 	"github.com/mineot/krios/internal/write"
 )
@@ -79,6 +82,10 @@ type (
 	Validator = entity.Validator
 	// Formatter is implemented by field types that provide a presentation text.
 	Formatter = entity.Formatter
+	// SQLFile is the immutable reference to a consumer-embedded SQL resource.
+	SQLFile = sqlfile.SQLFile
+	// File is the runner created by DB.File or Tx.File that executes a SQLFile.
+	File = sqlfile.File
 )
 
 const (
@@ -120,6 +127,10 @@ var (
 	// ErrInvalidQuery indicates an invalid query construction, reported before
 	// execution.
 	ErrInvalidQuery = errs.ErrInvalidQuery
+	// ErrFileNotFound indicates that an embedded SQL resource could not be
+	// loaded (nil file system, invalid or missing path, directory or blank
+	// file).
+	ErrFileNotFound = errs.ErrFileNotFound
 )
 
 // Open validates cfg, opens database access and verifies connectivity.
@@ -128,6 +139,18 @@ var (
 // cancellation. Resources created during a failed attempt are released.
 func Open(ctx context.Context, cfg Config) (*DB, error) {
 	return access.Open(ctx, cfg)
+}
+
+// NewSQLFile loads path from the consumer's fs.FS (for example an embed.FS)
+// and returns the immutable embedded SQL resource. Loading is eager; a nil
+// file system, an invalid or missing path, a directory or a blank file fail
+// with ErrFileNotFound before any database access.
+//
+// The resource is executed outside a transaction with DB.File or inside one
+// with Tx.File. Parameters are supplied separately, using the markers the
+// configured driver accepts, and no syntax translation happens.
+func NewSQLFile(fsys fs.FS, path string) (*SQLFile, error) {
+	return sqlfile.NewSQLFile(fsys, path)
 }
 
 // EntityOf derives and returns the entity descriptor for T, which may be a

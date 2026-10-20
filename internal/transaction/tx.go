@@ -14,6 +14,7 @@ import (
 	"github.com/mineot/krios/internal/query"
 	"github.com/mineot/krios/internal/result"
 	"github.com/mineot/krios/internal/scan"
+	"github.com/mineot/krios/internal/sqlfile"
 	"github.com/mineot/krios/internal/write"
 )
 
@@ -66,6 +67,13 @@ func (tx *Tx) Update(ent *entity.Entity) *write.Update {
 // is required before execution.
 func (tx *Tx) Delete(ent *entity.Entity) *write.Delete {
 	return write.NewDelete(tx, tx.dialect, ent)
+}
+
+// File creates a runner that executes the embedded SQL resource f through this
+// transaction. Statement failures recorded by the execution calls block Commit
+// as usual; DB/Tx guards apply unchanged.
+func (tx *Tx) File(f *sqlfile.SQLFile) *sqlfile.File {
+	return sqlfile.NewFile(tx, f)
 }
 
 // ExecContext executes a query without returning rows on this transaction.

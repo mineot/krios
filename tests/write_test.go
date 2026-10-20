@@ -11,10 +11,10 @@ import (
 )
 
 type writeAccount struct {
-	ID   int64          `krios:"id,pk"`
-	Name string         `krios:"name"`
-	Bio  *string        `krios:"bio"`
-	Age  sql.NullInt64  `krios:"age"`
+	ID   int64         `krios:"id,pk"`
+	Name string        `krios:"name"`
+	Bio  *string       `krios:"bio"`
+	Age  sql.NullInt64 `krios:"age"`
 }
 
 func (writeAccount) TableName() string { return "write_accounts" }
@@ -231,9 +231,9 @@ func TestWriteInsideTransaction(t *testing.T) {
 	if _, err := tx.Insert(ent).SetValues(&writeAccount{ID: 1, Name: "tx"}).Exec(ctx); err != nil {
 		t.Fatalf("tx Insert = %v", err)
 	}
-		if _, err := tx.Update(ent).SetValues(&writeAccount{Name: "tx2"}).Omit("id", "bio", "age").Where(ent.Col("id").Eq(1)).Exec(ctx); err != nil {
-			t.Fatalf("tx Update = %v", err)
-		}
+	if _, err := tx.Update(ent).SetValues(&writeAccount{Name: "tx2"}).Omit("id", "bio", "age").Where(ent.Col("id").Eq(1)).Exec(ctx); err != nil {
+		t.Fatalf("tx Update = %v", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Commit() = %v", err)
 	}

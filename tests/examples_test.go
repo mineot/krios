@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 	"os"
@@ -295,7 +296,6 @@ func Example_selectQueries() {
 	// 1 alice
 }
 
-
 func Example_insert() {
 	db, cleanup := exampleDatabase()
 	defer cleanup()
@@ -434,7 +434,6 @@ func Example_writeReturning() {
 	// 1
 }
 
-
 // exampleStatus validates and formats its own text through the field-level
 // interfaces detected by EntityOf.
 type exampleStatus string
@@ -547,4 +546,79 @@ func Example_mappingValidation() {
 	// 1 alice reader
 	// 2 bob <null>
 	// nome: bob bio válida: false
+}
+
+//go:embed testdata/embed_*.sql
+var embedSQL embed.FS
+
+type embedUser struct {
+	ID   int64  `krios:"id,pk"`
+	Name string `krios:"name"`
+}
+
+func (embedUser) TableName() string { return "embed_users" }
+
+func Example_sqlFile() {
+	db, cleanup := exampleDatabase()
+	defer cleanup()
+	ctx := context.Background()
+
+	// The consumer embeds the SQL files; the name only selects a resource that
+	// is already part of the executable. Loading is eager and fails early.
+	schema, err := krios.NewSQLFile(embedSQL, "testdata/embed_schema.sql")
+	if err != nil {
+		panic(err)
+	}
+	insert, err := krios.NewSQLFile(embedSQL, "testdata/embed_insert.sql")
+	if err != nil {
+		panic(err)
+	}
+	all, err := krios.NewSQLFile(embedSQL, "testdata/embed_all.sql")
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := db.File(schema).Exec(ctx); err != nil {
+		panic(err)
+	}
+
+	// Parameters are bound separately, using the markers the driver accepts.
+	// SQLite uses '?'.
+	for _, name := range []string{"alice", "bob"} {
+		if _, err := db.File(insert).Exec(ctx, name); err != nil {
+			panic(err)
+		}
+	}
+
+	// A read resource maps its rows into a slice, by column name.
+	var users []embedUser
+	if err := db.File(all).All(ctx, &users); err != nil {
+		panic(err)
+	}
+	for _, u := range users {
+		fmt.Println(u.ID, u.Name)
+	}
+
+	// The same runner executes inside a transaction via tx.File.
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		panic(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.File(insert).Exec(ctx, "carol"); err != nil {
+		panic(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		panic(err)
+	}
+
+	var after []embedUser
+	if err := db.File(all).All(ctx, &after); err != nil {
+		panic(err)
+	}
+	fmt.Println("total:", len(after))
+	// Output:
+	// 1 alice
+	// 2 bob
+	// total: 3
 }

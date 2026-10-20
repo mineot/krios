@@ -18,6 +18,7 @@ import (
 	"github.com/mineot/krios/internal/query"
 	"github.com/mineot/krios/internal/result"
 	"github.com/mineot/krios/internal/scan"
+	"github.com/mineot/krios/internal/sqlfile"
 	"github.com/mineot/krios/internal/transaction"
 	"github.com/mineot/krios/internal/write"
 )
@@ -208,4 +209,11 @@ func (db *DB) Update(ent *entity.Entity) *write.Update {
 // before execution.
 func (db *DB) Delete(ent *entity.Entity) *write.Delete {
 	return write.NewDelete(db, db.dialect, ent)
+}
+
+// File creates a runner that executes the embedded SQL resource f through this
+// access, outside any transaction. The resource text is sent unchanged with
+// parameters bound separately; DB guards (ErrClosed) apply unchanged.
+func (db *DB) File(f *sqlfile.SQLFile) *sqlfile.File {
+	return sqlfile.NewFile(db, f)
 }

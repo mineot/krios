@@ -22,6 +22,15 @@ func newTestStore(t *testing.T) *Store {
 	return store
 }
 
+func TestRun(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "run.db")
+	if err := Run(context.Background(), dbPath); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+}
+
 func TestStoreSelects(t *testing.T) {
 	t.Parallel()
 

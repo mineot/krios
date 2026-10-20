@@ -13,7 +13,7 @@ import (
 )
 
 type account struct {
-	ID   int64  `krios:"id,pk"`
+	ID   int64 `krios:"id,pk"`
 	Name string
 	Bio  *string
 }
@@ -282,7 +282,7 @@ func TestConstructionErrors(t *testing.T) {
 	d := dialect.For(config.DBTypeSQLite)
 
 	cases := []struct {
-		name string
+		name  string
 		build func() (string, []any, error)
 		want  error
 	}{

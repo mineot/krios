@@ -2,7 +2,7 @@
 
 Biblioteca Go em desenvolvimento para acesso a SQLite3, MySQL e PostgreSQL por `database/sql`.
 
-Implementados: configuração em código, abertura/fechamento, SQL parametrizado, transações explícitas, mapeamento de entidades por reflexão sobre structs (`krios.EntityOf`, `Row.Scan` para um registro e `Rows.All` para múltiplos) e consultas `SELECT` encadeadas com seleção de colunas, filtros, junções, agregações, ordenação e paginação (`DB.Select`/`Tx.Select`, `Only`, `Where`, `Join`, `Fields`, `GroupBy`, `OrderBy`, `Limit`/`Offset`, `Count`, `Paginate`, `Build`). O SQL incorporado e as migrações pertencem às próximas entregas. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN/geração de SQL e aguardam integração manual.
+Implementados: configuração em código, abertura/fechamento, SQL parametrizado, transações explícitas, mapeamento de entidades por reflexão sobre structs (`krios.EntityOf`, `Row.Scan` para um registro e `Rows.All` para múltiplos), consultas `SELECT` encadeadas com seleção de colunas, filtros, junções, agregações, ordenação e paginação (`DB.Select`/`Tx.Select`, `Only`, `Where`, `Join`, `Fields`, `GroupBy`, `OrderBy`, `Limit`/`Offset`, `Count`, `Paginate`, `Build`), escritas encadeadas (`DB.Insert`/`Update`/`Delete` e equivalentes em `Tx`) e execução de SQL incorporado (`krios.NewSQLFile` com `DB.File`/`Tx.File`). As migrações pertencem à próxima entrega. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN/geração de SQL e aguardam integração manual.
 
 ## Desenvolvimento local
 
@@ -156,6 +156,30 @@ info, err := db.Select(tasks).
 
 As decisões estão em [E05-P03](.specs/E05-P03_decisions.md); `Example_aggregationsAndPagination` demonstra agrupamento e paginação. O pacote [examples/](examples/) (KriosTasks) usa o builder em todas as leituras e cobre junção, agrupamento e paginação em `examples/store_test.go`.
 
+## SQL incorporado
+
+O consumidor incorpora arquivos `.sql` com `go:embed` e executa o conteúdo sem tradução de sintaxe, fora do mecanismo de migrações:
+
+```go
+//go:embed queries/*.sql
+var queries embed.FS
+
+byEmail, err := krios.NewSQLFile(queries, "queries/users_by_email.sql")
+if err != nil { return err }
+
+var users []User
+err = db.File(byEmail).All(ctx, &users, email)   // leitura mapeada
+
+res, err := db.File(insertUser).Exec(ctx, name, email)   // escrita
+```
+
+- `krios.NewSQLFile(fsys, path)` carrega o recurso uma vez e devolve um objeto imutável (`Name()`, `Text()`), reutilizável entre conexões, transações e bancos. FS `nil`, caminho inválido/ausente, diretório ou arquivo em branco falham com `ErrFileNotFound` antes de tocar o banco.
+- `db.File(f)` executa fora de transação; `tx.File(f)` executa na transação, com os mesmos guards (`ErrClosed`, `ErrTxDone`), serialização e bloqueio de commit de E03.
+- Métodos: `Exec(ctx, args...)` devolve `Result`; `Query`/`QueryRow` devolvem `Rows`/`Row` nativos (com `Close`/`Err` pelo consumidor); `One(ctx, dest, args...)` preenche `*T`; `All(ctx, dest, args...)` preenche `*[]T` pelo mapeamento de E04.
+- Os parâmetros são passados separadamente, com os marcadores do driver configurado (`?` em SQLite/MySQL, `$1..$n` em PostgreSQL). A biblioteca não divide múltiplos statements nem renumera parâmetros; use um arquivo por conjunto de arquivos compatível com cada banco.
+
+`Example_sqlFile` demonstra incorporação, leitura mapeada, escrita parametrizada e execução em transação. As decisões estão em [E07-P01](.specs/E07-P01_decisions.md).
+
 ## Erros e propriedade dos resultados
 
 - Tratar erros com `errors.Is`/`errors.As`. Erros do driver são preservados.
@@ -166,6 +190,7 @@ As decisões estão em [E05-P03](.specs/E05-P03_decisions.md); `Example_aggregat
 - `ErrInvalidEntity` indica struct/tag/`TableName` inválidos na derivação ou destino de mapeamento malformado. Erros de mapeamento preservam a causa do driver.
 - `ErrValidation` e `ErrFormat` indicam campo reprovado por `Validate()` ou falha em `Format()`, com tabela e coluna no contexto.
 - `ErrInvalidQuery` indica construção inválida de consulta (coluna/entidade desconhecida, operando `nil`, junção inválida, grupo vazio, alias de saída inválido, limite/deslocamento inválido); é detectado em `Build()` e antes da execução.
+- `ErrFileNotFound` indica recurso SQL incorporado que não pôde ser carregado (FS `nil`, caminho inválido/ausente, diretório ou arquivo em branco), detectado em `NewSQLFile` antes de qualquer acesso ao banco.
 
 ## Transações e concorrência
 
@@ -181,7 +206,7 @@ O contexto passado a `Begin` controla toda a vida da transação e seu cancelame
 
 | Arquivo | Responsabilidade |
 | --- | --- |
-| `krios.go` | Fachada pública: aliases de tipos, constantes, erros e delegação de `Open`, `EntityOf`, `And`, `Or` e `Count` |
+| `krios.go` | Fachada pública: aliases de tipos, constantes, erros e delegação de `Open`, `NewSQLFile`, `EntityOf`, `And`, `Or` e `Count` |
 | `internal/errs/errors.go` | Erros sentinela compartilhados e normalização de erros nativos |
 | `internal/config/config.go`, `dsn.go` | Configuração, validações e DSNs |
 | `internal/dialect/dialect.go`, `migration.go` | Interface `Dialect`, seleção por `Config.Type` e capacidades de migração |
@@ -191,6 +216,7 @@ O contexto passado a `Begin` controla toda a vida da transação e seu cancelame
 | `internal/transaction/tx.go` | Transação (`Begin`, `Commit`, `Rollback`), dialeto retido e `Select` |
 | `internal/execute/execution.go` | Delegação nativa compartilhada (contexto, chamada, wrapper) |
 | `internal/scan/rows.go`, `mapping.go` | Recursos de leitura (`Row`/`Rows`, `All`) e mapeamento para `*T`/`*[]T` |
+| `internal/sqlfile/sqlfile.go` | Recurso SQL incorporado (`SQLFile`) e runner de execução (`File`) |
 | `internal/result/result.go` | Resultado de escrita com flags de disponibilidade |
 | `internal/testutil/driver.go` | Driver simulador com hooks e contadores usado pelos testes |
 | `internal/**/*_test.go` | Testes internos por pacote |

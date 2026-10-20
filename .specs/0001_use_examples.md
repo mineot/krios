@@ -1,7 +1,7 @@
 # Exemplos de uso — KriosTasks
 
 Este documento mostra como fica o código de um projeto consumidor do Krios,
-com tudo o que já foi implementado nas entregas **E01–E05**:
+com tudo o que já foi implementado nas entregas **E01–E07**:
 
 | Entrega | Escopo                       | O que os exemplos cobrem                                                                                       |
 | ------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -9,11 +9,13 @@ com tudo o que já foi implementado nas entregas **E01–E05**:
 | E03     | Execução e transações        | SQL puro com parâmetros, `Result`, `Begin`/`Commit`/`Rollback`, commit bloqueado, `sql.ErrNoRows`, `ErrTxDone` |
 | E04     | Entidades e mapeamento       | tags `krios`, `EntityOf`, `Row.Scan`, `Rows.All`, NULL, `Validator`/`Formatter`                                |
 | E05     | Consultas encadeadas         | `Select`/`Only`/`Where`/`Join`, agregações, `Count`, `Paginate`, leituras mapeadas                             |
+| E06     | Escrita encadeada            | `Insert`/`Update`/`Delete`, `SetValues`, `Where` obrigatório, `Returning`                                      |
+| E07     | SQL embutido                 | `NewSQLFile` com `go:embed`, `db.File`/`tx.File`, parâmetros do dialeto                                        |
 
-As entregas **E06–E08** (builder de escrita, SQL embutido e migrações) ainda
-não existem. As consultas de leitura usam o builder de E05; o esquema e as
-escritas permanecem SQL do consumidor. Quando as demais forem implementadas,
-os pontos de extensão aparecem marcados ao longo do texto.
+A entrega **E08** (migrações) ainda não existe. As consultas de leitura e as
+escritas usam os builders de E05/E06 e o esquema é SQL embutido de E07. Quando
+as demais forem implementadas, os pontos de extensão aparecem marcados ao longo
+do texto.
 
 O código completo e compilável vive no pacote **`examples/`** deste módulo —
 os trechos abaixo são extraídos dele:
@@ -217,31 +219,23 @@ type Store struct {
 func (s *Store) Close() error { return s.db.Close() }
 ```
 
-## 4. Esquema com SQL puro (E03)
+## 4. Esquema com SQL puro (E03; embutido em E07)
 
 Sem migrações (E08), o consumidor é dono do DDL; o Krios executa o SQL sem
-retraduzir entre dialetos — o que está no arquivo/na string é o que vai ao
-banco:
+retraduzir entre dialetos — o que está no arquivo é o que vai ao banco. A partir
+de E07 o DDL deixa de ser strings em Go e passa a arquivos `.sql` embutidos com
+`go:embed`, um statement por arquivo:
 
 ```go
+//go:embed schema/*.sql
+var schemaFS embed.FS
+
+var usersSchema = mustSQLFile(schemaFS, "schema/users.sql")
+var tasksSchema = mustSQLFile(schemaFS, "schema/tasks.sql")
+
 func (s *Store) CreateSchema(ctx context.Context) error {
-	statements := []string{
-		`CREATE TABLE IF NOT EXISTS users (
-			id INTEGER PRIMARY KEY,
-			name TEXT NOT NULL,
-			email TEXT NOT NULL UNIQUE,
-			bio TEXT,
-			status TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS tasks (
-			id INTEGER PRIMARY KEY,
-			title TEXT NOT NULL,
-			owner_id INTEGER NOT NULL,
-			done BOOLEAN NOT NULL DEFAULT FALSE
-		)`,
-	}
-	for _, ddl := range statements {
-		if _, err := s.db.ExecContext(ctx, ddl); err != nil {
+	for _, schema := range []*krios.SQLFile{usersSchema, tasksSchema} {
+		if _, err := s.db.File(schema).Exec(ctx); err != nil {
 			return err
 		}
 	}
@@ -846,7 +840,9 @@ go test -run '^Example' -v ./tests   # exemplos executáveis das garantias de E0
 - **E06** — `CreateUser`/`CreateTask` passam ao builder de escrita, com
   `Where` obrigatório em UPDATE/DELETE e integração automática com o motor de
   validação já usado em `ValidateUsers`.
-- **E07** — `CreateSchema` deixa de ser strings em Go e vira arquivos `.sql`
-  embutidos via `go:embed`.
+- **E07 — usado pelo projeto.** `CreateSchema` deixou de ser strings em Go e
+  passou a arquivos `.sql` embutidos via `go:embed` (um statement por arquivo
+  em `examples/schema/`), carregados com `krios.NewSQLFile` e executados por
+  `db.File(f).Exec`. Ver `examples/store.go` e `examples/schema/`.
 - **E08** — `CreateSchema` dá lugar a migrações versionadas up/down com
   histórico na tabela `migrations` (design em `E08-P01_decisions.md`).
