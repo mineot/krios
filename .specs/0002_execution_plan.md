@@ -18,15 +18,21 @@ As pendências serão resolvidas conforme a entrega que depende delas for inicia
 
 ### Estratégia de validação
 
-Os testes automatizados com banco usarão inicialmente apenas SQLite3, com o driver `modernc.org/sqlite`. MySQL e PostgreSQL permanecem no escopo da biblioteca, mas seus cenários de integração serão executados manualmente pelo consumidor posteriormente. Onde uma entrega exige validação nos três bancos, a evidência será automatizada para SQLite e manual para os demais; a ausência dessa evidência deve permanecer registrada até a validação final em E09.
+Inicialmente, os testes automatizados com banco usam SQLite3, com o driver `modernc.org/sqlite`. **Revisão solicitada pelo consumidor em 2026-10-20:** a nova [E10](E10_integration_plan.md) automatizará o fluxo completo também em MySQL e PostgreSQL reais, localmente e no GitHub Actions. A evidência dos três bancos será reunida na conferência final de E09; casos excepcionais não automatizáveis permanecerão manuais, identificados e justificados.
 
-Também serão construídos testes unitários para as regras da biblioteca e a geração de SQL de cada dialeto, sem exigir instâncias de MySQL ou PostgreSQL. Esses testes não substituem a execução manual contra os bancos reais. Os lembretes para essa cobertura estão ao final deste documento.
+Os testes unitários das regras da biblioteca e da geração de SQL de cada dialeto continuam sem exigir servidores. Eles não substituem a integração real da E10. Referências históricas à integração exclusivamente manual nas entregas anteriores devem ser lidas conforme esta revisão; resultados ainda não executados permanecem pendentes.
 
 ### Revisão parcial da base E01–E03
 
 **Organização vigente após M06:** fachada pública em `krios.go`; implementação e testes internos sob `internal/`; testes de integração e exemplos em `tests/`. Mudança solicitada pelo consumidor, preservando o import `github.com/mineot/krios`. Ver [revisão de organização](E01-P01_decisions.md).
 
 A revisão de 2026-10-19 identificou correções de erros, ciclo de vida e DSN, além de ajustes de contratos, testes e documentação. O [plano de melhorias da base](0003_improvement_plan.md) organiza esse trabalho em M01–M06, com critérios para iniciar E04. M01–M06 foram implementados e validados localmente nas linhas Go 1.26/1.27. A execução remota do novo CI permanece pendente; integração real MySQL/PostgreSQL permanece em E09. Os registros datados das entregas originais abaixo são históricos; os contratos vigentes estão nas decisões revisadas e as novas evidências no plano de melhorias.
+
+### Consolidação antes de E09 (2026-10-20)
+
+O [plano de consolidação C01–C07](0005_consolidation_plan.md) passa a ser condição de entrada em E09. A inspeção dirigida identificou correções necessárias em migrações e recursos de leitura, além de divergências documentais. Um ciclo SQLite `0 → 1 → 0 → 1` reproduziu sucesso aparente sem recriar a tabela; a conclusão local histórica de E08 não cobre esse cenário.
+
+As marcações e evidências anteriores permanecem como registro das entregas realizadas. O estado atual inclui consolidação pendente: contratos, correções e regressões locais, reconciliação de exemplos/documentos, preparação do roteiro e verificação consolidada. Pela revisão de escopo que acrescenta E10, a integração real automatizada dos três bancos será entregue nessa nova etapa; E09 fará a conferência final dos requisitos e a distribuição. Nenhuma correção foi implementada na criação desses planos.
 
 ## 3. Visão geral das entregas
 
@@ -40,9 +46,12 @@ A revisão de 2026-10-19 identificou correções de erros, ciclo de vida e DSN, 
 | E06     | Operações de escrita por entidade               | E05        | RF-07                              |
 | E07     | Execução de arquivos SQL incorporados           | E06        | RF-08                              |
 | E08     | Migrações versionadas de avanço e reversão      | E07        | RF-04 e RF-05                      |
-| E09     | Validação completa, documentação e distribuição | E08        | Todos os critérios de atendimento  |
+| E09     | Validação completa, documentação e distribuição | E08 + C01–C07; E10 para conclusão | Todos os critérios de atendimento  |
+| E10     | Integração automatizada completa nos três bancos | E08 + C01–C07 | RF-01–RF-09 e evidência real para E09 |
 
 A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecipar trabalho após E04, pois precisa da execução, das transações e do mapeamento, mas não dos construtores de escrita. E08 pode avançar após E07 sem esperar funcionalidades independentes dos construtores. Qualquer ajuste deve preservar as dependências técnicas e os critérios de conclusão.
+
+**Ordem revisada para a validação final:** C01–C07 → E10 → conclusão de E09/publicação. E10 é um identificador adicional, sem renumeração do histórico; sua execução não depende de publicação prévia. A preparação documental de E09 pode avançar, mas a conferência final e E09-P04 aguardam a evidência de E10.
 
 ## 4. Passos de desenvolvimento
 
@@ -260,9 +269,11 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 ### E09 — Consolidar a qualidade e preparar a distribuição
 
+**Pré-requisitos adicionais:** concluir C01–C07 conforme [0005_consolidation_plan.md](0005_consolidation_plan.md) e obter a evidência da [E10](E10_integration_plan.md) antes de encerrar E09-P01/publicar. A conclusão histórica de E08 isoladamente não libera a validação final.
+
 **Entrega:** biblioteca com o escopo inicial validado, documentação de consumo e uma versão distribuível.
 
-- [ ] **E09-P01 — Conferir todos os requisitos e critérios de atendimento.** Relacionar os treze critérios da seção 7 do planejamento aos exemplos e testes que os comprovam. Executar as verificações automatizadas com SQLite e os testes unitários dos dialetos; reunir os resultados dos cenários manuais de MySQL e PostgreSQL realizados pelo consumidor, corrigindo divergências encontradas.
+- [ ] **E09-P01 — Conferir todos os requisitos e critérios de atendimento.** Relacionar os treze critérios da seção 7 do planejamento aos exemplos e testes que os comprovam. Reunir as verificações locais, unitárias e a integração real nos três bancos produzida pela E10; obter evidência dos casos manuais residuais obrigatórios e corrigir divergências encontradas.
 
   > **Pendências:** fechar as decisões que ainda afetem o comportamento do escopo inicial. Uma funcionalidade exigida não pode ser considerada entregue apenas porque sua definição foi adiada; eventuais mudanças de escopo devem ser registradas no planejamento.
 
@@ -274,9 +285,24 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 - [ ] **E09-P04 — Publicar e validar o consumo externo.** No momento da entrega, executar o procedimento de publicação definido e instalar a versão em um projeto consumidor separado. Verificar imports, dependências e um exemplo funcional de acesso ao banco com `krios.Config` definida em código, sem distribuir arquivos externos de configuração.
 
-  > **Pendências:** concluir E09-P03 e dispor do acesso necessário ao repositório de publicação. Este documento planeja essa ação futura; sua criação não publica código nem versões.
+  > **Pendências:** concluir E09-P01–P03 e E10, e dispor do acesso necessário ao repositório de publicação. Este documento planeja essa ação futura; sua criação não publica código nem versões.
 
 **Critério de conclusão:** os critérios de atendimento têm evidências, a documentação corresponde à implementação e a versão publicada pode ser instalada e utilizada por outro projeto Go.
+
+### E10 — Automatizar a integração completa nos três bancos
+
+**Entrega:** suíte especializada de SQLite, MySQL e PostgreSQL reais, executada localmente e no GitHub Actions, desde o esquema criado por migrações até operações, falhas, reversões e reaplicações. Plano detalhado e matriz: [E10_integration_plan.md](E10_integration_plan.md).
+
+- [ ] **E10-P01 — Fixar ambientes e comandos.** Versões dos bancos/drivers, provisionamento isolado, readiness, prazos e limpeza.
+- [ ] **E10-P02 — Criar harness e matriz.** Módulo consumidor separado, adaptadores e inventário rastreável da API/requisitos/cenários.
+- [ ] **E10-P03 — Validar migrações completas.** Criação do esquema, múltiplas versões/arquivos, down/up, reabertura, estado parcial e recuperação nos três bancos.
+- [ ] **E10-P04 — Exercitar operações da API.** Entidades, consultas, paginação, escritas, validação/formatação, SQL direto/incorporado e diferenças de capacidade.
+- [ ] **E10-P05 — Validar transações e recursos.** Commit/rollback, falhas imediatas/tardias, contexto, concorrência e liberação de recursos.
+- [ ] **E10-P06 — Executar consumidor completo.** Fluxo funcional por API pública, com esquema criado por migrações e resultados persistidos conferidos em cada banco.
+- [ ] **E10-P07 — Integrar GitHub Actions e Makefile.** Jobs por banco nas linhas Go 1.26/1.27, serviços reais, execução sem cache e falha quando o ambiente obrigatório estiver ausente.
+- [ ] **E10-P08 — Corrigir divergências e consolidar evidências.** Regressões, resultados da matriz associados à revisão e atualização de contratos/documentos para a conclusão de E09.
+
+**Critério de conclusão:** os três bancos executam os cenários obrigatórios e o ciclo completo, com evidência real nas seis combinações previstas de banco/Go. Casos sem suporte são testados como rejeição; casos residuais manuais são justificados e não contam como sucesso automatizado. Drivers de teste permanecem fora dos imports de produção.
 
 ## 5. Registro de progresso
 
@@ -296,6 +322,10 @@ Ao concluir uma entrega, registrar abaixo sua referência de implementação e v
 | E08     | Concluída localmente (evidência manual MySQL/PostgreSQL pendente para E09) | E08-P01–E08-P04 concluídos. Contratos em [E08-P01_decisions.md](E08-P01_decisions.md) (2026-10-20): `MigrationsConfig{FS, TargetVersion, Versions, ManagedObjects}`, tabela `migrations`, `ErrPartialMigration` e contrato `MigrationDialect`. Implementação em [internal/migrate](../internal/migrate) (`Prepare`/`Apply`, execução por versão em PG/SQLite e por arquivo/sem transação em MySQL), com `DB.RunMigrations(ctx) (*Plan, error)` em [access](../internal/access/db.go). Integração real contra SQLite em [tests/migrations_test.go](../tests/migrations_test.go); caminho MySQL simulado em [internal/migrate/apply_test.go](../internal/migrate/apply_test.go). Roteiro de migrações M01–M07 ampliado em [E09](E09_manual_validation.md); evidência real MySQL/PostgreSQL pendente. |
 | E09     | Preparado (E01–E05 e M01–M07); execução pendente                            | Roteiro manual com harness E01–E05, cenários V01–V23 e cenários de migração M01–M07 (§4.1). Falta ampliar o roteiro para escritas (E06) e SQL incorporado (E07) e executar tudo em MySQL/PostgreSQL reais.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
+### Atualização de escopo — E10 (2026-10-20)
+
+E10 está **planejada, com E10-P01–P08 pendentes**. O workflow atual ainda executa integração real somente em SQLite. Os registros anteriores de pendência manual são históricos: a integração reproduzível MySQL/PostgreSQL será automatizada na E10, e E09 consolidará os resultados e os casos manuais residuais. Criar o plano não executou nem concluiu esses testes.
+
 ## 6. Lembretes para validação posterior
 
 - [ ] Construir testes unitários das regras da biblioteca e da geração de SQL para SQLite, MySQL e PostgreSQL conforme as funcionalidades forem implementadas, incluindo parâmetros, filtros, escritas e capacidades não suportadas.
@@ -307,4 +337,4 @@ Ao concluir uma entrega, registrar abaixo sua referência de implementação e v
 - [x] Preparar o [roteiro manual da base E01–E05](E09_manual_validation.md), com ambiente isolado, versões e registro de resultados.
 - [ ] Ampliar o roteiro para escritas (E06) e SQL incorporado (E07); as migrações (E08) já contam com os cenários M01–M07 em §4.1.
 - [ ] Na preparação desses testes manuais, escolher os drivers e as versões dos bancos e registrar as combinações utilizadas e os resultados.
-- [ ] Antes de concluir E09, reunir as evidências manuais dos dois bancos e corrigir incompatibilidades. O sucesso dos testes com SQLite ou dos testes unitários não comprova sozinho o funcionamento em MySQL e PostgreSQL.
+- [ ] Executar E10-P01–P08 e, antes de concluir E09, reunir evidências reais automatizadas dos três bancos e dos casos manuais residuais obrigatórios, corrigindo incompatibilidades. O sucesso dos testes com SQLite ou dos testes unitários não comprova sozinho o funcionamento em MySQL e PostgreSQL.

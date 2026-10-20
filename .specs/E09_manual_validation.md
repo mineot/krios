@@ -2,6 +2,8 @@
 
 Data: 2026-10-19. **Estado: preparado; MySQL e PostgreSQL ainda não executados.**
 
+> **Revisão de escopo (2026-10-20):** a [E10](E10_integration_plan.md) automatizará os cenários reproduzíveis contra SQLite, MySQL e PostgreSQL reais, com esquema criado por migrações e execução no GitHub Actions. Este roteiro alimenta a matriz da E10 e permanece como procedimento para casos residuais manuais. A consolidação C06 revisará os cenários antes da automação. As expectativas antigas de M05/M06 devem acompanhar os contratos decididos em C01; a criação da E10 não constitui evidência de execução.
+
 Este roteiro coleta evidência real de conexão, transações e consultas encadeadas. DSNs e drivers simulados já têm testes locais, mas não substituem este roteiro. As migrações (E08) já contam com os cenários M01–M07 em §4.1; faltam os cenários de escritas (E06) e de SQL incorporado (E07), a ampliar nesta entrega.
 
 ## 1. Preparar e registrar o ambiente
