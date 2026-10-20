@@ -109,11 +109,15 @@ Assinatura pública (RF-05):
 
 ```go
 // RunMigrations moves the schema to Config.Migrations.TargetVersion, applying
-// up or down migrations as needed. The configuration is always explicit: a
-// missing Migrations config, a non-positive/absent target or verified partial
-// state block execution.
-func (db *DB) RunMigrations(ctx context.Context) error
+// up or down migrations as needed, and returns the plan it prepared (so the
+// caller can inspect what was executed). The configuration is always
+// explicit: a missing Migrations config, a non-positive/absent target or
+// verified partial state block execution.
+func (db *DB) RunMigrations(ctx context.Context) (*Plan, error)
 ```
+
+> **Ajuste de implementação (E08-P03, 2026-10-20):** a assinatura passou a retornar `(*Plan, error)` em vez de apenas `error` — o `Plan` é útil para o consumidor inspecionar o que foi preparado/executado, e a fachada já o expunha desde E08-P02. O comportamento de erro é o mesmo descrito abaixo.
+
 
 - **Execução explícita:** o consumidor decide quando chamar; abrir o banco e executar operações comuns nunca dispara migrações (RF-05).
 - **Configuração obrigatória:** `Config.Migrations == nil` → `ErrInvalidConfig`. `TargetVersion` em `MigrationsConfig` é sempre explícita (§4); não há como distinguir campo ausente de `0` dentro da struct, e a ausência de toda a config é o único "não configurado".
@@ -191,7 +195,7 @@ Resolvidos nesta entrega:
 - [x] Contrato de dialeto transacional (`SupportsTransactionalDDL`, `IsTransactionalStatement`) (§6.2/§6.4): §10, interface segregada no mesmo tipo concreto.
 - [x] Escopo transacional máximo viável (§6.4/RF-05): §11, por versão (PG/SQLite), por arquivo (MySQL transacional) ou sem transação.
 
-Permanecem em outras entregas: implementação da preparação (E08-P02); execução e recuperação de falhas (E08-P03); validação dos percursos e falhas (E08-P04); evidência real MySQL/PostgreSQL dos cenários M01–M06 (E09). Splitting de arquivos e reescrita de marcadores continuam proibidos/não adotados, herdados de [E07-P01_decisions.md](E07-P01_decisions.md) §9.
+Permanecem em outras entregas: implementação da preparação (E08-P02, concluída); execução e recuperação de falhas (E08-P03, concluída); validação dos percursos e falhas (E08-P04); evidência real MySQL/PostgreSQL dos cenários M01–M06 (E09). Splitting de arquivos e reescrita de marcadores continuam proibidos/não adotados, herdados de [E07-P01_decisions.md](E07-P01_decisions.md) §9.
 
 ## 13. Referências
 

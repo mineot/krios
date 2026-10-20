@@ -32,6 +32,37 @@ type executor interface {
 	QueryRowContext(context.Context, string, ...any) scan.Row
 }
 
+// statement is the write-only contract used by the history helpers. It is
+// satisfied by both the DB executor and a migration Tx, so a history record
+// can be written inside or outside a transaction.
+type statement interface {
+	ExecContext(context.Context, string, ...any) (result.Result, error)
+}
+
+// Tx is the transaction contract used to execute one migration scope. It is
+// satisfied structurally by *transaction.Tx; the access layer exposes an
+// adapter through Beginner so that migrate never imports the transaction
+// package. Commit is first-error-wins in the underlying transaction: when a
+// statement failed, Commit rolls back instead of confirming (E03).
+type Tx interface {
+	// ExecContext executes a statement without returning rows.
+	ExecContext(ctx context.Context, query string, args ...any) (result.Result, error)
+
+	// Commit confirms the scope. When a recorded failure blocks it, the
+	// transaction is rolled back instead.
+	Commit(ctx context.Context) error
+
+	// Rollback discards the scope. It is attempted even after a failure.
+	Rollback(ctx context.Context) error
+}
+
+// Beginner starts the transaction that scopes a group of migration files
+// (E08-P01 §11). It is satisfied structurally by an access adapter over *DB;
+// the interface keeps migrate free of the access and transaction imports.
+type Beginner interface {
+	Begin(ctx context.Context) (Tx, error)
+}
+
 // historyTable is the name of the migrations history table (E08-P01 §7).
 const historyTable = "migrations"
 

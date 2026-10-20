@@ -232,13 +232,30 @@ func (db *DB) Migrations() *config.MigrationsConfig {
 	return db.migrations
 }
 
-// RunMigrations prepares the migrations configured in Open and returns the
-// ordered plan. Applying the plan is not implemented yet: when a plan has
-// steps, RunMigrations returns ErrMigrationsNotImplemented. When no migration
-// is needed it returns a nil error. The DB guards (ErrClosed) apply unchanged.
+// migrationBeginner adapts this DB to migrate.Beginner. Begin returns the
+// transaction through the migrate.Tx interface, which *transaction.Tx
+// satisfies structurally, so that migrate never imports the transaction
+// package.
+type migrationBeginner struct{ db *DB }
+
+func (b migrationBeginner) Begin(ctx context.Context) (migrate.Tx, error) {
+	tx, err := b.db.Begin(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return tx, nil
+}
+
+// RunMigrations prepares the migrations configured in Open and applies the
+// resulting plan, returning the plan for inspection.
 //
 // Preparation is pure and reports every configuration, association, history
-// and atomicity problem before any migration statement would run (E08-P02).
+// and atomicity problem before any migration statement runs. When a plan has
+// no steps the schema is already at the target and nothing is executed. The
+// plan is returned even when applying fails, so the caller can see what was
+// attempted. The DB guards (ErrClosed) apply unchanged (E08-P02/P03).
 func (db *DB) RunMigrations(ctx context.Context) (*migrate.Plan, error) {
 	if err := db.ensureOpen(); err != nil {
 		return nil, err
@@ -250,8 +267,12 @@ func (db *DB) RunMigrations(ctx context.Context) (*migrate.Plan, error) {
 		return nil, err
 	}
 
-	if len(plan.Steps) > 0 {
-		return plan, fmt.Errorf("%w: %d step(s) prepared", errs.ErrMigrationsNotImplemented, len(plan.Steps))
+	if len(plan.Steps) == 0 {
+		return plan, nil
+	}
+
+	if err := migrate.Apply(ctx, db, migrationBeginner{db: db}, plan, db.migrations, db.dialect); err != nil {
+		return plan, err
 	}
 
 	return plan, nil

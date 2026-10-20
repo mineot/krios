@@ -64,12 +64,6 @@ var (
 	// continued automatically; the consumer must resolve it explicitly. Use
 	// errors.As with *PartialMigrationError for the structured context.
 	ErrPartialMigration = errors.New("krios: partial migration state blocks execution")
-
-	// ErrMigrationsNotImplemented indicates that migration preparation
-	// succeeded and produced a plan, but applying the plan is not available
-	// yet. It marks the boundary between E08-P02 (preparation) and E08-P03
-	// (execution).
-	ErrMigrationsNotImplemented = errors.New("krios: migration execution is not implemented yet")
 )
 
 // PartialMigrationError carries the context of a blocked migration run. It

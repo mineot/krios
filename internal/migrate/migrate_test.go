@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -164,23 +165,22 @@ func (r *countRows) Next(dest []driver.Value) error {
 	return nil
 }
 
-// missingHistoryDriver returns a driver whose first QueryContext call (the
-// history SELECT) reports a missing table, and whose later calls (the
-// object-existence SELECT) report the object with the given count.
+// missingHistoryDriver returns a driver whose history SELECT reports a missing
+// table and whose object-existence SELECT reports the object with the given
+// count. Queries are distinguished by text so the behaviour is stable across
+// the several history probes Prepare and Apply perform.
 func missingHistoryDriver(objectCount int64) *testutil.Driver {
-	var calls int
+	d := &testutil.Driver{}
 
-	return &testutil.Driver{
-		QueryContext: func(context.Context) (driver.Rows, error) {
-			calls++
+	d.QueryContext = func(context.Context) (driver.Rows, error) {
+		if strings.Contains(d.LastQuery(), "migrations") {
+			return nil, errors.New("no such table: migrations")
+		}
 
-			if calls == 1 {
-				return nil, errors.New("no such table: migrations")
-			}
-
-			return &countRows{value: objectCount}, nil
-		},
+		return &countRows{value: objectCount}, nil
 	}
+
+	return d
 }
 
 func TestPrepareAlreadyAtTarget(t *testing.T) {
@@ -461,7 +461,7 @@ func TestPrepareContextCancelled(t *testing.T) {
 	}
 }
 
-func TestRunMigrationsNotImplemented(t *testing.T) {
+func TestRunMigrationsAppliesUpPlan(t *testing.T) {
 	d := missingHistoryDriver(0)
 
 	cfg := testutil.Config(d)
@@ -479,13 +479,20 @@ func TestRunMigrationsNotImplemented(t *testing.T) {
 	}()
 
 	plan, err := db.RunMigrations(context.Background())
-
-	if !errors.Is(err, errs.ErrMigrationsNotImplemented) {
-		t.Fatalf("RunMigrations() = %v, want ErrMigrationsNotImplemented", err)
+	if err != nil {
+		t.Fatalf("RunMigrations() = %v, want nil", err)
 	}
 
 	if plan == nil || len(plan.Steps) != 2 {
 		t.Fatalf("RunMigrations() plan = %+v, want 2 steps", plan)
+	}
+
+	if d.Commits.Load() != 2 {
+		t.Errorf("Commits = %d, want 2 (one version scope per version)", d.Commits.Load())
+	}
+
+	if d.Rollbacks.Load() != 0 {
+		t.Errorf("Rollbacks = %d, want 0", d.Rollbacks.Load())
 	}
 }
 

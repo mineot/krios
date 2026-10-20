@@ -5,11 +5,11 @@
 // and Tx), reflection-based entity mapping with per-field validation and
 // formatting, chained SELECT building with filters, joins, aggregates,
 // ordering and limit/offset pagination, chained INSERT/UPDATE/DELETE with
-// the value policy, mandatory filters and per-database RETURNING support, and
+// the value policy, mandatory filters and per-database RETURNING support,
 // execution of consumer-embedded SQL files (NewSQLFile with DB.File or
-// Tx.File) and the preparation of versioned migrations (RunMigrations, which
-// loads resources, inspects history and builds the ordered plan) are
-// implemented; applying a migration plan is not implemented yet.
+// Tx.File) and versioned migrations (RunMigrations, which loads resources,
+// inspects history, builds the ordered plan and applies it with the maximum
+// viable transactional scope) are implemented.
 //
 // Drivers are chosen and imported by the consumer; Krios does not import them.
 package krios
@@ -147,9 +147,6 @@ var (
 	// in_progress or failed record, or by managed objects in a database
 	// without history. Use errors.As with *PartialMigrationError for context.
 	ErrPartialMigration = errs.ErrPartialMigration
-	// ErrMigrationsNotImplemented indicates that migration preparation
-	// succeeded but applying the plan is not available yet (E08-P03).
-	ErrMigrationsNotImplemented = errs.ErrMigrationsNotImplemented
 )
 
 // Open validates cfg, opens database access and verifies connectivity.
