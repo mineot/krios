@@ -123,7 +123,7 @@ A incorporação desses arquivos ao executável, por meio de `embed`, é respons
 
 Os arquivos devem seguir o padrão de nomes `0001_create_table.up.sql` e `0001_create_table.down.sql`, com prefixo numérico, descrição e indicação da direção. O consumidor deve informar em `krios.Config` a associação dos arquivos às versões do esquema.
 
-A numeração no nome foi proposta como convenção de organização; ela não deve ser presumida como fonte definitiva da versão ou da ordem de execução. O formato da associação em `krios.Config`, a ordem dentro de cada versão, a validação dos pares `up`/`down` e o tratamento de divergências entre nomes e configuração permanecem pendentes.
+A numeração no nome foi proposta como convenção de organização; ela não deve ser presumida como fonte definitiva da versão ou da ordem de execução. O formato da associação em `krios.Config`, a ordem dentro de cada versão, a validação dos pares `up`/`down` e o tratamento de divergências entre nomes e configuração permanecem pendentes. **Atualizado em C01-P02 (2026-10-20):** conforme [C01-P01_decisions.md](C01-P01_decisions.md), a versão desejada é sempre explícita em `krios.Config.Migrations.TargetVersion *int`; `nil` é erro (`ErrInvalidConfig`), `&0` solicita reversão total e a versão efetiva só avança/reduz quando a versão completa é concluída.
 
 A incorporação ocorre durante a compilação, por meio de `go:embed`. A configuração pode referenciar arquivos já incorporados, mas não adiciona novos arquivos ao executável em tempo de execução. Essa distinção segue o funcionamento do [pacote `embed`](https://pkg.go.dev/embed).
 
@@ -131,9 +131,9 @@ A incorporação ocorre durante a compilação, por meio de `go:embed`. A config
 
 A configuração de migrações é opcional para o uso da biblioteca. O consumidor deve decidir quando executar as migrações, chamando `RunMigrations()`.
 
-Ao chamar `RunMigrations()`, o consumidor deve ter informado explicitamente a versão desejada do esquema em `krios.Config` e fornecido os recursos de migração necessários conforme o contrato de configuração. A ausência da versão desejada deve produzir erro antes de executar migrações e não deve ser interpretada como uma solicitação de reversão.
+Ao chamar `RunMigrations()`, o consumidor deve ter informado explicitamente a versão desejada do esquema em `krios.Config.Migrations.TargetVersion *int` e fornecido os recursos de migração necessários conforme o contrato de configuração. A ausência da versão desejada (`nil`) deve produzir erro antes de executar migrações e não deve ser interpretada como uma solicitação de reversão.
 
-A versão `0` representa o estado anterior à primeira migração. Informar explicitamente essa versão deve solicitar a reversão de todas as migrações aplicadas.
+A versão `0` representa o estado anterior à primeira migração. Informar explicitamente essa versão (`TargetVersion: &zero`) deve solicitar a reversão de todas as migrações aplicadas. A versão efetiva só avança quando todos os arquivos da versão forem concluídos com sucesso; uma reversão completa reduz o estado efetivo e permite reaplicação.
 
 O Krios deve gerenciar uma tabela chamada `migrations`, responsável por registrar o histórico de aplicação: versão, nome do arquivo, direção (`up`/`down`), status (`applied`|`failed`|`in_progress`), checksum opcional, data de aplicação e eventual mensagem de erro. Os detalhes exatos da estrutura, chaves e regras de transição são definidos em [E08-P01_decisions.md](E08-P01_decisions.md).
 
@@ -279,13 +279,13 @@ A intenção já definida é confirmar ou reverter em conjunto operações da me
 ### 6.4. Migrações
 
 - Como representar em `krios.Config` a versão desejada e a associação de arquivos a cada versão, distinguindo versão ausente de versão `0`?
-  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md) §4/§8: `MigrationsConfig{FS, TargetVersion, Versions, ManagedObjects}` com `MigrationVersion{Version, Up, Down}`, associação explícita por versão (prefixo numérico é só convenção); `TargetVersion` é sempre explícita e `0` solicita reversão total; ausência da config é o único "não configurado", nunca interpretado como reversão._
+  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md) §4/§8: `MigrationsConfig{FS, TargetVersion *int, Versions, ManagedObjects}` com `MigrationVersion{Version, Up, Down}`, associação explícita por versão (prefixo numérico é só convenção); `TargetVersion` é sempre explícita e `&0` solicita reversão total; `nil` é erro (`ErrInvalidConfig`); ausência de `Migrations` na config é o único caso "não configurado". Conforme [C01-P01_decisions.md](C01-P01_decisions.md) (D01–D02), a versão efetiva só avança/reduz quando a versão completa é concluída e ciclos repetidos são suportados._
 - Qual será o papel do prefixo numérico dos arquivos diante dessa associação? Como tratar divergências, arquivos ausentes ou duplicados e pares `up`/`down` incompletos?
   _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md) §5: versão e ordem vêm da configuração, não do nome; ordem declarada divergente da numérica ou versão duplicada é `ErrInvalidConfig`; arquivo ausente/branco é `ErrFileNotFound`; nome repetido e direção necessária ausente ao percurso são `ErrInvalidQuery`._
 - Em qual ordem os arquivos de uma versão serão executados no avanço e na reversão?
   _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md) §5: `Up` e `Down` na ordem declarada; a biblioteca não reordena nem inverte._
 - A transação abrangerá um arquivo, uma versão ou todo o percurso até a versão desejada?
-  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): escopo máximo viável — por versão em PostgreSQL/SQLite, por arquivo no MySQL quando 100% transacional, sem transação quando contiver DDL com commit implícito._
+  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): escopo máximo viável — por versão em PostgreSQL/SQLite, por arquivo no MySQL quando 100% transacional, sem transação quando contiver DDL com commit implícito. Conforme [C01-P01_decisions.md](C01-P01_decisions.md) (D03), **não** há rollback de todo o percurso: versões já confirmadas permanecem; em PostgreSQL/SQLite o rollback se aplica à versão em execução._
 - Como agir quando o banco ou os comandos não permitirem rollback integral? Como registrar falha, impedir que uma aplicação parcial seja considerada concluída e permitir recuperação?
   _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): histórico com `status` (`in_progress`|`failed`|`applied`), bloqueio por `ErrPartialMigration`, nunca tentar reverter DDL já confirmado e recuperação guiada pelo consumidor._
 - Qual será a estrutura da tabela `migrations`, incluindo histórico, datas e registro da versão `0`?

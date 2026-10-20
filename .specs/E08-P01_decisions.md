@@ -24,8 +24,8 @@ Decidido aqui: formato de `MigrationsConfig` e associação arquivo→versão (�
 
 ## 3. Promessa transacional
 
-- PostgreSQL e SQLite: quando aplicável, executar com escopo transacional que permita rollback integral em caso de falha.
-- MySQL: **não** prometer rollback integral quando o arquivo/conjunto contiver comandos com commit implícito. Usar escopo máximo viável, registrar estado parcial e reportar claramente ao consumidor.
+- PostgreSQL e SQLite: executar por versão com escopo transacional quando a sequência for transacional; **rollback da versão em execução** em caso de falha, com versões já confirmadas permanecendo (sem rollback de todo o percurso).
+- MySQL: **não** prometer rollback integral quando o arquivo/conjunto contiver comandos com commit implícito. Usar escopo máximo viável (por arquivo quando 100% transacional, senão sem transação), registrar estado parcial e reportar claramente ao consumidor. Ver [C01-P01_decisions.md](C01-P01_decisions.md) (D03).
 
 ## 4. Configuração: versão desejada e associação de arquivos
 
@@ -48,7 +48,8 @@ type MigrationsConfig struct {
     // FS recebe os recursos incorporados pelo consumidor (ex.: embed.FS).
     FS fs.FS
     // TargetVersion é a versão desejada. Obrigatória e sempre explícita.
-    TargetVersion int
+    // Sempre um ponteiro: nil é erro (ErrInvalidConfig); &0 solicita reversão total.
+    TargetVersion *int
     // Versions associa versões a arquivos. A ordem declarada define a
     // sequência entre versões.
     Versions []MigrationVersion
@@ -58,7 +59,7 @@ type MigrationsConfig struct {
 }
 ```
 
-- **Versão desejada explícita:** `TargetVersion` é sempre obrigatória quando `Migrations != nil`; não há distinção de "campo ausente" dentro de uma struct preenchida. Se o consumidor deseja reverter tudo, informa `TargetVersion: 0` explicitamente (§8). Não existe valor-sentinela de omissão: configurar migrações sem versão é erro de configuração (`ErrInvalidConfig`), nunca interpretado como reversão (RF-05).
+- **Versão desejada explícita:** `TargetVersion` é sempre obrigatória quando `Migrations != nil` e deve ser um ponteiro não-nulo (`*int`). `nil` é erro de configuração (`ErrInvalidConfig`). Se o consumidor deseja reverter tudo, informa `TargetVersion: ptr(0)` explicitamente (§8). Nunca interpretado como reversão (RF-05). Ver [C01-P01_decisions.md](C01-P01_decisions.md) (D01).
 - **Associação explícita:** a versão vem de `MigrationVersion.Version`, e os arquivos vêm de `Up`/`Down`. O prefixo numérico do nome do arquivo **não** é fonte da versão nem da ordem (RF-04); é apenas convenção de organização.
 - **Recursos incorporados:** `FS` segue a semântica de `io/fs` já usada por `krios.NewSQLFile` ([E07-P01_decisions.md](E07-P01_decisions.md) §3). Os nomes em `Up`/`Down` são caminhos relativos ao `FS`, carregados por `NewSQLFile` na preparação (E08-P02).
 - **Estrutura explícita por versão (decisão do consumidor, 2026-10-20):** a associação não é descoberta por varredura do `FS`; o consumidor declara cada versão e seus arquivos. Isso mantém RF-04 (prefixo não é definitivo) e permite múltiplos arquivos por direção sem depender de nomes.
@@ -120,9 +121,9 @@ func (db *DB) RunMigrations(ctx context.Context) (*Plan, error)
 
 
 - **Execução explícita:** o consumidor decide quando chamar; abrir o banco e executar operações comuns nunca dispara migrações (RF-05).
-- **Configuração obrigatória:** `Config.Migrations == nil` → `ErrInvalidConfig`. `TargetVersion` em `MigrationsConfig` é sempre explícita (§4); não há como distinguir campo ausente de `0` dentro da struct, e a ausência de toda a config é o único "não configurado".
-- **Estado `0`:** `TargetVersion == 0` solicita reversão de todas as migrações `applied`.
-- **Comparação:** versão atual = maior `Version` com `status='applied'` (ou `0` se não houver). Igual a `TargetVersion` → nenhuma migração. Inferior → aplicar `up` até alcançar; superior → aplicar `down` até alcançar (§5).
+- **Configuração obrigatória:** `Config.Migrations == nil` → `ErrInvalidConfig`. `TargetVersion` em `MigrationsConfig` é sempre um ponteiro explícito não-nulo (§4); `nil` → `ErrInvalidConfig`. A ausência de toda a config é o único "não configurado".
+- **Estado `0`:** `*TargetVersion == 0` solicita reversão de todas as migrações `applied`. Versões já confirmadas podem permanecer se a reversão falhar em uma versão posterior (escopo por versão), com bloqueio/estado parcial conforme D03.
+- **Comparação:** versão atual = versão efetiva derivada do histórico, considerando apenas versões **integralmente concluídas** (todos os arquivos da versão com `status='applied'`). A mera existência de uma linha `applied` não basta; versões parcialmente executadas são tratadas como inconsistentes. Igual a `TargetVersion` → nenhuma migração. Inferior → aplicar `up` até alcançar; superior → aplicar `down` até alcançar (§5). Ciclos repetidos (`0→1→0→1`) são suportados após redução do estado efetivo (D02).
 - **Verificações antes de executar** (§6 e §7): ausência de histórico com objetos geridos presentes → erro; registro `in_progress`/`failed` → `ErrPartialMigration` (§9); direção necessária incompleta (§5) → `ErrInvalidQuery`.
 - **Concorrência:** a biblioteca não promete coordenação entre chamadas simultâneas de `RunMigrations` em processos distintos nem a mesma `DB`; a resolução de conflito de histórico é por erro (chave única da tabela, §7). Nada desta entrega cria caminho de execução alternativo ao `executor` de E03 — os statement e o DDL usam `DB.ExecContext`/`Begin`.
 
@@ -174,7 +175,7 @@ Detecção por statement deve ignorar case, comentários e espaços. Palavras-ch
 
 | Cenário                                     | Escopo                                              | Comportamento                                                                                                                                                           |
 | ------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PostgreSQL/SQLite                           | Por versão (quando toda a sequência é transacional) | Envolver sequência de arquivos até versão desejada em única transação. Falha → rollback integral.                                                                       |
+| PostgreSQL/SQLite                           | Por versão (quando toda a sequência é transacional) | Envolver arquivos da versão em transação. Falha → rollback da versão em execução; versões já confirmadas permanecem.                                                       |
 | MySQL – arquivo 100% transacional           | Por arquivo                                         | Envolver arquivo em transação própria. Arquivos anteriores permanecem aplicados.                                                                                        |
 | MySQL – arquivo contém DDL não-transacional | Sem transação                                       | Executar statements sequencialmente. Falha em statement pode deixar banco em estado parcial deste arquivo. **Não** tentar reverter statements já executados/commitados. |
 

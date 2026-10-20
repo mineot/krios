@@ -69,7 +69,9 @@ Resolver cada decisão antes de implementar a parte dependente. Trabalhos indepe
 
   > **Concluído (2026-10-20):** decisões registradas em [C01-P01_decisions.md](C01-P01_decisions.md), aprovadas pelo consumidor. D01: `TargetVersion` passa a `*int` (presença obrigatória; `&0` reverte; negativo/ausente é `ErrInvalidConfig`). D02: versão efetiva distingue execução de estado aplicado; versão só conclui com todos os arquivos; ciclos repetidos refletem o esquema; histórico antigo ambíguo é detectado, sem reescrita automática. D03: atomicidade por versão em SQLite/PG e por arquivo/sem transação em MySQL; sem rollback de todo o percurso. D04: fechamento uniforme em `Rows.All`/`Row.Scan`, propagação primária preservada e registro na `Tx` quando a consulta já começou. D05: snapshot da configuração em `Open` e cópia defensiva em `Migrations()`, com limite explícito da cópia de `fs.FS`. Nenhuma implementação foi feita; reconciliação documental em C01-P02 e correções em C02–C05.
 
-- [ ] **C01-P02 — Reconciliar os requisitos afetados**, com referência à decisão vigente e identificação dos trechos históricos superados em RF-05, E03/E04/E07/E08 e manual.
+- [x] **C01-P02 — Reconciliar os requisitos afetados**, com referência à decisão vigente e identificação dos trechos históricos superados em RF-05, E03/E04/E07/E08 e manual.
+
+  > **Concluído (2026-10-20):** reconciliados RF-05 e §6.4 em [0001_planning.md](0001_planning.md) para `TargetVersion *int`, distinção presença/`0`, versão efetiva e sem rollback de todo o percurso (D01–D03). Atualizados [E08-P01_decisions.md](E08-P01_decisions.md) (struct, §3/§8/§11), [E09_manual_validation.md](E09_manual_validation.md) (M05/M06 com ponteiro e atomicidade) e adição de referência a [C01-P01_decisions.md](C01-P01_decisions.md). Trechos que prometiam "rollback integral do percurso" foram corrigidos para "rollback da versão em execução". Nenhuma alteração de código/testes.
 
 **Critério de conclusão:** cada comportamento necessário às correções tem contrato verificável; nenhuma recomendação aparece como aprovação já obtida. Mudanças que dependem de escolha do consumidor são apresentadas concretamente antes de sua implementação.
 
@@ -139,9 +141,9 @@ Depende de C01–C06.
 
 Sequência: C01 → C02 → C03 → C05 → C06 → C07 → E10 → conclusão de E09. C04 pode avançar após D04 e converge em C05. A divisão representa frentes de trabalho; não exige agentes paralelos nem publicação por etapa.
 
-| Entrega | Resultado                                                       | Estado   | Evidência de conclusão |
-| ------- | --------------------------------------------------------------- | -------- | ---------------------- |
-| C01     | Contratos e impactos decididos                                  | Pendente | —                      |
+| Entrega | Resultado                                                       | Estado     | Evidência de conclusão |
+| ------- | --------------------------------------------------------------- | ---------- | ---------------------- |
+| C01     | Contratos e impactos decididos                                  | Concluída  | [C01-P01_decisions.md](C01-P01_decisions.md); reconciliado em 0001/0002/E08/E09 2026-10-20 |
 | C02     | Estado de migração e ciclos corretos                            | Pendente | —                      |
 | C03     | Preparação, atomicidade e falhas coerentes                      | Pendente | —                      |
 | C04     | Recursos e erros de leitura corrigidos                          | Pendente | —                      |
