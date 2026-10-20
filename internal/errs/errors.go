@@ -57,7 +57,74 @@ var (
 	// instead of a file, or a blank file. It wraps fs.ErrNotExist when the
 	// path does not exist.
 	ErrFileNotFound = errors.New("krios: embedded SQL file not found or invalid")
+
+	// ErrPartialMigration indicates that a migration run cannot proceed
+	// because the history holds an in_progress or failed record, or because a
+	// database without history already has managed objects. It is never
+	// continued automatically; the consumer must resolve it explicitly. Use
+	// errors.As with *PartialMigrationError for the structured context.
+	ErrPartialMigration = errors.New("krios: partial migration state blocks execution")
+
+	// ErrMigrationsNotImplemented indicates that migration preparation
+	// succeeded and produced a plan, but applying the plan is not available
+	// yet. It marks the boundary between E08-P02 (preparation) and E08-P03
+	// (execution).
+	ErrMigrationsNotImplemented = errors.New("krios: migration execution is not implemented yet")
 )
+
+// PartialMigrationError carries the context of a blocked migration run. It
+// satisfies errors.As and wraps ErrPartialMigration through errors.Is. When it
+// wraps an underlying cause, Unwrap preserves it.
+type PartialMigrationError struct {
+	// Direction is the affected direction: "up" or "down".
+	Direction string
+
+	// TargetVersion is the desired version of the blocked run.
+	TargetVersion int
+
+	// LastVersion is the last successfully applied version.
+	LastVersion int
+
+	// LastFile is the file of the partial record, when known.
+	LastFile string
+
+	// Status is the recorded state: "in_progress" or "failed".
+	Status string
+
+	// Message describes the block.
+	Message string
+
+	cause error
+}
+
+// Error renders the message with the structured context.
+func (e *PartialMigrationError) Error() string {
+	return fmt.Sprintf("%s: %s (direction %s, target %d, last version %d, file %q, status %q)",
+		ErrPartialMigration, e.Message, e.Direction, e.TargetVersion, e.LastVersion, e.LastFile, e.Status)
+}
+
+// Unwrap exposes ErrPartialMigration and any wrapped cause to errors.Is.
+func (e *PartialMigrationError) Unwrap() []error {
+	if e.cause != nil {
+		return []error{ErrPartialMigration, e.cause}
+	}
+
+	return []error{ErrPartialMigration}
+}
+
+// NewPartialMigrationError builds a PartialMigrationError. When cause is
+// non-nil it is preserved for errors.Is/errors.As.
+func NewPartialMigrationError(direction string, targetVersion, lastVersion int, lastFile, status, message string, cause error) error {
+	return &PartialMigrationError{
+		Direction:     direction,
+		TargetVersion: targetVersion,
+		LastVersion:   lastVersion,
+		LastFile:      lastFile,
+		Status:        status,
+		Message:       message,
+		cause:         cause,
+	}
+}
 
 // NormalizeTxError maps the native sql.ErrTxDone to ErrTxDone, preserving the
 // original cause for errors.Is/errors.As. Other errors pass through unchanged.

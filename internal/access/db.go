@@ -15,6 +15,7 @@ import (
 	"github.com/mineot/krios/internal/entity"
 	"github.com/mineot/krios/internal/errs"
 	"github.com/mineot/krios/internal/execute"
+	"github.com/mineot/krios/internal/migrate"
 	"github.com/mineot/krios/internal/query"
 	"github.com/mineot/krios/internal/result"
 	"github.com/mineot/krios/internal/scan"
@@ -40,6 +41,12 @@ var (
 type DB struct {
 	sqlDB   *sql.DB
 	dialect dialect.Dialect
+
+	// migrations is the validated migration configuration retained from Open
+	// so that RunMigrations needs no argument. Only this subset of the
+	// configuration is kept; the connection configuration is not retained
+	// (E02-P01), which is a deliberate exception scoped to migrations.
+	migrations *config.MigrationsConfig
 
 	mu     sync.Mutex
 	closed bool
@@ -105,7 +112,7 @@ func Open(ctx context.Context, cfg config.Config) (*DB, error) {
 		return nil, fmt.Errorf("krios: open: %w", err)
 	}
 
-	return &DB{sqlDB: sqlDB, dialect: d}, nil
+	return &DB{sqlDB: sqlDB, dialect: d, migrations: cfg.Migrations}, nil
 }
 
 // Close releases the resources associated with the access. It is idempotent:
@@ -216,4 +223,36 @@ func (db *DB) Delete(ent *entity.Entity) *write.Delete {
 // parameters bound separately; DB guards (ErrClosed) apply unchanged.
 func (db *DB) File(f *sqlfile.SQLFile) *sqlfile.File {
 	return sqlfile.NewFile(db, f)
+}
+
+// Migrations returns the migration configuration retained from Open, or nil
+// when migrations were not configured. It is provided so callers can inspect
+// the same configuration the access was opened with.
+func (db *DB) Migrations() *config.MigrationsConfig {
+	return db.migrations
+}
+
+// RunMigrations prepares the migrations configured in Open and returns the
+// ordered plan. Applying the plan is not implemented yet: when a plan has
+// steps, RunMigrations returns ErrMigrationsNotImplemented. When no migration
+// is needed it returns a nil error. The DB guards (ErrClosed) apply unchanged.
+//
+// Preparation is pure and reports every configuration, association, history
+// and atomicity problem before any migration statement would run (E08-P02).
+func (db *DB) RunMigrations(ctx context.Context) (*migrate.Plan, error) {
+	if err := db.ensureOpen(); err != nil {
+		return nil, err
+	}
+
+	plan, err := migrate.Prepare(ctx, db, db.migrations, db.dialect)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(plan.Steps) > 0 {
+		return plan, fmt.Errorf("%w: %d step(s) prepared", errs.ErrMigrationsNotImplemented, len(plan.Steps))
+	}
+
+	return plan, nil
 }

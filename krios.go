@@ -7,7 +7,9 @@
 // ordering and limit/offset pagination, chained INSERT/UPDATE/DELETE with
 // the value policy, mandatory filters and per-database RETURNING support, and
 // execution of consumer-embedded SQL files (NewSQLFile with DB.File or
-// Tx.File) are implemented; migrations are not implemented yet.
+// Tx.File) and the preparation of versioned migrations (RunMigrations, which
+// loads resources, inspects history and builds the ordered plan) are
+// implemented; applying a migration plan is not implemented yet.
 //
 // Drivers are chosen and imported by the consumer; Krios does not import them.
 package krios
@@ -20,6 +22,7 @@ import (
 	"github.com/mineot/krios/internal/config"
 	"github.com/mineot/krios/internal/entity"
 	"github.com/mineot/krios/internal/errs"
+	"github.com/mineot/krios/internal/migrate"
 	"github.com/mineot/krios/internal/query"
 	"github.com/mineot/krios/internal/result"
 	"github.com/mineot/krios/internal/scan"
@@ -86,6 +89,15 @@ type (
 	SQLFile = sqlfile.SQLFile
 	// File is the runner created by DB.File or Tx.File that executes a SQLFile.
 	File = sqlfile.File
+	// MigrationVersion associates a schema version with its up and down files.
+	MigrationVersion = config.MigrationVersion
+	// MigrationPlan is the ordered set of steps prepared by RunMigrations.
+	MigrationPlan = migrate.Plan
+	// MigrationStep is one file to execute within a version and direction.
+	MigrationStep = migrate.Step
+	// PartialMigrationError carries the context of a blocked migration run.
+	// Use errors.As to recover it from an ErrPartialMigration.
+	PartialMigrationError = errs.PartialMigrationError
 )
 
 const (
@@ -131,6 +143,13 @@ var (
 	// loaded (nil file system, invalid or missing path, directory or blank
 	// file).
 	ErrFileNotFound = errs.ErrFileNotFound
+	// ErrPartialMigration indicates that a migration run is blocked by an
+	// in_progress or failed record, or by managed objects in a database
+	// without history. Use errors.As with *PartialMigrationError for context.
+	ErrPartialMigration = errs.ErrPartialMigration
+	// ErrMigrationsNotImplemented indicates that migration preparation
+	// succeeded but applying the plan is not available yet (E08-P03).
+	ErrMigrationsNotImplemented = errs.ErrMigrationsNotImplemented
 )
 
 // Open validates cfg, opens database access and verifies connectivity.

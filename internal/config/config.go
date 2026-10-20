@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"io/fs"
 	"time"
 
 	"github.com/mineot/krios/internal/errs"
@@ -55,9 +56,41 @@ type PostgresConfig struct {
 	Port int
 }
 
-// MigrationsConfig is reserved for the requested version and the association
-// of migration files. Its contents will be defined in E08-P01.
-type MigrationsConfig struct{}
+// MigrationVersion associates a schema version with the embedded files that
+// implement it in each direction (E08-P01 §4). The numeric prefix of a file
+// name is only a naming convention: the version and order come from this
+// declaration.
+type MigrationVersion struct {
+	// Version is the version number. Required, unique and > 0.
+	Version int
+
+	// Up lists the up files in execution order.
+	Up []string
+
+	// Down lists the down files in execution order.
+	Down []string
+}
+
+// MigrationsConfig configures versioned migrations. It is filled in code and
+// optional: when Config.Migrations is nil the library never loads or runs
+// migrations. The versioned files are consumer-embedded (go:embed) and read
+// through NewSQLFile (E08-P01 §4).
+type MigrationsConfig struct {
+	// FS receives the consumer's embedded resources (for example an embed.FS).
+	FS fs.FS
+
+	// TargetVersion is the desired version. Always explicit; 0 requests
+	// reverting all applied migrations.
+	TargetVersion int
+
+	// Versions associates versions with files. The declared order defines the
+	// sequence between versions.
+	Versions []MigrationVersion
+
+	// ManagedObjects lists the objects (tables) under Krios management, used
+	// to verify a database without history (E08-P01 §6).
+	ManagedObjects []string
+}
 
 // Config describes the database access. It is filled in code by the consumer
 // and passed to Open, with no external configuration file required.
@@ -145,6 +178,79 @@ func (cfg Config) Validate() error {
 
 	if cfg.Timeout < 0 {
 		return fmt.Errorf("%w: timeout must not be negative", errs.ErrInvalidConfig)
+	}
+
+	if cfg.Migrations != nil {
+		if err := cfg.Migrations.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Validate reports whether the migration configuration is complete and
+// consistent. Failures wrap ErrInvalidConfig. The checks are structural: the
+// embedded files themselves are loaded by the migration preparation layer.
+func (m MigrationsConfig) Validate() error {
+	if m.FS == nil {
+		return fmt.Errorf("%w: migrations require an FS with embedded resources", errs.ErrInvalidConfig)
+	}
+
+	if len(m.ManagedObjects) == 0 {
+		return fmt.Errorf("%w: migrations require at least one managed object", errs.ErrInvalidConfig)
+	}
+
+	if len(m.Versions) == 0 {
+		return fmt.Errorf("%w: migrations require at least one version", errs.ErrInvalidConfig)
+	}
+
+	seen := make(map[int]bool, len(m.Versions))
+	previous := -1
+
+	for _, v := range m.Versions {
+		if v.Version <= 0 {
+			return fmt.Errorf("%w: migration version must be greater than zero", errs.ErrInvalidConfig)
+		}
+
+		if seen[v.Version] {
+			return fmt.Errorf("%w: duplicate migration version %d", errs.ErrInvalidConfig, v.Version)
+		}
+
+		if v.Version <= previous {
+			return fmt.Errorf("%w: migration versions must be declared in strictly increasing order", errs.ErrInvalidConfig)
+		}
+
+		if err := checkDirection("up", v.Up); err != nil {
+			return err
+		}
+
+		if err := checkDirection("down", v.Down); err != nil {
+			return err
+		}
+
+		seen[v.Version] = true
+		previous = v.Version
+	}
+
+	return nil
+}
+
+// checkDirection rejects blank and duplicated file names within one direction
+// of a version.
+func checkDirection(direction string, files []string) error {
+	seen := make(map[string]bool, len(files))
+
+	for _, name := range files {
+		if name == "" {
+			return fmt.Errorf("%w: %s migration contains a blank file name", errs.ErrInvalidConfig, direction)
+		}
+
+		if seen[name] {
+			return fmt.Errorf("%w: duplicate %s migration file %q", errs.ErrInvalidConfig, direction, name)
+		}
+
+		seen[name] = true
 	}
 
 	return nil
