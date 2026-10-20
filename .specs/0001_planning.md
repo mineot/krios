@@ -279,18 +279,23 @@ A intenção já definida é confirmar ou reverter em conjunto operações da me
 ### 6.4. Migrações
 
 - Como representar em `krios.Config` a versão desejada e a associação de arquivos a cada versão, distinguindo versão ausente de versão `0`?
+  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md) §4/§8: `MigrationsConfig{FS, TargetVersion, Versions, ManagedObjects}` com `MigrationVersion{Version, Up, Down}`, associação explícita por versão (prefixo numérico é só convenção); `TargetVersion` é sempre explícita e `0` solicita reversão total; ausência da config é o único "não configurado", nunca interpretado como reversão._
 - Qual será o papel do prefixo numérico dos arquivos diante dessa associação? Como tratar divergências, arquivos ausentes ou duplicados e pares `up`/`down` incompletos?
+  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md) §5: versão e ordem vêm da configuração, não do nome; ordem declarada divergente da numérica ou versão duplicada é `ErrInvalidConfig`; arquivo ausente/branco é `ErrFileNotFound`; nome repetido e direção necessária ausente ao percurso são `ErrInvalidQuery`._
 - Em qual ordem os arquivos de uma versão serão executados no avanço e na reversão?
+  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md) §5: `Up` e `Down` na ordem declarada; a biblioteca não reordena nem inverte._
 - A transação abrangerá um arquivo, uma versão ou todo o percurso até a versão desejada?
   _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): escopo máximo viável — por versão em PostgreSQL/SQLite, por arquivo no MySQL quando 100% transacional, sem transação quando contiver DDL com commit implícito._
 - Como agir quando o banco ou os comandos não permitirem rollback integral? Como registrar falha, impedir que uma aplicação parcial seja considerada concluída e permitir recuperação?
   _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): histórico com `status` (`in_progress`|`failed`|`applied`), bloqueio por `ErrPartialMigration`, nunca tentar reverter DDL já confirmado e recuperação guiada pelo consumidor._
 - Qual será a estrutura da tabela `migrations`, incluindo histórico, datas e registro da versão `0`?
-  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): `version`, `filename`, `direction`, `status`, `checksum`, `applied_at`, `error`, com chave única `(version, filename, direction)`; versão `0` continua sendo estado antes da primeira migração aplicada._
+  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): `version`, `filename`, `direction`, `status`, `checksum`, `applied_at`, `error`, com chave única `(version, filename, direction)`; versão `0` é o estado vazio da tabela (sem linha sentinela)._
 - Como delimitar o esquema gerenciado e quais objetos serão considerados na verificação de um banco sem histórico?
+  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md) §6: `ManagedObjects` lista os objetos sob gestão; sem introspecção genérica; banco sem histórico com objetos geridos presentes é erro, sem objetos geridos a versão atual é `0`._
 - Como `krios.Config` receberá ou referenciará os recursos incorporados pelo consumidor e como a biblioteca localizará os arquivos configurados?
+  _Resolvido em [E08-P01_decisions.md](E08-P01_decisions.md) §4: `FS fs.FS` recebe os recursos incorporados e os nomes em `Up`/`Down` são caminhos relativos ao `FS`, carregados por `krios.NewSQLFile` ([E07-P01_decisions.md](E07-P01_decisions.md))._
 
-O padrão de nomes, a associação de arquivos a versões por `krios.Config`, a execução explícita e a execução com escopo transacional máximo viável já foram registrados nos RF-04 e RF-05. A garantia efetiva de reversão depende do dialeto e das limitações descritas nesses requisitos; o contrato de capacidades transacionais está em [E08-P01_decisions.md](E08-P01_decisions.md). A interface completa dos dialetos foi resolvida em [E05-P01_decisions.md](E05-P01_decisions.md).
+O padrão de nomes, a associação de arquivos a versões por `krios.Config`, a execução explícita e a execução com escopo transacional máximo viável já foram registrados nos RF-04 e RF-05. As questões restantes desta seção foram resolvidas em [E08-P01_decisions.md](E08-P01_decisions.md) §4–§11: formato de `MigrationsConfig`, associação e ordem dos arquivos, pares `up`/`down`, esquema gerenciado por `ManagedObjects`, `RunMigrations(ctx)`, `ErrPartialMigration`, contrato de dialeto transacional e escopo transacional. A garantia efetiva de reversão depende do dialeto e das limitações descritas nesses requisitos. A interface completa dos dialetos foi resolvida em [E05-P01_decisions.md](E05-P01_decisions.md).
 
 ### 6.5. Consultas e paginação
 

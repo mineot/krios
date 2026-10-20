@@ -472,7 +472,7 @@ V11 não autoriza repetir automaticamente a escrita: confirmar a situação por 
 
 ### 4.1 Cenários de migrações — estado parcial (E08)
 
-Aplicam-se quando E08 estiver implementado; ver [E08-P01_decisions.md](E08-P01_decisions.md).
+Aplicam-se quando E08 estiver implementado; ver [E08-P01_decisions.md](E08-P01_decisions.md), que fixa `MigrationsConfig{FS, TargetVersion, Versions, ManagedObjects}` e `RunMigrations(ctx)`. As migrações são configuradas em código: `ManagedObjects` deve listar as tabelas geridas pelo cenário para a verificação de banco sem histórico (§6 de E08-P01).
 
 | ID  | Procedimento                                                                                                                                            | Resultado esperado                                                                                                                  |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -481,7 +481,8 @@ Aplicam-se quando E08 estiver implementado; ver [E08-P01_decisions.md](E08-P01_d
 | M03 | Após M01, inspecionar o banco                                                                                                                           | DDL já executado **não** revertido (sem rollback de commit implícito); estado real registrado como evidência                        |
 | M04 | Recuperar conforme política: concluir manualmente e marcar registro como `applied` (ou reverter manualmente e limpar registro); repetir `RunMigrations` | Execução segue da versão correta até a desejada                                                                                     |
 | M05 | PostgreSQL e SQLite: sequência com falha deliberada em arquivo                                                                                          | Rollback integral do percurso; nenhum registro `in_progress` remanescente; banco como antes da execução                             |
-| M06 | Estado `0` e ausência de versão desejada                                                                                                                | Reversão total apenas em versão `0` explícita; versão ausente retorna erro antes de executar                                        |
+| M06 | Estado `0` e versão desejada                                                                                                                            | `TargetVersion: 0` reverte tudo; configurar migrações sem `Migrations` (ou com `ManagedObjects` vazio) retorna erro antes de executar |
+| M07 | Banco sem histórico: declarar `ManagedObjects` inclui uma tabela existente; repetir com `ManagedObjects` apontando só para tabelas ausentes               | Com objeto gerido presente → erro antes de executar; sem nenhum objeto gerido presente → versão atual `0` e percursos normais       |
 
 ## 5. Registro de evidências
 
