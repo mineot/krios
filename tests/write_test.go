@@ -351,3 +351,222 @@ func (c checkedTitle) Validate() error {
 }
 
 func strptr(s string) *string { return &s }
+
+func TestInsertMultipleRowsAffected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := seedWriteDB(t)
+	ent, err := krios.EntityOf[writeAccount]()
+	if err != nil {
+		t.Fatalf("EntityOf() = %v", err)
+	}
+
+	for i := int64(1); i <= 3; i++ {
+		res, err := db.Insert(ent).SetValues(&writeAccount{ID: i, Name: "u"}).Exec(ctx)
+		if err != nil {
+			t.Fatalf("Insert.Exec() #%d = %v", i, err)
+		}
+		if n, ok := res.RowsAffected(); !ok || n != 1 {
+			t.Fatalf("Insert.RowsAffected() #%d = %d, %v; want 1, true", i, n, ok)
+		}
+	}
+	if n := countRows(t, db, "write_accounts"); n != 3 {
+		t.Fatalf("rows = %d, want 3", n)
+	}
+}
+
+func TestUpdateMultipleRowsAffected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := seedWriteDB(t)
+	ent, err := krios.EntityOf[writeAccount]()
+	if err != nil {
+		t.Fatalf("EntityOf() = %v", err)
+	}
+
+	for i := int64(1); i <= 3; i++ {
+		if _, err := db.Insert(ent).SetValues(&writeAccount{ID: i, Name: "old"}).Exec(ctx); err != nil {
+			t.Fatalf("seed Insert = %v", err)
+		}
+	}
+
+	res, err := db.Update(ent).
+		SetValues(&writeAccount{Name: "new"}).
+		Omit("id", "bio", "age").
+		Where(ent.Col("id").In(int64(1), int64(2), int64(3))).
+		Exec(ctx)
+	if err != nil {
+		t.Fatalf("Update.Exec() = %v", err)
+	}
+	if n, ok := res.RowsAffected(); !ok || n != 3 {
+		t.Fatalf("RowsAffected() = %d, %v; want 3, true", n, ok)
+	}
+}
+
+func TestDeleteMultipleRowsAffected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := seedWriteDB(t)
+	ent, err := krios.EntityOf[writeAccount]()
+	if err != nil {
+		t.Fatalf("EntityOf() = %v", err)
+	}
+
+	for i := int64(1); i <= 2; i++ {
+		if _, err := db.Insert(ent).SetValues(&writeAccount{ID: i, Name: "x"}).Exec(ctx); err != nil {
+			t.Fatalf("seed Insert = %v", err)
+		}
+	}
+
+	res, err := db.Delete(ent).Where(ent.Col("id").In(int64(1), int64(2))).Exec(ctx)
+	if err != nil {
+		t.Fatalf("Delete.Exec() = %v", err)
+	}
+	if n, ok := res.RowsAffected(); !ok || n != 2 {
+		t.Fatalf("RowsAffected() = %d, %v; want 2, true", n, ok)
+	}
+	if n := countRows(t, db, "write_accounts"); n != 0 {
+		t.Fatalf("rows = %d, want 0", n)
+	}
+}
+
+func TestInsertNilPointerWritesNull(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := seedWriteDB(t)
+	ent, err := krios.EntityOf[writeAccount]()
+	if err != nil {
+		t.Fatalf("EntityOf() = %v", err)
+	}
+
+	if _, err := db.Insert(ent).SetValues(&writeAccount{ID: 1, Name: "n", Bio: nil}).Exec(ctx); err != nil {
+		t.Fatalf("Insert.Exec() = %v", err)
+	}
+
+	var bio sql.NullString
+	if err := db.QueryRowContext(ctx, "SELECT bio FROM write_accounts WHERE id = 1").Scan(&bio); err != nil {
+		t.Fatalf("SELECT bio = %v", err)
+	}
+	if bio.Valid {
+		t.Errorf("bio = %+v, want NULL", bio)
+	}
+}
+
+func TestUpdateDoesNotUpdateNilPointerColumn(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := seedWriteDB(t)
+	ent, err := krios.EntityOf[writeAccount]()
+	if err != nil {
+		t.Fatalf("EntityOf() = %v", err)
+	}
+
+	if _, err := db.Insert(ent).SetValues(&writeAccount{ID: 1, Name: "a", Bio: strptr("keep")}).Exec(ctx); err != nil {
+		t.Fatalf("seed = %v", err)
+	}
+
+	if _, err := db.Update(ent).SetValues(&writeAccount{Name: "b", Bio: nil}).Omit("id", "age").Where(ent.Col("id").Eq(1)).Exec(ctx); err != nil {
+		t.Fatalf("Update.Exec() = %v", err)
+	}
+
+	var bio sql.NullString
+	if err := db.QueryRowContext(ctx, "SELECT bio FROM write_accounts WHERE id = 1").Scan(&bio); err != nil {
+		t.Fatalf("SELECT bio = %v", err)
+	}
+	if !bio.Valid || bio.String != "keep" {
+		t.Errorf("bio = %+v, want keep", bio)
+	}
+}
+
+func TestUpdateEmptyWhereIsRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := seedWriteDB(t)
+	ent, err := krios.EntityOf[writeAccount]()
+	if err != nil {
+		t.Fatalf("EntityOf() = %v", err)
+	}
+
+	_, err = db.Update(ent).SetValues(&writeAccount{Name: "x"}).Where().Exec(ctx)
+	if !errors.Is(err, krios.ErrInvalidQuery) {
+		t.Fatalf("Update.Where() empty = %v, want ErrInvalidQuery", err)
+	}
+}
+
+func TestDeleteEmptyWhereIsRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := seedWriteDB(t)
+	ent, err := krios.EntityOf[writeAccount]()
+	if err != nil {
+		t.Fatalf("EntityOf() = %v", err)
+	}
+
+	_, err = db.Delete(ent).Where().Exec(ctx)
+	if !errors.Is(err, krios.ErrInvalidQuery) {
+		t.Fatalf("Delete.Where() empty = %v, want ErrInvalidQuery", err)
+	}
+}
+
+func TestReturningExecRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := seedWriteDB(t)
+	ent, err := krios.EntityOf[writeAccount]()
+	if err != nil {
+		t.Fatalf("EntityOf() = %v", err)
+	}
+
+	_, err = db.Insert(ent).SetValues(&writeAccount{ID: 1, Name: "x"}).Returning().Exec(ctx)
+	if !errors.Is(err, krios.ErrInvalidQuery) {
+		t.Fatalf("Insert.Exec() with Returning = %v, want ErrInvalidQuery", err)
+	}
+
+	_, err = db.Update(ent).SetValues(&writeAccount{Name: "x"}).Omit("id", "bio", "age").Where(ent.Col("id").Eq(1)).Returning().Exec(ctx)
+	if !errors.Is(err, krios.ErrInvalidQuery) {
+		t.Fatalf("Update.Exec() with Returning = %v, want ErrInvalidQuery", err)
+	}
+
+	_, err = db.Delete(ent).Where(ent.Col("id").Eq(1)).Returning().Exec(ctx)
+	if !errors.Is(err, krios.ErrInvalidQuery) {
+		t.Fatalf("Delete.Exec() with Returning = %v, want ErrInvalidQuery", err)
+	}
+}
+
+func TestAllOneWithoutReturningRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := seedWriteDB(t)
+	ent, err := krios.EntityOf[writeAccount]()
+	if err != nil {
+		t.Fatalf("EntityOf() = %v", err)
+	}
+
+	if _, err := db.Insert(ent).SetValues(&writeAccount{ID: 1, Name: "x"}).Exec(ctx); err != nil {
+		t.Fatalf("seed = %v", err)
+	}
+
+	err = db.Update(ent).SetValues(&writeAccount{Name: "y"}).Omit("id", "bio", "age").Where(ent.Col("id").Eq(1)).All(ctx, &[]writeAccount{})
+	if !errors.Is(err, krios.ErrInvalidQuery) {
+		t.Fatalf("Update.All() without Returning = %v, want ErrInvalidQuery", err)
+	}
+
+	err = db.Delete(ent).Where(ent.Col("id").Eq(1)).All(ctx, &[]writeAccount{})
+	if !errors.Is(err, krios.ErrInvalidQuery) {
+		t.Fatalf("Delete.All() without Returning = %v, want ErrInvalidQuery", err)
+	}
+
+	err = db.Insert(ent).SetValues(&writeAccount{Name: "z"}).One(ctx, &writeAccount{})
+	if !errors.Is(err, krios.ErrInvalidQuery) {
+		t.Fatalf("Insert.One() without Returning = %v, want ErrInvalidQuery", err)
+	}
+}
