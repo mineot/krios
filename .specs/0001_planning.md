@@ -205,7 +205,7 @@ No escopo inicial:
 - `UPDATE` deve receber valores associados aos nomes dos campos e exigir filtros com `Where`, podendo atingir várias linhas.
 - `DELETE` deve exigir filtros com `Where`, podendo atingir várias linhas.
 
-Os construtores devem partir da entidade derivada por reflexão de um struct Go e permitir encadeamento. A operação conceitual `SetValues` deve atribuir os valores para inserção e atualização a partir de um struct. O formato exato em Go e a política de campos `nil`/omitidos permanecem para E06-P01 (ver [0002_execution_plan.md](0002_execution_plan.md)). Operações de `UPDATE` ou `DELETE` sem `Where` devem ser rejeitadas antes da execução.
+Os construtores devem partir da entidade derivada por reflexão de um struct Go e permitir encadeamento. A operação conceitual `SetValues` deve atribuir os valores para inserção e atualização a partir de um struct. O formato exato em Go e a política de campos `nil`/omitidos permanecem para E06-P01 (ver [0002_execution_plan.md](0002_execution_plan.md)) — _resolvidos em [E06-P01_decisions.md](E06-P01_decisions.md)_. Operações de `UPDATE` ou `DELETE` sem `Where` devem ser rejeitadas antes da execução.
 
 Operações de escrita devem retornar informações sobre sua execução, incluindo a quantidade de linhas afetadas quando disponível.
 
@@ -257,7 +257,7 @@ Os tipos e assinaturas de execução e resultados foram resolvidos em [E03-P01_d
 - Qual será a interface dos dialetos e como cada dialeto será selecionado ou associado ao driver?
   _Parcialmente resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): contrato mínimo de capacidades transacionais para migrações (`SupportsTransactionalDDL`, `IsTransactionalStatement`) por dialeto, selecionado por `Config.Type`. Interface completa resolvida em [E05-P01_decisions.md](E05-P01_decisions.md): pacote `internal/dialect` com a interface `Dialect` (nome, marcador de parâmetro, aspas de identificador) e a `MigrationDialect` no mesmo tipo concreto; seleção por `Config.Type`, retenção do dialeto em `DB`/`Tx` e renderizador único compartilhado. Sem extensão pública de dialetos nesta versão._
 - Quais drivers e versões de MySQL e PostgreSQL serão usados na validação manual posterior? Quais capacidades serão garantidas por banco, especialmente retorno de campos e transações em migrações?
-  _Transações em migrações resolvidas em [E08-P01_decisions.md](E08-P01_decisions.md) (escopo condicional por dialeto); retorno de campos em escritas continua para E06-P01; drivers/versões de validação permanecem para E09._
+  _Transações em migrações resolvidas em [E08-P01_decisions.md](E08-P01_decisions.md) (escopo condicional por dialeto); retorno de campos em escritas resolvido em [E06-P01_decisions.md](E06-P01_decisions.md); drivers/versões de validação permanecem para E09._
 
 A responsabilidade de escolher e importar o driver já está definida como sendo do consumidor. Permanecem pendentes os dialetos e a evidência de integração real MySQL/PostgreSQL em E09, conforme o [roteiro manual](E09_manual_validation.md).
 
@@ -309,11 +309,11 @@ O encadeamento, a seleção de todas as colunas mapeadas por padrão, sua ordem 
 
 ### 6.6. Escritas
 
-- Qual será o formato de `SetValues` em Go? _Parcialmente resolvido em [E04-P01_decisions.md](E04-P01_decisions.md): a entrada por struct/ponteiro é o modelo adotado; a assinatura exata fica para E06-P01._
-- Como distinguir campo omitido, valor zero, `false` e `NULL`? Como representar explicitamente a intenção de gravar cada um deles? _Direção definida em [E04-P01_decisions.md](E04-P01_decisions.md) (ponteiro `nil` × tipo anulável não-`nil`); a política de escrita fica para E06-P01._
-- O que será considerado um `Where` válido para autorizar `UPDATE` e `DELETE`, inclusive diante de um grupo de condições vazio?
-- Quais informações serão retornadas pela execução e como indicar que a quantidade de linhas afetadas não está disponível?
-- Como solicitar campos gerados ou alterados, quais bancos oferecerão esse retorno e quais destinos receberão resultados de uma ou de múltiplas linhas?
+- Qual será o formato de `SetValues` em Go? _Parcialmente resolvido em [E04-P01_decisions.md](E04-P01_decisions.md): a entrada por struct/ponteiro é o modelo adotado; a assinatura exata fica para E06-P01._ _Resolvido em [E06-P01_decisions.md](E06-P01_decisions.md): `SetValues(record any)` em `*Insert`/`*Update`, recebendo `T`/`*T` de uma linha, com erro de tipo memorizado no builder._
+- Como distinguir campo omitido, valor zero, `false` e `NULL`? Como representar explicitamente a intenção de gravar cada um deles? _Direção definida em [E04-P01_decisions.md](E04-P01_decisions.md) (ponteiro `nil` × tipo anulável não-`nil`); a política de escrita fica para E06-P01._ _Resolvida em [E06-P01_decisions.md](E06-P01_decisions.md): não-anulável grava sempre (inclusive zero/`false`); `*T nil` grava `NULL` em `INSERT` e não atualiza em `UPDATE`; `sql.Null*{Valid:false}` grava `NULL`; default do banco só por `Omit("coluna")` explícito._
+- O que será considerado um `Where` válido para autorizar `UPDATE` e `DELETE`, inclusive diante de um grupo de condições vazio? _Resolvido em [E06-P01_decisions.md](E06-P01_decisions.md): pelo menos uma condição; ausente ou vazio é `ErrInvalidQuery` antes de executar, sem atalho para atualizar/excluir tudo._
+- Quais informações serão retornadas pela execução e como indicar que a quantidade de linhas afetadas não está disponível? _Resolvido em [E06-P01_decisions.md](E06-P01_decisions.md): `krios.Result` de E03, com `RowsAffected` garantido nos três bancos e ausência comunicada por flag `false` (matriz por banco na §6; `LastInsertId` indisponível no PostgreSQL)._
+- Como solicitar campos gerados ou alterados, quais bancos oferecerão esse retorno e quais destinos receberão resultados de uma ou de múltiplas linhas? _Resolvido em [E06-P01_decisions.md](E06-P01_decisions.md): `Returning()` explícito; SQLite (≥3.35) e PostgreSQL sim, MySQL não (erro antes de executar, capacidade por `ReturningDialect`); destino `*T` via `One` no `INSERT` e `*[]T` via `All` em `UPDATE`/`DELETE`, com todas as colunas da entidade._
 
 A exigência de `Where` em atualizações e exclusões e o retorno de campos apenas quando solicitado e suportado já estão definidos no RF-07.
 

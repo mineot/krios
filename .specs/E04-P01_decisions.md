@@ -42,7 +42,7 @@ type User struct {
 
 - `NULL` é representado por ponteiro (`*T`) ou por tipos `sql.Null*`. Um `NULL` lido em campo não anulável é erro de conversão.
 - **Coluna não selecionada:** o campo correspondente permanece inalterado no destino; não é zerado.
-- **Campo omitido × valor zero × `NULL`:** a distinção é habilitada pelo modelo. Ponteiro `nil` representa ausência; ponteiro não-`nil` para valor zero representa o zero explícito. A regra exata de escrita (omitir e usar default do banco, gravar `NULL` ou gravar zero) é fixada em E06-P01; a convenção recomendada é: em `INSERT`, `nil` → `NULL` (ou omissão com marcador a definir); em `UPDATE`, campo `nil` não é atualizado e um tipo anulável não-`nil` grava o valor, inclusive `NULL`.
+- **Campo omitido × valor zero × `NULL`:** a distinção é habilitada pelo modelo. Ponteiro `nil` representa ausência; ponteiro não-`nil` para valor zero representa o zero explícito. A regra exata de escrita (omitir e usar default do banco, gravar `NULL` ou gravar zero) é fixada em E06-P01; a convenção recomendada é: em `INSERT`, `nil` → `NULL` (ou omissão com marcador a definir); em `UPDATE`, campo `nil` não é atualizado e um tipo anulável não-`nil` grava o valor, inclusive `NULL`. _Resolvida em [E06-P01_decisions.md](E06-P01_decisions.md) §4: `INSERT` `nil` → `NULL`, `UPDATE` `nil` → não atualiza, e o default do banco somente por `Omit("coluna")` explícito._
 - Conversões incompatíveis retornam erro associado à coluna, preservando a causa para `errors.Is`/`errors.As`.
 
 ## 4. Representação de resultados
@@ -83,7 +83,7 @@ type User struct {
 
 - Sintaxe definitiva das tags (tabela, esquema, alias, chave primária, associações, política de nome sem tag).
 - Regras de correspondência e conversão de tipos e o erro detalhado por coluna.
-- Representação e política de escrita de `NULL`/omitido (E06-P01).
+- Representação e política de escrita de `NULL`/omitido (E06-P01). _Resolvida em [E06-P01_decisions.md](E06-P01_decisions.md) §4._
 - Junções e associações (E04-P02/E05).
 - Metadados de colunas (`Columns`/`ColumnTypes`) para SQL arbitrário e aliases (E04/E07).
 - Momento de execução da validação e da formatação (E04-P03).

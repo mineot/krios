@@ -17,8 +17,8 @@ Adiado com destino definido:
 | `krios.Paginate`, total e estatísticas                                               | E05-P03                                            |
 | Agregações (`Count`, `Sum`, `Max`, `Min`), `OrderBy`, `GroupBy`, `Distinct`, `Limit` | E05-P03 (o nó de função do AST, §4, já os reserva) |
 | `RIGHT`/`FULL` join, alias e esquema como superfície pública                         | Extensão futura registrada (§7)                    |
-| `SetValues`, validade de `Where` vazio em `UPDATE`/`DELETE`, retornos de escrita     | E06-P01                                            |
-| Capacidade de dialeto para retornos (`RETURNING`)                                    | E06-P01, sobre o mesmo tipo concreto (§3)          |
+| `SetValues`, validade de `Where` vazio em `UPDATE`/`DELETE`, retornos de escrita     | E06-P01 — resolvido em [E06-P01_decisions.md](E06-P01_decisions.md) |
+| Capacidade de dialeto para retornos (`RETURNING`)                                    | E06-P01, sobre o mesmo tipo concreto (§3) — resolvido como `ReturningDialect` em [E06-P01_decisions.md](E06-P01_decisions.md) |
 | `ColumnTypes`                                                                        | E07                                                |
 
 As expressões e `Where` decididas aqui servem também aos construtores de escrita de E06, que reutilizarão os mesmos predicados.
@@ -65,7 +65,7 @@ A distinção coluna × valor é resolvida por **construtores ancorados na entid
 
 - `Where(c ...Condition)` combina as condições com `AND`; encadear várias chamadas de `Where` acumula com `AND`.
 - Grupos aninhados por `krios.And(c ...Condition)` e `krios.Or(c ...Condition)`, aceitando qualquer condição, inclusive outros grupos. `And`/`Or` sem argumentos é erro em `Build()` (`ErrInvalidQuery`).
-- `Where` sem condições não produz cláusula `WHERE` (consulta sem filtro). A validade de `Where` vazio para autorizar `UPDATE`/`DELETE` permanece em E06-P01.
+- `Where` sem condições não produz cláusula `WHERE` (consulta sem filtro). A validade de `Where` vazio para autorizar `UPDATE`/`DELETE` permanece em E06-P01. _Resolvida em [E06-P01_decisions.md](E06-P01_decisions.md) §5: em `UPDATE`/`DELETE` pelo menos uma condição é exigida; ausente ou vazio é erro antes de executar._
 - Parâmetros de `ON` (junções) antecede os de `WHERE` na lista de argumentos, seguindo a ordem textual.
 
 ## 7. Junções
@@ -139,7 +139,7 @@ Resolvidos nesta entrega:
 - [x] Tipos de junção, operadores e modos de busca textual (§6.5; agregações em E05-P03).
 - [x] Fronteira construção × execução e vínculo do construtor com conexão/transação (§6.3 e pendência de [E04-P01_decisions.md](E04-P01_decisions.md) §7): receptor `db.Select(ent)`/`tx.Select(ent)`.
 
-Permanecem em outras entregas: `SetValues` e escritas (E06-P01); retorno de campos e `RETURNING` (E06-P01); alias/esquema públicos, `RIGHT`/`FULL` join e self-join (extensão futura); SQL incorporado (E07); implementação das migrações sobre o dialeto (E08-P02/P03). Agregações, `DISTINCT`/`GROUP BY`/`ORDER BY`, `LIMIT`/`OFFSET` e `krios.Paginate` foram resolvidos em [E05-P03_decisions.md](E05-P03_decisions.md).
+Permanecem em outras entregas: `SetValues` e escritas (E06-P01 — resolvidos em [E06-P01_decisions.md](E06-P01_decisions.md)); retorno de campos e `RETURNING` (E06-P01 — resolvido em [E06-P01_decisions.md](E06-P01_decisions.md)); alias/esquema públicos, `RIGHT`/`FULL` join e self-join (extensão futura); SQL incorporado (E07); implementação das migrações sobre o dialeto (E08-P02/P03). Agregações, `DISTINCT`/`GROUP BY`/`ORDER BY`, `LIMIT`/`OFFSET` e `krios.Paginate` foram resolvidos em [E05-P03_decisions.md](E05-P03_decisions.md).
 
 ## 12. Referências
 
