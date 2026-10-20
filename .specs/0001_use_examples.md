@@ -1,30 +1,31 @@
 # Exemplos de uso — KriosTasks
 
 Este documento mostra como fica o código de um projeto consumidor do Krios,
-com tudo o que já foi implementado nas entregas **E01–E04**:
+com tudo o que já foi implementado nas entregas **E01–E05**:
 
 | Entrega | Escopo                       | O que os exemplos cobrem                                                                                       |
 | ------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | E02     | Configuração e ciclo de vida | `krios.Config` dos 3 bancos, `Open`, `Close`, erros de abertura, timeout                                       |
 | E03     | Execução e transações        | SQL puro com parâmetros, `Result`, `Begin`/`Commit`/`Rollback`, commit bloqueado, `sql.ErrNoRows`, `ErrTxDone` |
 | E04     | Entidades e mapeamento       | tags `krios`, `EntityOf`, `Row.Scan`, `Rows.All`, NULL, `Validator`/`Formatter`                                |
+| E05     | Consultas encadeadas         | `Select`/`Only`/`Where`/`Join`, agregações, `Count`, `Paginate`, leituras mapeadas                             |
 
 As entregas **E06–E08** (builder de escrita, SQL embutido e migrações) ainda
-não existem. A E05 já oferece o builder de leitura, mas este projeto exemplo
-mantém as consultas SQL de E04 e mostra a extensão no item 12. Quando as
-demais forem implementadas, os pontos de extensão aparecem marcados ao longo
-do texto.
+não existem. As consultas de leitura usam o builder de E05; o esquema e as
+escritas permanecem SQL do consumidor. Quando as demais forem implementadas,
+os pontos de extensão aparecem marcados ao longo do texto.
 
 O código completo e compilável vive no pacote **`examples/`** deste módulo —
 os trechos abaixo são extraídos dele:
 
 ```
 examples/
-├── doc.go      // visão geral do pacote
-├── config.go   // Config dos 3 bancos, OpenStore, classificação de erros
-├── models.go   // Status (Validator/Formatter), User, Task
-├── store.go    // Store: esquema, escritas, transações, leituras mapeadas
-└── run.go      // Run: narrativa completa passo a passo
+├── doc.go        // visão geral do pacote
+├── config.go     // Config dos 3 bancos, OpenStore, classificação de erros
+├── models.go     // Status (Validator/Formatter), User, Task
+├── store.go      // Store: esquema, escritas, transações, leituras encadeadas
+├── store_test.go // verificação SQLite das leituras de E05
+└── run.go        // Run: narrativa completa passo a passo
 ```
 
 ## 1. O projeto exemplo
@@ -458,18 +459,16 @@ func mustEntity[T any]() *krios.Entity {
 
 ### 7.1 Multi-linha: `Rows.All` casa colunas por **nome**
 
+A leitura usa o builder de E05: `Select(ent)` cria a consulta, `OrderBy`
+ordena e `All` mapeia o resultado por nome.
+
 ```go
 func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, name, email, bio, status FROM users ORDER BY id")
-	if err != nil {
-		return nil, err
-	}
 	var users []User
-	if err := rows.All(&users); err != nil {
-		return nil, err
-	}
-	return users, nil
+	err := s.db.Select(userEntity).
+		OrderBy(userEntity.Col("id").Asc()).
+		All(ctx, &users)
+	return users, err
 }
 ```
 
@@ -478,22 +477,25 @@ depois case-insensitive), descarta colunas extras, deixa zero os campos sem
 coluna, **sempre fecha** o iterador e só substitui o slice em caso de sucesso.
 Aliases e subconjuntos de colunas funcionam por esse motivo.
 
-### 7.2 Linha única: `Row.Scan` é **posicional**
+### 7.2 Linha única: `One` — mapeamento **posicional**
 
 ```go
 func (s *Store) UserByID(ctx context.Context, id int64) (User, error) {
 	var user User
-	err := s.db.QueryRowContext(ctx,
-		"SELECT id, name, email, bio, status FROM users WHERE id = ?", id,
-	).Scan(&user)
+	err := s.db.Select(userEntity).
+		Where(userEntity.Col("id").Eq(id)).
+		One(ctx, &user)
 	return user, err
 }
 ```
 
-Com destino `*T` struct (que não implementa `sql.Scanner`), o resultset deve
-seguir a ordem de declaração dos campos. Tipos que implementam `sql.Scanner`
+`One` executa e faz `Scan` de um único registro esperado. Com destino `*T`
+struct (que não implementa `sql.Scanner`), o resultset deve seguir a ordem de
+declaração dos campos — por isso a seleção padrão do builder usa todas as
+colunas mapeadas nessa ordem. Tipos que implementam `sql.Scanner`
 (`time.Time`, `sql.Null*`) mantêm a semântica posicional e nunca são tratados
-como entidades. Falhas de conversão são contextualizadas preservando a causa:
+como entidades. `sql.ErrNoRows` é preservado; falhas de conversão são
+contextualizadas preservando a causa:
 
 ```
 krios: map users: sql: Scan error on column index 4, name "status": ...
@@ -547,7 +549,104 @@ vazio; o valor formatado é **só apresentação** — operações de banco semp
 usam o campo original; falha de `Format` casa com `krios.ErrFormat`; destino
 errado em `Validate`/`Format` casa com `krios.ErrInvalidEntity`.
 
-## 9. Erros sentinela — resumo
+## 9. Consultas encadeadas (E05)
+
+`DB.Select(ent)` e `Tx.Select(ent)` criam o construtor; a construção é pura e a
+execução usa o mesmo contrato e as mesmas proteções de E03. O projeto exemplo
+migrou as leituras de E04 para o builder e adicionou três consultas que
+exercitam junções, agregações e paginação.
+
+### 9.1 Contagem com filtros
+
+```go
+func (s *Store) CountOpenTasks(ctx context.Context, ownerID int64) (int64, error) {
+	return s.db.Select(taskEntity).
+		Where(
+			taskEntity.Col("owner_id").Eq(ownerID),
+			taskEntity.Col("done").Eq(false),
+		).
+		Count(ctx)
+}
+```
+
+`Count` conta por subconsulta (`SELECT COUNT(*) FROM (...) AS "krios_total"`),
+sem ordenação nem limite, então continua exato quando a consulta tem `DISTINCT`
+ou agrupamento.
+
+### 9.2 Junção `INNER` + filtros
+
+```go
+func (s *Store) ListOpenTasksByOwnerEmail(ctx context.Context, email string) ([]Task, error) {
+	var tasks []Task
+	err := s.db.Select(taskEntity).
+		Join(userEntity, krios.InnerJoin, userEntity.Col("id").Eq(taskEntity.Col("owner_id"))).
+		Where(
+			userEntity.Col("email").Eq(email),
+			taskEntity.Col("done").Eq(false),
+		).
+		OrderBy(taskEntity.Col("id").Asc()).
+		All(ctx, &tasks)
+	return tasks, err
+}
+```
+
+A entidade base é `tasks`; `users` participa só na junção e no filtro. Toda
+entidade citada precisa participar da consulta e a tabela não pode se repetir.
+
+### 9.3 Agregação com `LEFT JOIN` e modelo de leitura
+
+```go
+type UserTaskCount struct {
+	ID    int64  `krios:"id"`
+	Name  string `krios:"name"`
+	Tasks int64  `krios:"tasks"`
+}
+
+func (s *Store) ListUserTaskCounts(ctx context.Context) ([]UserTaskCount, error) {
+	var counts []UserTaskCount
+	err := s.db.Select(userEntity).
+		Join(taskEntity, krios.LeftJoin, taskEntity.Col("owner_id").Eq(userEntity.Col("id"))).
+		Fields(
+			userEntity.Col("id"),
+			userEntity.Col("name"),
+			taskEntity.Col("id").Count().As("tasks"),
+		).
+		GroupBy(userEntity.Col("id"), userEntity.Col("name")).
+		OrderBy(userEntity.Col("id").Asc()).
+		All(ctx, &counts)
+	return counts, err
+}
+```
+
+`Fields` usa expressões; o alias `"tasks"` casa com o campo pelo nome. O
+`LEFT JOIN` mantém usuários sem tarefas, cuja contagem é `0`.
+
+### 9.4 Paginação com estatísticas
+
+```go
+func (s *Store) ListUsersPage(ctx context.Context, limit, offset int) ([]User, krios.Paginate, error) {
+	var users []User
+	page, err := s.db.Select(userEntity).
+		OrderBy(userEntity.Col("id").Asc()).
+		Paginate(ctx, limit, offset, &users)
+	if err != nil {
+		return nil, krios.Paginate{}, err
+	}
+	return users, page, nil
+}
+```
+
+`Paginate` devolve `krios.Paginate{Total, Limit, Offset, Page, Pages, HasNext,
+HasPrev}`. `limit` deve ser maior que zero e `offset` não pode ser negativo
+(`ErrInvalidQuery`). Na `*DB` a contagem e a página são consultas
+independentes; dentro de uma `*Tx` compartilham a transação. `Paginate` não
+muta o construtor.
+
+As leituras são verificadas por `examples/store_test.go` (SQLite temporário),
+cobrindo filtros, contagem, junção, agrupamento e paginação. As decisões da API
+estão em [E05-P01](E05-P01_decisions.md) e [E05-P03](E05-P03_decisions.md).
+
+## 10. Erros sentinela — resumo
 
 Todos casam com `errors.Is` e preservam a causa original:
 
@@ -564,12 +663,12 @@ Todos casam com `errors.Is` e preservam a causa original:
 | `sql.ErrNoRows`                         | `UserByID`/`UserByEmail` sem registro — preservado, não embrulhado                            |
 | `context.Canceled` / `DeadlineExceeded` | prazo estourado em `Open`/operações — preservados                                             |
 
-## 10. Fluxo completo — `Run`
+## 11. Fluxo completo — `Run`
 
 `Run` costura tudo: abre o banco, cria o esquema, demonstra validação,
-escrita em grupo com rollback, escrita simples, leituras mapeadas,
-transferência em transação e commit bloqueado — imprimindo cada passo
-(`examples/run.go`):
+escrita em grupo com rollback, escrita simples, leituras mapeadas com o builder,
+paginação, junções, contagem agrupada, transferência em transação e commit
+bloqueado — imprimindo cada passo (`examples/run.go`):
 
 ```go
 func Run(ctx context.Context, dbPath string) error {
@@ -613,7 +712,7 @@ func Run(ctx context.Context, dbPath string) error {
 	}
 	fmt.Printf("carol criada (id %d) com bio\n", carol.ID)
 
-	// E04: Rows.All maps by column name; Status.Format supplies the display text.
+	// E05: Rows.All maps by column name; Status.Format supplies the display text.
 	users, err := store.ListUsers(ctx)
 	if err != nil {
 		return err
@@ -627,7 +726,18 @@ func Run(ctx context.Context, dbPath string) error {
 			text["id"], text["name"], text["email"], text["status"], text["bio"])
 	}
 
-	// E04: single-row mapping; sql.ErrNoRows stays available for checks.
+	// E05: Paginate executes the count and one page, returning navigation data.
+	pageUsers, pageInfo, err := store.ListUsersPage(ctx, 1, 0)
+	if err != nil {
+		return fmt.Errorf("paginação: %w", err)
+	}
+	fmt.Printf("página %d/%d de %d usuários:", pageInfo.Page, pageInfo.Pages, pageInfo.Total)
+	for _, u := range pageUsers {
+		fmt.Printf(" %s", u.Name)
+	}
+	fmt.Println()
+
+	// E05: single-row mapping; sql.ErrNoRows stays available for checks.
 	one, err := store.UserByID(ctx, alice.ID)
 	if err != nil {
 		return err
@@ -638,7 +748,7 @@ func Run(ctx context.Context, dbPath string) error {
 	}
 	fmt.Println("  id 999 ausente: true")
 
-	// E03: the transfer commits as one unit and reports the affected rows.
+	// E05: the transfer commits as one unit and reports the affected rows.
 	moved, err := store.TransferTasks(ctx, alice.ID, carol.ID)
 	if err != nil {
 		return fmt.Errorf("transferência: %w", err)
@@ -648,6 +758,22 @@ func Run(ctx context.Context, dbPath string) error {
 		return err
 	}
 	fmt.Println("transferência: movidas", moved, "tarefas; alice ainda tem", remaining)
+
+	// E05: an INNER JOIN finds open tasks by owner email; the LEFT JOIN count
+	// keeps users without tasks, so alice appears with zero after the transfer.
+	carolOpen, err := store.ListOpenTasksByOwnerEmail(ctx, carol.Email)
+	if err != nil {
+		return fmt.Errorf("join de tarefas: %w", err)
+	}
+	fmt.Println("tarefas abertas de carol via join:", len(carolOpen))
+
+	counts, err := store.ListUserTaskCounts(ctx)
+	if err != nil {
+		return fmt.Errorf("contagem agrupada: %w", err)
+	}
+	for _, row := range counts {
+		fmt.Printf("  %s: %d tarefa(s)\n", row.Name, row.Tasks)
+	}
 
 	// E03: the failed duplicate insert poisons the commit; the first insert of
 	// the same group is discarded together with it.
@@ -677,9 +803,13 @@ grupo de bob revertido: true
 carol criada (id 2) com bio
   usuário 1: alice <alice@exemplo.dev> status=ACTIVE bio=""
   usuário 2: carol <carol@exemplo.dev> status=INACTIVE bio="leitora assídua"
+página 1/2 de 2 usuários: alice
 UserByID: alice active
   id 999 ausente: true
 transferência: movidas 2 tarefas; alice ainda tem 0
+tarefas abertas de carol via join: 2
+  alice: 0 tarefa(s)
+  carol: 2 tarefa(s)
 commit bloqueado: true
   ghost ausente após o commit bloqueado
 execução concluída
@@ -689,7 +819,7 @@ Observe o contraste didático: `PresentUser` mostra `status=ACTIVE`
 (formatação), `UserByID` imprime `active` (valor original), e `bio=""` de
 alice versus `bio="leitora assídua"` de carol evidencia o NULL via ponteiro.
 
-## 11. Como executar e verificar
+## 12. Como executar e verificar
 
 O pacote `examples` é biblioteca: o consumidor chama `Run` do próprio
 `main` (substituindo o caminho do arquivo):
@@ -709,12 +839,10 @@ make check                       # fmt + build + vet + test (inclui ./examples)
 go test -run '^Example' -v ./tests   # exemplos executáveis das garantias de E03/E04
 ```
 
-## 12. Próximos passos (E05–E08)
+## 13. Próximos passos (E06–E08)
 
-- **E05 — disponível.** `ListUsers`/`CountOpenTasks` podem migrar de SQL manual
-  para o builder encadeado com filtros, joins, agregações e paginação
-  (`krios.Paginate` com total); a API está descrita no README e coberta por
-  testes.
+- **E05 — usado pelo projeto.** As leituras usam o builder encadeado com
+  filtros, joins, agregações e paginação (`krios.Paginate` com total).
 - **E06** — `CreateUser`/`CreateTask` passam ao builder de escrita, com
   `Where` obrigatório em UPDATE/DELETE e integração automática com o motor de
   validação já usado em `ValidateUsers`.

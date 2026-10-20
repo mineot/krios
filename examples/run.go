@@ -11,7 +11,7 @@ import (
 
 // Run executes the KriosTasks narrative against the SQLite file at dbPath and
 // prints each step. Every scenario isolates one capability of the deliveries
-// implemented so far (E01–E04) and reports the errors a consumer is expected
+// implemented so far (E01–E05) and reports the errors a consumer is expected
 // to handle. Use a fresh dbPath between runs for reproducible output.
 func Run(ctx context.Context, dbPath string) error {
 	store, err := OpenStore(ctx, SQLiteConfig(dbPath))
@@ -68,6 +68,17 @@ func Run(ctx context.Context, dbPath string) error {
 			text["id"], text["name"], text["email"], text["status"], text["bio"])
 	}
 
+	// E05: Paginate executes the count and one page, returning navigation data.
+	pageUsers, pageInfo, err := store.ListUsersPage(ctx, 1, 0)
+	if err != nil {
+		return fmt.Errorf("paginação: %w", err)
+	}
+	fmt.Printf("página %d/%d de %d usuários:", pageInfo.Page, pageInfo.Pages, pageInfo.Total)
+	for _, u := range pageUsers {
+		fmt.Printf(" %s", u.Name)
+	}
+	fmt.Println()
+
 	// E04: single-row mapping; sql.ErrNoRows stays available for checks.
 	one, err := store.UserByID(ctx, alice.ID)
 	if err != nil {
@@ -89,6 +100,22 @@ func Run(ctx context.Context, dbPath string) error {
 		return err
 	}
 	fmt.Println("transferência: movidas", moved, "tarefas; alice ainda tem", remaining)
+
+	// E05: an INNER JOIN finds open tasks by owner email; the LEFT JOIN count
+	// keeps users without tasks, so alice appears with zero after the transfer.
+	carolOpen, err := store.ListOpenTasksByOwnerEmail(ctx, carol.Email)
+	if err != nil {
+		return fmt.Errorf("join de tarefas: %w", err)
+	}
+	fmt.Println("tarefas abertas de carol via join:", len(carolOpen))
+
+	counts, err := store.ListUserTaskCounts(ctx)
+	if err != nil {
+		return fmt.Errorf("contagem agrupada: %w", err)
+	}
+	for _, row := range counts {
+		fmt.Printf("  %s: %d tarefa(s)\n", row.Name, row.Tasks)
+	}
 
 	// E03: the failed duplicate insert poisons the commit; the first insert of
 	// the same group is discarded together with it.

@@ -141,8 +141,8 @@ func (s *Store) TransferTasks(ctx context.Context, from, to int64) (int64, error
 	}
 	defer tx.Rollback(ctx)
 
-	var exists int
-	err = tx.QueryRowContext(ctx, "SELECT 1 FROM users WHERE id = ?", to).Scan(&exists)
+	var target User
+	err = tx.Select(userEntity).Where(userEntity.Col("id").Eq(to)).One(ctx, &target)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, fmt.Errorf("target user %d does not exist", to)
 	}
@@ -197,30 +197,24 @@ func (s *Store) RegisterAndCloneEmail(ctx context.Context, first, clone *User) e
 	return errors.New("commit was not blocked by the statement error")
 }
 
-// ListUsers reads every user ordered by id and maps the result set by column
-// name. Rows.All always closes the iterator and replaces the slice only on
-// success.
+// ListUsers reads every user ordered by id. The E05 builder maps the result set
+// by column name; Rows.All replaces the slice only on success.
 func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, name, email, bio, status FROM users ORDER BY id")
-	if err != nil {
-		return nil, err
-	}
 	var users []User
-	if err := rows.All(&users); err != nil {
-		return nil, err
-	}
-	return users, nil
+	err := s.db.Select(userEntity).
+		OrderBy(userEntity.Col("id").Asc()).
+		All(ctx, &users)
+	return users, err
 }
 
-// UserByID reads one user. Row.Scan maps positionally, so the select list must
-// follow the declaration order of the struct fields; sql.ErrNoRows is
-// preserved for existence checks.
+// UserByID reads one user through the builder. One maps positionally, so the
+// default selection follows the declaration order of the struct fields;
+// sql.ErrNoRows is preserved for existence checks.
 func (s *Store) UserByID(ctx context.Context, id int64) (User, error) {
 	var user User
-	err := s.db.QueryRowContext(ctx,
-		"SELECT id, name, email, bio, status FROM users WHERE id = ?", id,
-	).Scan(&user)
+	err := s.db.Select(userEntity).
+		Where(userEntity.Col("id").Eq(id)).
+		One(ctx, &user)
 	return user, err
 }
 
@@ -228,20 +222,76 @@ func (s *Store) UserByID(ctx context.Context, id int64) (User, error) {
 // mapping and the same sql.ErrNoRows contract.
 func (s *Store) UserByEmail(ctx context.Context, email string) (User, error) {
 	var user User
-	err := s.db.QueryRowContext(ctx,
-		"SELECT id, name, email, bio, status FROM users WHERE email = ?", email,
-	).Scan(&user)
+	err := s.db.Select(userEntity).
+		Where(userEntity.Col("email").Eq(email)).
+		One(ctx, &user)
 	return user, err
 }
 
-// CountOpenTasks returns the number of open tasks of an owner.
-func (s *Store) CountOpenTasks(ctx context.Context, ownerID int64) (int, error) {
-	var count int
-	err := s.db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND done = ?",
-		ownerID, false,
-	).Scan(&count)
-	return count, err
+// CountOpenTasks returns the number of open tasks of an owner. Count uses a
+// derived-table query, so it remains exact even if the builder is extended with
+// DISTINCT or grouping later.
+func (s *Store) CountOpenTasks(ctx context.Context, ownerID int64) (int64, error) {
+	return s.db.Select(taskEntity).
+		Where(
+			taskEntity.Col("owner_id").Eq(ownerID),
+			taskEntity.Col("done").Eq(false),
+		).
+		Count(ctx)
+}
+
+// ListOpenTasksByOwnerEmail finds open tasks through an INNER JOIN. The base
+// entity is tasks; users participates only in the join and filter.
+func (s *Store) ListOpenTasksByOwnerEmail(ctx context.Context, email string) ([]Task, error) {
+	var tasks []Task
+	err := s.db.Select(taskEntity).
+		Join(userEntity, krios.InnerJoin, userEntity.Col("id").Eq(taskEntity.Col("owner_id"))).
+		Where(
+			userEntity.Col("email").Eq(email),
+			taskEntity.Col("done").Eq(false),
+		).
+		OrderBy(taskEntity.Col("id").Asc()).
+		All(ctx, &tasks)
+	return tasks, err
+}
+
+// UserTaskCount is a read model mapped by output alias. It demonstrates a
+// grouped projection built with Fields.
+type UserTaskCount struct {
+	ID    int64  `krios:"id"`
+	Name  string `krios:"name"`
+	Tasks int64  `krios:"tasks"`
+}
+
+// ListUserTaskCounts returns every user with their task count. The LEFT JOIN
+// keeps users without tasks, whose count is zero.
+func (s *Store) ListUserTaskCounts(ctx context.Context) ([]UserTaskCount, error) {
+	var counts []UserTaskCount
+	err := s.db.Select(userEntity).
+		Join(taskEntity, krios.LeftJoin, taskEntity.Col("owner_id").Eq(userEntity.Col("id"))).
+		Fields(
+			userEntity.Col("id"),
+			userEntity.Col("name"),
+			taskEntity.Col("id").Count().As("tasks"),
+		).
+		GroupBy(userEntity.Col("id"), userEntity.Col("name")).
+		OrderBy(userEntity.Col("id").Asc()).
+		All(ctx, &counts)
+	return counts, err
+}
+
+// ListUsersPage returns one page of users together with the totals and
+// navigation statistics computed by Paginate. The count and the page are
+// independent queries on *DB.
+func (s *Store) ListUsersPage(ctx context.Context, limit, offset int) ([]User, krios.Paginate, error) {
+	var users []User
+	page, err := s.db.Select(userEntity).
+		OrderBy(userEntity.Col("id").Asc()).
+		Paginate(ctx, limit, offset, &users)
+	if err != nil {
+		return nil, krios.Paginate{}, err
+	}
+	return users, page, nil
 }
 
 // ValidateUsers reports whether a batch of users satisfies every field-level

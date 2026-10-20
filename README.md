@@ -2,7 +2,7 @@
 
 Biblioteca Go em desenvolvimento para acesso a SQLite3, MySQL e PostgreSQL por `database/sql`.
 
-Implementados: configuração em código, abertura/fechamento, SQL parametrizado, transações explícitas, mapeamento de entidades por reflexão sobre structs (`krios.EntityOf`, `Row.Scan` para um registro e `Rows.All` para múltiplos) e consultas `SELECT` encadeadas com seleção de colunas, filtros e junções (`DB.Select`/`Tx.Select`, `Only`, `Where`, `Join`, `Build`). O SQL incorporado e as migrações pertencem às próximas entregas. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN/geração de SQL e aguardam integração manual.
+Implementados: configuração em código, abertura/fechamento, SQL parametrizado, transações explícitas, mapeamento de entidades por reflexão sobre structs (`krios.EntityOf`, `Row.Scan` para um registro e `Rows.All` para múltiplos) e consultas `SELECT` encadeadas com seleção de colunas, filtros, junções, agregações, ordenação e paginação (`DB.Select`/`Tx.Select`, `Only`, `Where`, `Join`, `Fields`, `GroupBy`, `OrderBy`, `Limit`/`Offset`, `Count`, `Paginate`, `Build`). O SQL incorporado e as migrações pertencem às próximas entregas. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN/geração de SQL e aguardam integração manual.
 
 ## Desenvolvimento local
 
@@ -154,7 +154,7 @@ info, err := db.Select(tasks).
 - `Paginate(ctx, limit, offset, dest)` valida `limit > 0` e `offset >= 0`, não muta o construtor e retorna total e estatísticas (`Page` base 1, `Pages`, `HasNext`, `HasPrev`). Em `*DB` contagem e página são consultas independentes; em `*Tx` compartilham a transação.
 - `SUM`/`MAX`/`MIN` podem retornar `NULL` e o tipo nativo do driver (use `*T`/`sql.Null*`). `DISTINCT` com `ORDER BY` fora da seleção é rejeitado pelo PostgreSQL; a seleção deve ser coerente com o agrupamento.
 
-As decisões estão em [E05-P03](.specs/E05-P03_decisions.md); `Example_aggregationsAndPagination` demonstra agrupamento e paginação.
+As decisões estão em [E05-P03](.specs/E05-P03_decisions.md); `Example_aggregationsAndPagination` demonstra agrupamento e paginação. O pacote [examples/](examples/) (KriosTasks) usa o builder em todas as leituras e cobre junção, agrupamento e paginação em `examples/store_test.go`.
 
 ## Erros e propriedade dos resultados
 
@@ -195,6 +195,7 @@ O contexto passado a `Begin` controla toda a vida da transação e seu cancelame
 | `internal/testutil/driver.go` | Driver simulador com hooks e contadores usado pelos testes |
 | `internal/**/*_test.go` | Testes internos por pacote |
 | `tests/` | Integração SQLite e exemplos de consumo externo |
+| `examples/` | Projeto consumidor de exemplo (KriosTasks) com leituras pelo builder de E05 |
 | `cmd/krios/main.go` | Placeholder que imprime uma saudação; ainda não é exemplo funcional de acesso |
 | `.specs/` | Requisitos, decisões, melhorias e roteiro manual |
 
