@@ -31,16 +31,7 @@ type Paginate struct {
 // are preserved. The total is exact at the cost of materializing the inner
 // query.
 func (s *Select) Count(ctx context.Context) (int64, error) {
-	if s == nil || s.ent == nil {
-		return 0, fmt.Errorf("%w: select requires a base entity", errs.ErrInvalidQuery)
-	}
-
-	if s.dialect == nil {
-		return 0, fmt.Errorf("%w: select requires a dialect", errs.ErrInvalidQuery)
-	}
-
-	inner, args, err := s.build(buildOptions{omitOrder: true})
-
+	query, args, err := s.countQuery()
 	if err != nil {
 		return 0, err
 	}
@@ -49,7 +40,6 @@ func (s *Select) Count(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("%w: select has no executor", errs.ErrInvalidQuery)
 	}
 
-	query := "SELECT COUNT(*) FROM (" + inner + ") AS " + s.dialect.QuoteIdent("krios_total")
 	var total int64
 
 	if err := s.exec.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
@@ -57,6 +47,26 @@ func (s *Select) Count(ctx context.Context) (int64, error) {
 	}
 
 	return total, nil
+}
+
+// countQuery renders the counting statement independently of the executor so
+// the generated SQL and arguments can be validated for every dialect.
+func (s *Select) countQuery() (string, []any, error) {
+	if s == nil || s.ent == nil {
+		return "", nil, fmt.Errorf("%w: select requires a base entity", errs.ErrInvalidQuery)
+	}
+
+	if s.dialect == nil {
+		return "", nil, fmt.Errorf("%w: select requires a dialect", errs.ErrInvalidQuery)
+	}
+
+	inner, args, err := s.build(buildOptions{omitOrder: true})
+
+	if err != nil {
+		return "", nil, err
+	}
+
+	return "SELECT COUNT(*) FROM (" + inner + ") AS " + s.dialect.QuoteIdent("krios_total"), args, nil
 }
 
 // Paginate counts the query, executes the page starting at offset and maps its

@@ -181,12 +181,12 @@ O contexto passado a `Begin` controla toda a vida da transação e seu cancelame
 
 | Arquivo | Responsabilidade |
 | --- | --- |
-| `krios.go` | Fachada pública: aliases de tipos, constantes, erros e delegação de `Open`, `EntityOf`, `And` e `Or` |
+| `krios.go` | Fachada pública: aliases de tipos, constantes, erros e delegação de `Open`, `EntityOf`, `And`, `Or` e `Count` |
 | `internal/errs/errors.go` | Erros sentinela compartilhados e normalização de erros nativos |
 | `internal/config/config.go`, `dsn.go` | Configuração, validações e DSNs |
 | `internal/dialect/dialect.go`, `migration.go` | Interface `Dialect`, seleção por `Config.Type` e capacidades de migração |
-| `internal/entity/entity.go`, `validation.go`, `expression.go` | Entidades por reflexão, validação/formatação e AST de condições |
-| `internal/query/query.go` | Construtor `Select` (`Only`/`Where`/`Join`), `Build` e execução |
+| `internal/entity/entity.go`, `validation.go`, `expression.go`, `aggregate.go` | Entidades por reflexão, validação/formatação, AST de condições e agregações/ordenação |
+| `internal/query/query.go`, `pagination.go` | Construtor `Select` (seleção, filtros, junções, agrupamento/ordem/limite), `Build`, execução, `Count` e `Paginate` |
 | `internal/access/db.go` | Conexão (`Open`, `Close`), dialeto retido e `Select` |
 | `internal/transaction/tx.go` | Transação (`Begin`, `Commit`, `Rollback`), dialeto retido e `Select` |
 | `internal/execute/execution.go` | Delegação nativa compartilhada (contexto, chamada, wrapper) |
@@ -216,7 +216,7 @@ Os jobs executam somente quando o repositório é público, preservando a condi�
 
 A revisão M01–M06 passou localmente por `make check CGO_ENABLED=0` e `make race` em Go **1.26.8** e **1.27.1**. As versões locais não são apresentadas como as últimas disponíveis. A execução remota do workflow atualizado permanece pendente. O relato de sucesso remoto em 18/10 é evidência histórica, anterior a estas alterações.
 
-MySQL/PostgreSQL aguardam execução do [roteiro manual](.specs/E09_manual_validation.md). Testar DSNs e falhas simuladas não comprova conexão real. E04 pode avançar sobre a base corrigida; as evidências manuais continuam obrigatórias para concluir E09.
+MySQL/PostgreSQL aguardam execução do [roteiro manual](.specs/E09_manual_validation.md). Testar DSNs e falhas simuladas não comprova conexão real. E04 e E05 avançaram sobre a base corrigida; a validação de consultas e paginação tem evidência automatizada em SQLite e nos três dialetos, mas as evidências manuais dos dois servidores continuam obrigatórias para concluir E09.
 
 ## Documentação do projeto
 
@@ -232,6 +232,7 @@ MySQL/PostgreSQL aguardam execução do [roteiro manual](.specs/E09_manual_valid
 - [Validação do mapeamento — E04-P04](.specs/E04-P04_decisions.md)
 - [Seleção, filtros e junções — E05-P01](.specs/E05-P01_decisions.md)
 - [Agregações e paginação — E05-P03](.specs/E05-P03_decisions.md)
+- [Validação de consultas — E05-P04](.specs/E05-P04_decisions.md)
 - [Reorganização dos pacotes internos](.specs/0004_reorganization.md)
 
 ## Licença

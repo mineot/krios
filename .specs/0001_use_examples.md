@@ -9,10 +9,11 @@ com tudo o que já foi implementado nas entregas **E01–E04**:
 | E03     | Execução e transações        | SQL puro com parâmetros, `Result`, `Begin`/`Commit`/`Rollback`, commit bloqueado, `sql.ErrNoRows`, `ErrTxDone` |
 | E04     | Entidades e mapeamento       | tags `krios`, `EntityOf`, `Row.Scan`, `Rows.All`, NULL, `Validator`/`Formatter`                                |
 
-As entregas **E05–E08** (builders de consulta e escrita, SQL embutido e
-migrações) ainda não existem; por isso o projeto exemplo é dono do seu DDL e
-escreve SQL à mão. Quando forem implementadas, os pontos de extensão aparecem
-marcados ao longo do texto.
+As entregas **E06–E08** (builder de escrita, SQL embutido e migrações) ainda
+não existem. A E05 já oferece o builder de leitura, mas este projeto exemplo
+mantém as consultas SQL de E04 e mostra a extensão no item 12. Quando as
+demais forem implementadas, os pontos de extensão aparecem marcados ao longo
+do texto.
 
 O código completo e compilável vive no pacote **`examples/`** deste módulo —
 os trechos abaixo são extraídos dele:
@@ -710,11 +711,10 @@ go test -run '^Example' -v ./tests   # exemplos executáveis das garantias de E0
 
 ## 12. Próximos passos (E05–E08)
 
-Quando as entregas seguintes chegarem, os pontos de extensão do projeto
-exemplo serão:
-
-- **E05** — `ListUsers`/`CountOpenTasks` ganham builder encadeado com filtros,
-  joins e paginação (`krios.Paginate` com total).
+- **E05 — disponível.** `ListUsers`/`CountOpenTasks` podem migrar de SQL manual
+  para o builder encadeado com filtros, joins, agregações e paginação
+  (`krios.Paginate` com total); a API está descrita no README e coberta por
+  testes.
 - **E06** — `CreateUser`/`CreateTask` passam ao builder de escrita, com
   `Where` obrigatório em UPDATE/DELETE e integração automática com o motor de
   validação já usado em `ValidateUsers`.
