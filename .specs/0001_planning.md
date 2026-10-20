@@ -336,8 +336,10 @@ O modelo de entidades por reflexão, a ordem das colunas, a representação de `
 ### 6.8. SQL incorporado
 
 - Qual será o tipo público que referencia o arquivo e como ele receberá os recursos incorporados e os parâmetros?
-- **Parcialmente resolvido em E03:** Exec/Query/QueryRow distinguem execução e leitura, com wrappers Krios e fechamento pelo consumidor. A ligação desses métodos ao arquivo incorporado será definida em E07.
+  _Resolvido em [E07-P01_decisions.md](E07-P01_decisions.md): objeto imutável `krios.NewSQLFile(fs.FS, path)` com leitura eager, `Name()`/`Text()`; parâmetros variádicos separados do texto, com marcadores do driver e sem tradução de sintaxe._
+- **Resolvido em E03:** Exec/Query/QueryRow distinguem execução e leitura, com wrappers Krios e fechamento pelo consumidor. A ligação desses métodos ao arquivo incorporado foi resolvida em [E07-P01_decisions.md](E07-P01_decisions.md) pelo runner `db.File(f)`/`tx.File(f)` sobre o `executor` interno.
 - Como combinar os resultados nativos com o mapeamento do RF-09 e executar essas operações na transação selecionada?
+  _Resolvido em [E07-P01_decisions.md](E07-P01_decisions.md): `Exec`/`Query`/`QueryRow` (E03) e `One`/`All` com destinos `*T`/`*[]T` (E04) no mesmo runner; escolha por método; associação à transação pelo receptor, sobre o mesmo `executor` de [E03-P01_decisions.md](E03-P01_decisions.md). Nova sentinela `ErrFileNotFound` na construção._
 
 O consumidor continua responsável pela incorporação dos arquivos durante a compilação. O nome fornecido na configuração apenas seleciona um recurso já incorporado.
 

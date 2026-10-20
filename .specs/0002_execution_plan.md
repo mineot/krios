@@ -218,13 +218,17 @@ A ordem acima é a sequência inicial recomendada. Por exemplo, E07 pode antecip
 
 **Entrega:** consumidor incorpora SQL ao executável e usa esses arquivos para escritas e consultas, inclusive dentro de transações.
 
-- [ ] **E07-P01 — Especificar o recebimento de arquivos.** Definir o objeto que referencia um arquivo, a forma de receber os recursos incorporados e os métodos de execução, consulta e obtenção dos resultados.
+- [x] **E07-P01 — Especificar o recebimento de arquivos.** Definir o objeto que referencia um arquivo, a forma de receber os recursos incorporados e os métodos de execução, consulta e obtenção dos resultados.
 
-  > **Pendências:** resolver o tipo público, o recebimento dos arquivos, a passagem de parâmetros e a combinação entre resultados nativos e mapeados (§6.8). Reutilizar os contratos de E03 e E04.
+  > **Decisões registradas (2026-10-20) em [E07-P01_decisions.md](E07-P01_decisions.md):** objeto público `krios.NewSQLFile(fs.FS, path)` com leitura **eager** e imutável (`Name()`/`Text()`), independente de `Config`/`DB` e reutilizável por E08 (§3); runner ancorado no acesso `db.File(f)`/`tx.File(f)` sobre o `executor` de E03, com `Exec`/`Query`/`QueryRow` e `One`/`All` (§4); parâmetros separados do texto, marcadores do driver e **sem** tradução de sintaxe (§5); resultados nativos de E03 e mapeados de E04 combinados por método, sem `Build()` (§6); nova sentinela `ErrFileNotFound` na construção e `ErrInvalidQuery` para arquivo vazio/`nil` (§8); sem splitting de multi-statement, comportamento do driver documentado (§9). Reuso dos contratos de E03 e E04; implementação em E07-P02 e exemplo `go:embed` em E07-P03.
 
 - [ ] **E07-P02 — Implementar a execução dos recursos.** Carregar o SQL selecionado, passar parâmetros separadamente e executá-lo sem tradução de sintaxe. Permitir selecionar a transação explicitamente e comunicar erros de recurso inexistente ou execução.
 
+  > **Base:** [E07-P01_decisions.md](E07-P01_decisions.md) (objeto `SQLFile`, runner `db.File(f)`/`tx.File(f)`, parâmetros, resultados, `ErrFileNotFound`).
+
 - [ ] **E07-P03 — Validar um consumidor com `go:embed`.** Compilar um exemplo que incorpore consultas e escritas, executá-lo sem depender dos arquivos SQL originais em tempo de execução e verificar resultados, erros e transações nos bancos correspondentes.
+
+  > **Base:** [E07-P01_decisions.md](E07-P01_decisions.md); converter `CreateSchema` de strings em Go para arquivos `.sql` embutidos (ver [0001_use_examples.md](0001_use_examples.md) §13).
 
 **Critério de conclusão:** o consumidor consegue utilizar SQL incorporado fora do mecanismo de migrações, com parâmetros, resultados e encerramento de recursos conforme o contrato.
 
