@@ -156,8 +156,9 @@ O dialeto já implementa esta capacidade em `internal/dialect.migration.go`; o c
 type MigrationDialect interface {
   // SupportsTransactionalDDL indica se TODOS os DDLs são transacionais neste dialeto.
   SupportsTransactionalDDL() bool
-  // IsTransactionalStatement retorna false se o statement é conhecido por causar commit implícito.
-  // Deve ser conservador: em dúvida, retornar false.
+  // IsTransactionalStatement retorna false se o statement não é conhecido
+  // como transacional (em dúvida, false) e erro para comandos de controle
+  // de transação, que são rejeitados antes de aplicar.
   IsTransactionalStatement(sql string) (bool, error)
 }
 ```
@@ -171,6 +172,8 @@ Valores (conservadores):
 | MySQL      | false                    | Assumir não-universal por segurança. Atomic DDL limitado. |
 
 Detecção por statement deve ignorar case, comentários e espaços. Palavras-chave típicas que justificam tratar como não-transacional: `CREATE`, `ALTER`, `DROP`, `RENAME`, `TRUNCATE`, `LOCK`, `UNLOCK`, `REPAIR`, `OPTIMIZE`, `ANALYZE`, `FLUSH`.
+
+> **Revisado por [C03-P02_decisions.md](C03-P02_decisions.md) (D10–D13, 2026-10-20):** o comportamento passou a ser uma allowlist de DML (`INSERT`, `UPDATE`, `DELETE`, `SELECT`, `REPLACE`, `WITH`) somada à denylist acima, ampliada para `GRANT`, `REVOKE`, `LOAD`, `CHECK`, `CACHE` e `RESET` conforme o §15.3.3 do manual MySQL; keyword fora das duas listas resulta em `false`. `SET` ficou fora da allowlist (`SET PASSWORD`/`SET autocommit` causam commit implícito). Comandos de controle (`BEGIN`, `START`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`, `END`, `ABORT`) retornam erro em todos os dialetos; e `fileTransactional` varre os statements também em SQLite/PostgreSQL, propagando esses erros e comentários de bloco não terminados.
 
 ## 11. Escopo transacional
 

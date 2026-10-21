@@ -319,19 +319,23 @@ func loadStep(cfg *config.MigrationsConfig, version int, direction, name string,
 }
 
 // fileTransactional reports whether every statement in text is safe to run in
-// a transaction for the dialect. When the dialect has no universal
-// transactional DDL (MySQL), each statement is classified separately; on any
-// doubt the statement is non-transactional, so the file is non-transactional.
+// a transaction for the dialect. Every statement is classified (C03-P02 D12):
+// on MySQL a statement outside the transactional allowlist makes the file
+// non-transactional ("in doubt, false"); on SQLite/PostgreSQL the boolean
+// result is discarded because DDL is transactional by SupportsTransactionalDDL,
+// but errors still propagate — transaction control statements are rejected and
+// malformed text (unterminated block comment) fails preparation. The file text
+// sent to the driver is never rewritten (E07-P01 §9).
 func fileTransactional(text string, md dialect.MigrationDialect) (bool, error) {
-	if md.SupportsTransactionalDDL() {
-		return true, nil
-	}
-
 	for _, statement := range splitStatements(text) {
 		ok, err := md.IsTransactionalStatement(statement)
 
 		if err != nil {
 			return false, err
+		}
+
+		if md.SupportsTransactionalDDL() {
+			continue
 		}
 
 		if !ok {

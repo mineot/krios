@@ -243,6 +243,8 @@ Regras de execução:
 - O histórico usa a tabela `migrations`. Registros `in_progress`/`failed` bloqueiam nova execução com `ErrPartialMigration`; a resolução é explícita pelo consumidor.
 - Na implementação atual, tabela gerenciada existente em banco sem histórico bloqueia com `ErrInvalidQuery`. O nome do objeto é sempre um argumento vinculado, nunca interpolado no SQL; nomes simples são comparados no esquema da conexão (`DATABASE()`/`current_schema()`), e nomes qualificados no esquema declarado (MySQL/PostgreSQL). SQLite rejeita nome qualificado com `ErrInvalidConfig` na preparação.
 - SQLite/PostgreSQL usam uma transação por versão. MySQL usa uma transação por arquivo somente se todos os statements forem classificados como transacionais; arquivos não transacionais executam sem rollback, com histórico de progresso/falha.
+- A classificação é conservadora (C03-P02): só DML conhecido (`INSERT`, `UPDATE`, `DELETE`, `SELECT`, `REPLACE`, `WITH`) é transacional; qualquer keyword fora dessa lista — incluindo DDL e comandos administrativos do MySQL — torna o arquivo não transacional, e o mesmo veredito vale em SQLite/PostgreSQL, onde apenas os erros da análise importam.
+- Comandos de controle de transação (`BEGIN`, `START`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`, `END`, `ABORT`) são rejeitados na preparação, em todos os dialetos, com `ErrInvalidQuery` apontando o comando e o arquivo; a biblioteca é dona do escopo transacional das migrações.
 - O texto de cada arquivo é enviado inteiro ao driver. A análise de statements para decidir atomicidade não os divide em execuções independentes; prefira um statement por arquivo.
 
 ```go

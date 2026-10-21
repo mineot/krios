@@ -16,8 +16,9 @@ func ptrInt(i int) *int { v := i; return &v }
 
 // This file validates the migration paths and failures of E08 against a real
 // SQLite database, checking both the resulting schema and the migrations
-// history table. MySQL/PostgreSQL paths are covered by simulated tests in
-// internal/migrate; real-server evidence belongs to E09 (scenarios M01-M07).
+// history table. MySQL/PostgreSQL scope paths are covered by simulated tests
+// in internal/migrate (scope_test.go, C03-P02); real-server evidence belongs
+// to E09 (scenarios M01-M07).
 
 // migrationFiles is the embedded-resource fixture shared by the scenarios.
 func migrationFiles() fstest.MapFS {
