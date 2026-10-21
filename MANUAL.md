@@ -221,7 +221,7 @@ fmt.Println(plan.CurrentVersion, plan.TargetVersion, len(plan.Steps))
 
 | Tipo                    | Campos                                                                                                                                                                                       |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MigrationsConfig`      | `FS fs.FS`; `TargetVersion int` (zero solicita reversão total); `Versions []MigrationVersion`; `ManagedObjects []string` (tabelas verificadas quando não há histórico).                      |
+| `MigrationsConfig`      | `FS fs.FS`; `TargetVersion *int` (sempre explícita; `&0` solicita reversão total; `nil` é inválido); `Versions []MigrationVersion`; `ManagedObjects []string` (tabelas verificadas quando não há histórico; nome simples ou `schema.tabela` em MySQL/PostgreSQL, e somente nome simples em SQLite). |
 | `MigrationVersion`      | `Version int` positivo; `Up []string` e `Down []string`, na ordem de execução.                                                                                                               |
 | `MigrationPlan`         | `CurrentVersion int`, `TargetVersion int`, `Steps []MigrationStep`.                                                                                                                          |
 | `MigrationStep`         | `Version int`, `Direction string` (`"up"`/`"down"`), `File *SQLFile`, `Transactional bool`.                                                                                                  |
@@ -229,7 +229,7 @@ fmt.Println(plan.CurrentVersion, plan.TargetVersion, len(plan.Steps))
 
 | Método                                                          | Comportamento                                                                                                                                                           |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MigrationsConfig.Validate() error`                             | Exige FS, objetos e versões; versões positivas, únicas e crescentes; nomes de arquivos não vazios nem duplicados dentro de uma direção da versão. Não carrega arquivos. |
+| `MigrationsConfig.Validate() error`                             | Exige FS, objetos e versões; nomes de objetos não vazios, sem espaços nas bordas e no formato tabela ou `schema.tabela`; versões positivas, únicas e crescentes; nomes de arquivos não vazios nem duplicados dentro de uma direção da versão. Não carrega arquivos. |
 | `DB.Migrations() *MigrationsConfig`                             | Retorna a configuração retida, ou `nil`.                                                                                                                                |
 | `DB.RunMigrations(ctx context.Context) (*MigrationPlan, error)` | Inspeciona histórico, carrega recursos necessários, prepara e aplica o plano. Sem configuração: `ErrInvalidConfig`.                                                     |
 | `PartialMigrationError.Error() string`                          | Mensagem com contexto da falha.                                                                                                                                         |
@@ -241,7 +241,7 @@ Regras de execução:
 - Uma direção vazia pode passar na validação estrutural, mas falha com `ErrInvalidQuery` quando necessária ao percurso.
 - A preparação consulta o banco, mas não executa SQL de migração. Falha nessa etapa retorna plano `nil`; falha na aplicação retorna o plano preparado. Plano sem passos não executa alterações.
 - O histórico usa a tabela `migrations`. Registros `in_progress`/`failed` bloqueiam nova execução com `ErrPartialMigration`; a resolução é explícita pelo consumidor.
-- Na implementação atual, tabela gerenciada existente em banco sem histórico bloqueia com `ErrInvalidQuery`.
+- Na implementação atual, tabela gerenciada existente em banco sem histórico bloqueia com `ErrInvalidQuery`. O nome do objeto é sempre um argumento vinculado, nunca interpolado no SQL; nomes simples são comparados no esquema da conexão (`DATABASE()`/`current_schema()`), e nomes qualificados no esquema declarado (MySQL/PostgreSQL). SQLite rejeita nome qualificado com `ErrInvalidConfig` na preparação.
 - SQLite/PostgreSQL usam uma transação por versão. MySQL usa uma transação por arquivo somente se todos os statements forem classificados como transacionais; arquivos não transacionais executam sem rollback, com histórico de progresso/falha.
 - O texto de cada arquivo é enviado inteiro ao driver. A análise de statements para decidir atomicidade não os divide em execuções independentes; prefira um statement por arquivo.
 

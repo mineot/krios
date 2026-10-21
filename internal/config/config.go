@@ -5,6 +5,7 @@ package config
 import (
 	"fmt"
 	"io/fs"
+	"strings"
 	"time"
 
 	"github.com/mineot/krios/internal/errs"
@@ -88,7 +89,9 @@ type MigrationsConfig struct {
 	Versions []MigrationVersion
 
 	// ManagedObjects lists the objects (tables) under Krios management, used
-	// to verify a database without history (E08-P01 §6).
+	// to verify a database without history (E08-P01 §6). Each entry is a table
+	// name or, on MySQL/PostgreSQL, a qualified "schema.table" (C03-P01 D6);
+	// SQLite rejects qualified names when migrations are prepared.
 	ManagedObjects []string
 }
 
@@ -201,6 +204,12 @@ func (m MigrationsConfig) Validate() error {
 		return fmt.Errorf("%w: migrations require at least one managed object", errs.ErrInvalidConfig)
 	}
 
+	for _, object := range m.ManagedObjects {
+		if err := checkManagedObject(object); err != nil {
+			return err
+		}
+	}
+
 	if len(m.Versions) == 0 {
 		return fmt.Errorf("%w: migrations require at least one version", errs.ErrInvalidConfig)
 	}
@@ -239,6 +248,34 @@ func (m MigrationsConfig) Validate() error {
 
 		seen[v.Version] = true
 		previous = v.Version
+	}
+
+	return nil
+}
+
+// checkManagedObject rejects empty, padded or otherwise malformed managed
+// object names (C03-P01 D6). A valid entry is a table name or a qualified
+// "schema.table" with at most two non-empty parts; dialect-specific rules,
+// such as rejecting qualification on SQLite, belong to the migration layer.
+func checkManagedObject(name string) error {
+	if name == "" {
+		return fmt.Errorf("%w: managed object name must not be empty", errs.ErrInvalidConfig)
+	}
+
+	if strings.TrimSpace(name) != name {
+		return fmt.Errorf("%w: managed object %q must not have surrounding spaces", errs.ErrInvalidConfig, name)
+	}
+
+	parts := strings.Split(name, ".")
+
+	if len(parts) > 2 {
+		return fmt.Errorf("%w: managed object %q must be a table or schema.table", errs.ErrInvalidConfig, name)
+	}
+
+	for _, part := range parts {
+		if part == "" {
+			return fmt.Errorf("%w: managed object %q has an empty part", errs.ErrInvalidConfig, name)
+		}
 	}
 
 	return nil

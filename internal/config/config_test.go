@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/mineot/krios/internal/errs"
@@ -258,4 +259,44 @@ func ExampleConfig() {
 	}
 
 	// Output:
+}
+
+// migrationsConfigFixture returns a structurally valid migrations config whose
+// ManagedObjects can be overridden per case (C03-P01 D6).
+func migrationsConfigFixture(objects []string) *MigrationsConfig {
+	target := 1
+
+	return &MigrationsConfig{
+		FS: fstest.MapFS{
+			"m/001_users.sql": {Data: []byte("CREATE TABLE users (id INTEGER PRIMARY KEY)")},
+		},
+		TargetVersion:  &target,
+		Versions:       []MigrationVersion{{Version: 1, Up: []string{"m/001_users.sql"}}},
+		ManagedObjects: objects,
+	}
+}
+
+func TestMigrationsConfigManagedObjectNames(t *testing.T) {
+	t.Parallel()
+
+	valid := []string{"users", "public.users", "o'brien", "schema.table"}
+
+	for _, name := range valid {
+		if err := migrationsConfigFixture([]string{name}).Validate(); err != nil {
+			t.Errorf("Validate(%q) = %v, want nil", name, err)
+		}
+	}
+
+	invalid := []string{"", ".", "a.", ".b", "a..b", "a.b.c", " users", "users "}
+
+	for _, name := range invalid {
+		err := migrationsConfigFixture([]string{name}).Validate()
+		if !errors.Is(err, errs.ErrInvalidConfig) {
+			t.Errorf("Validate(%q) = %v, want ErrInvalidConfig", name, err)
+		}
+	}
+
+	if err := migrationsConfigFixture(nil).Validate(); !errors.Is(err, errs.ErrInvalidConfig) {
+		t.Errorf("Validate(nil objects) = %v, want ErrInvalidConfig", err)
+	}
 }

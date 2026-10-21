@@ -139,6 +139,10 @@ func Prepare(ctx context.Context, exec executor, cfg *config.MigrationsConfig, d
 		return nil, err
 	}
 
+	if err := validateManagedObjects(cfg.ManagedObjects, d); err != nil {
+		return nil, err
+	}
+
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("krios: migrations prepare: %w", err)
 	}
@@ -392,7 +396,7 @@ func lastAppliedComplete(records []record, cfg *config.MigrationsConfig) int {
 			}
 		}
 	}
-	
+
 	return last
 }
 
@@ -500,7 +504,7 @@ func detectPartial(records []record, cfg *config.MigrationsConfig, target int) e
 					break
 				}
 			}
-			
+
 			lastVer := lastAppliedComplete(records, cfg)
 			return errs.NewPartialMigrationError(DirectionDown, target, lastVer, lastFile, StatusInProgress, "version partially reverted", nil)
 		}
@@ -585,37 +589,103 @@ func verifyNoManagedObjects(ctx context.Context, exec executor, cfg *config.Migr
 
 // objectExists reports whether the named table exists.
 func objectExists(ctx context.Context, exec executor, object string, d dialect.Dialect) (bool, error) {
+	query, args := existenceQuery(object, d)
+
 	var n int
 
-	err := exec.QueryRowContext(ctx, existenceQuery(object, d)).Scan(&n)
+	err := exec.QueryRowContext(ctx, query, args...).Scan(&n)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
 
-		return false, err
+		return false, fmt.Errorf("krios: migrations: inspect managed object %q: %w", object, err)
 	}
 
 	return n > 0, nil
 }
 
-// existenceQuery returns a dialect-specific query that yields a positive count
-// when the table exists. It never enumerates the whole schema (E08-P01 §6).
-func existenceQuery(object string, d dialect.Dialect) string {
+// validateManagedObjects rejects qualified object names on SQLite, where user
+// schemas do not exist (C03-P01 D6). Structural checks (empty, padding, at
+// most two parts) live in config.MigrationsConfig.Validate.
+func validateManagedObjects(objects []string, d dialect.Dialect) error {
+	if d.Name() != "sqlite" {
+		return nil
+	}
+
+	for _, object := range objects {
+		if strings.Contains(object, ".") {
+			return fmt.Errorf("%w: sqlite has no user schemas; managed object %q must be a plain table name", errs.ErrInvalidConfig, object)
+		}
+	}
+
+	return nil
+}
+
+// existenceQuery returns a dialect-specific query and its arguments that yield
+// a positive count when the table exists. The consumer-supplied name is never
+// interpolated into the SQL text: it is bound as an argument (C03-P01 D7).
+// Simple names are scoped to the schema of the connection — DATABASE() on
+// MySQL, current_schema() on PostgreSQL, the single schema of SQLite — so a
+// same-named table in another schema is not reported. Qualified "schema.table"
+// names target the declared schema on MySQL/PostgreSQL. The query never
+// enumerates the whole schema (E08-P01 §6).
+func existenceQuery(object string, d dialect.Dialect) (string, []any) {
+	schema, table, qualified := strings.Cut(object, ".")
+
+	if !qualified {
+		table = object
+	}
+
 	switch d.Name() {
 	case "sqlite":
-		return fmt.Sprintf("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '%s'", object)
+		query := fmt.Sprintf("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = %s", d.Placeholder(1))
+
+		return query, []any{table}
+	case "mysql":
+		if qualified {
+			query := fmt.Sprintf(
+				"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = %s AND table_name = %s",
+				d.Placeholder(1), d.Placeholder(2),
+			)
+
+			return query, []any{schema, table}
+		}
+
+		query := fmt.Sprintf(
+			"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = %s",
+			d.Placeholder(1),
+		)
+
+		return query, []any{table}
 	default:
-		return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '%s'", object)
+		if qualified {
+			query := fmt.Sprintf(
+				"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = %s AND table_name = %s",
+				d.Placeholder(1), d.Placeholder(2),
+			)
+
+			return query, []any{schema, table}
+		}
+
+		query := fmt.Sprintf(
+			"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = %s",
+			d.Placeholder(1),
+		)
+
+		return query, []any{table}
 	}
 }
 
 // isMissingTable reports whether err indicates the history table is absent.
-// The check is textual and conservative; a missing table is the only case
-// mapped to a schema without history. The phrasings of the supported engines
-// are all accepted so preparation stays correct even if the driver wording
-// differs from the configured dialect.
+// The check is textual because database/sql exposes no portable error codes;
+// the patterns below are the missing-table phrasings of the supported engines
+// and are used only for the history probe (C03-P01 D8): SQLite reports "no
+// such table", MySQL "doesn't exist" and PostgreSQL "does not exist" (with
+// "undefined table" as a conservative variation). Errors that do not match —
+// permissions, connection loss, malformed history — are never treated as a
+// missing table and surface to the caller unchanged.
 func isMissingTable(err error) bool {
 	if err == nil {
 		return false
