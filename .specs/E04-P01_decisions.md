@@ -2,6 +2,8 @@
 
 Data: 2026-10-19. Substitui a proposta de entidade explícita descrita originalmente no RF-09.
 
+> **Revisado por [C05-P01_decisions.md](C05-P01_decisions.md) (D25, 2026-10-21):** este documento ainda descrevia a **tabela** como derivada de "tag de struct". Go não permite tag no tipo struct — apenas em campos —, logo a tabela **não** vem de tag. O contrato vigente é `snake_case` do nome do tipo, sobreponível por `TableName() string`, sem esquema/alias expostos ([E04-P02_decisions.md](E04-P02_decisions.md) §3). As menções a "tag de struct" para a tabela abaixo são históricas; as tags de **campo** (nome de coluna, `pk`, `-`) permanecem válidas.
+
 ## 1. Contexto e direcionamento
 
 O RF-09 propunha uma API explícita de entidade (`krios.Entity` com `Column`, `GetString`, `SetString`, `GetTime`, `SetTime` e `GetFormatted`). A revisão de E04-P01 **troca o direcionamento**: o mapeamento passa a ser feito por **reflexão sobre structs Go**, no mesmo espírito de bibliotecas como `database/sql`/`sqlx`/`ent`.
@@ -18,7 +20,7 @@ Motivos da escolha:
 ## 2. Modelo de entidade
 
 - **Entidade** é um tipo `struct` Go (ou ponteiro para `struct`). A biblioteca inspeciona seus campos exportados.
-- **Tabela:** nome declarado em tag de struct; esquema e alias opcionais.
+- **Tabela:** nome derivado do tipo (`snake_case`), sobreponível por `TableName() string`; a tabela não vem de tag (esquema e alias são extensão futura). Ver [E04-P02_decisions.md](E04-P02_decisions.md) §3.
 - **Colunas:** campos exportados do struct; o nome da coluna vem de tag de campo. Um marcador identifica a chave primária. Um marcador ignora o campo.
 - **Ordem:** a ordem das colunas é a ordem de declaração dos campos; é a ordem usada como seleção padrão quando não há seleção explícita (RF-06).
 - **`krios.Entity`:** mantém o nome, mas passa a ser o **descritor derivado por reflexão** de um tipo struct (por exemplo, obtido de um valor/tipo), não uma DSL declarativa de colunas.
@@ -33,7 +35,7 @@ type User struct {
 }
 ```
 
-- Tag de struct define a tabela (e, opcionalmente, esquema/alias).
+- Tags de campo definem o nome da coluna, `pk` e `-` (exclusão). O nome da **tabela** não usa tag (deriva do tipo, ver §2 e [E04-P02_decisions.md](E04-P02_decisions.md) §3).
 - `pk` marca a chave primária.
 - `-` exclui o campo do mapeamento.
 - Campo sem tag usa o nome do campo; a política de conversão de nome (snake_case) será decidida em E04-P02.
@@ -75,13 +77,13 @@ type User struct {
 | --- | --- |
 | `krios.Entity` como DSL explícita de colunas | Substituído: passa a ser o descritor derivado por reflexão |
 | `Column`, `GetString`/`SetString`, `GetTime`/`SetTime`, `GetFormatted` | Substituídos: acesso tipado pelos campos do struct |
-| Tabela, esquema, alias, colunas, junções | Mantidos, derivados de struct e tags |
+| Tabela, colunas, junções | Mantidos; tabela derivada do tipo (sem tag), colunas/junções por reflexão |
 | Funções de validação e formatação por coluna | Mantidas, associadas a campos |
 | Mapeamento automático para structs/slices | Adotado como modelo principal |
 
 ## 9. Itens ainda pendentes
 
-- Sintaxe definitiva das tags (tabela, esquema, alias, chave primária, associações, política de nome sem tag).
+- Sintaxe definitiva das tags de campo (nome de coluna, chave primária, associações, política de nome sem tag); a tabela não usa tag (ver §2).
 - Regras de correspondência e conversão de tipos e o erro detalhado por coluna.
 - Representação e política de escrita de `NULL`/omitido (E06-P01). _Resolvida em [E06-P01_decisions.md](E06-P01_decisions.md) §4._
 - Junções e associações (E04-P02/E05).

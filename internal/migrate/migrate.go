@@ -2,9 +2,10 @@
 // embedded resources, inspects the history table, compares the current and
 // desired versions, builds the ordered execution plan and evaluates the
 // transactional scope per dialect. It does not execute migration DDL; applying
-// the plan belongs to E08-P03. Preparation is pure: every configuration,
-// association, history and atomicity problem is reported before any migration
-// statement runs (E08-P01).
+// the plan belongs to E08-P03. Preparation performs read-only inspection
+// queries (history and managed-object existence) but runs no migration
+// statement; every configuration, association, history and atomicity problem
+// is reported before any migration statement runs (E08-P01).
 package migrate
 
 import (
@@ -514,19 +515,6 @@ func detectPartial(records []record, cfg *config.MigrationsConfig, target int) e
 		}
 	}
 	return nil
-}
-
-// lastApplied returns the highest version among applied records, or 0.
-func lastApplied(records []record) int {
-	last := 0
-
-	for _, r := range records {
-		if r.Status == StatusApplied && r.Version > last {
-			last = r.Version
-		}
-	}
-
-	return last
 }
 
 // record is one row of the history table.

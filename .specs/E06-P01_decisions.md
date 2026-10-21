@@ -126,8 +126,10 @@ Consequências documentadas como contrato:
 
 | Informação     | SQLite                   | MySQL                                   | PostgreSQL                       |
 | -------------- | ------------------------ | --------------------------------------- | -------------------------------- |
-| `RowsAffected` | garantido (`ok == true`) | garantido (`ok == true`)                | garantido (`ok == true`)         |
+| `RowsAffected` | disponível (`ok == true`) | disponível (`ok == true`)              | disponível (`ok == true`)         |
 | `LastInsertId` | disponível em `INSERT`   | disponível em `INSERT` (auto-increment) | **indisponível** (`ok == false`) |
+
+- A tabela descreve o caso esperado; a flag é o contrato real. `result.go` devolve `ok == false` sempre que o driver não fornece o dado **ou** falha ao reportá-lo (erro não exposto), inclusive para `RowsAffected`. Portanto `RowsAffected` **não** é "garantido" de forma absoluta: é comunicado pela flag, com disponibilidade esperada conforme a coluna acima. Ver [C05-P01_decisions.md](C05-P01_decisions.md) D28.
 
 - Ausência de informação é comunicada pela flag `false`, nunca por zero ambíguo — contrato já fixado em E03. A aplicação da chave gerada ao struct do consumidor é responsabilidade do consumidor (`Result` + pk, ou `Returning()`); a biblioteca não escreve no struct depois da execução.
 - Com `Returning()` ativo, o resultado **são as linhas retornadas**: `Exec` não está disponível nesse modo (§7) e `Result` não é devolvido — a contagem de linhas afetadas é o próprio conjunto lido (`All`) ou a presença da linha (`One`).

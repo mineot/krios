@@ -2,7 +2,7 @@
 
 Biblioteca Go em desenvolvimento para acesso a SQLite3, MySQL e PostgreSQL por `database/sql`.
 
-Implementados: configuração em código, abertura/fechamento, SQL parametrizado, transações explícitas, mapeamento de entidades por reflexão sobre structs (`krios.EntityOf`, `Row.Scan` para um registro e `Rows.All` para múltiplos), consultas `SELECT` encadeadas com seleção de colunas, filtros, junções, agregações, ordenação e paginação (`DB.Select`/`Tx.Select`, `Only`, `Where`, `Join`, `Fields`, `GroupBy`, `OrderBy`, `Limit`/`Offset`, `Count`, `Paginate`, `Build`), escritas encadeadas (`DB.Insert`/`Update`/`Delete` e equivalentes em `Tx`) e execução de SQL incorporado (`krios.NewSQLFile` com `DB.File`/`Tx.File`). As migrações pertencem à próxima entrega. A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN/geração de SQL e aguardam integração manual.
+Implementados: configuração em código, abertura/fechamento, SQL parametrizado, transações explícitas, mapeamento de entidades por reflexão sobre structs (`krios.EntityOf`, `Row.Scan` para um registro e `Rows.All` para múltiplos), consultas `SELECT` encadeadas com seleção de colunas, filtros, junções, agregações, ordenação e paginação (`DB.Select`/`Tx.Select`, `Only`, `Where`, `Join`, `Fields`, `GroupBy`, `OrderBy`, `Limit`/`Offset`, `Count`, `Paginate`, `Build`), escritas encadeadas (`DB.Insert`/`Update`/`Delete` e equivalentes em `Tx`) e execução de SQL incorporado (`krios.NewSQLFile` com `DB.File`/`Tx.File`). Migrações versionadas estão disponíveis (`Config.Migrations` e `DB.RunMigrations`; a preparação consulta o histórico sem executar DDL e o plano pode ser inspecionado). A integração automatizada real usa SQLite; MySQL/PostgreSQL têm testes locais de regras/DSN/geração de SQL e aguardam integração manual.
 
 ## Desenvolvimento local
 
@@ -88,7 +88,7 @@ func (e Email) Format() (string, error) { return string(e), nil }
 - `Entity.Validate(record)` e `Entity.ValidateAll(records)` validam campos que implementam `krios.Validator`, na ordem de declaração, parando no primeiro erro. Aceitam `T` ou `*T` (e `[]T` ou `*[]T`); campo ponteiro nulo é pulado.
 - `Entity.Format(record)` devolve `map[string]string` (coluna → texto) com **todas** as colunas. Campos sem `Formatter` usam `fmt.Sprint`; ponteiro nulo vira texto vazio.
 - O texto formatado é só para apresentação; operações de banco usam o valor original do campo.
-- A execução é explícita: chame os métodos quando precisar. O mesmo motor será reutilizado antes das escritas de E06.
+- Na leitura, a execução é explícita: chame `Validate`/`Format` quando precisar. Na **escrita**, `SetValues` executa `Entity.Validate` **automaticamente** e falha rápido com `ErrValidation`, sem chamada do consumidor e sem opção de desligar (E06 §8).
 - Falhas retornam `ErrValidation` (campo reprovado) ou `ErrFormat` (falha de formatação), contextualizadas com tabela e coluna e preservando a causa (`errors.Is`/`errors.As`). Destino inválido retorna `ErrInvalidEntity`.
 
 Campos primitivos (`string`, `int`, …) não têm validação/formatação sem um tipo nomeado. O exemplo `Example_validationFormatting` demonstra o fluxo; as decisões estão em [E04-P03](.specs/E04-P03_decisions.md).
@@ -261,7 +261,16 @@ MySQL/PostgreSQL aguardam execução do [roteiro manual](.specs/E09_manual_valid
 - [Seleção, filtros e junções — E05-P01](.specs/E05-P01_decisions.md)
 - [Agregações e paginação — E05-P03](.specs/E05-P03_decisions.md)
 - [Validação de consultas — E05-P04](.specs/E05-P04_decisions.md)
+- [Escritas — E06-P01](.specs/E06-P01_decisions.md)
+- [SQL incorporado — E07-P01](.specs/E07-P01_decisions.md)
+- [Migrações — E08-P01](.specs/E08-P01_decisions.md)
+- [Exemplos de consumo](.specs/0001_use_examples.md)
+- [Roteiro de validação manual — E09](.specs/E09_manual_validation.md)
+- [Integração real com servidores — E10](.specs/E10_integration_plan.md)
 - [Reorganização dos pacotes internos](.specs/0004_reorganization.md)
+- [Plano de consolidação e progresso](.specs/0005_consolidation_plan.md)
+
+Decisões da consolidação (C01–C07): [C01-P01](.specs/C01-P01_decisions.md), [C03-P01](.specs/C03-P01_decisions.md)–[C03-P04](.specs/C03-P04_decisions.md), [C04-P01](.specs/C04-P01_decisions.md)–[C04-P03](.specs/C04-P03_decisions.md), [C05-P01](.specs/C05-P01_decisions.md).
 
 ## Licença
 

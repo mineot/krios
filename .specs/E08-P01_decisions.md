@@ -114,11 +114,14 @@ Assinatura pública (RF-05):
 ```go
 // RunMigrations moves the schema to Config.Migrations.TargetVersion, applying
 // up or down migrations as needed, and returns the plan it prepared (so the
-// caller can inspect what was executed). The configuration is always
+// caller can inspect what was attempted — the prepared steps, and in case of
+// failure exactly what was attempted). The configuration is always
 // explicit: a missing Migrations config, a non-positive/absent target or
 // verified partial state block execution.
 func (db *DB) RunMigrations(ctx context.Context) (*Plan, error)
 ```
+
+> **Ajuste de descrição (C05-P01, D29, 2026-10-21):** a preparação **consulta o banco** (histórico e existência de objetos geridos) mas **não executa** DDL de migração; não é operação puramente local. Em falha de aplicação, o plano devolvido reflete o que foi **tentado**, não "o que foi executado" — alinhado a `MANUAL.md` §3 e a [`internal/access/db.go`](../internal/access/db.go) `RunMigrations`. Ver [C05-P01_decisions.md](C05-P01_decisions.md) D29.
 
 > **Ajuste de implementação (E08-P03, 2026-10-20):** a assinatura passou a retornar `(*Plan, error)` em vez de apenas `error` — o `Plan` é útil para o consumidor inspecionar o que foi preparado/executado, e a fachada já o expunha desde E08-P02. O comportamento de erro é o mesmo descrito abaixo.
 

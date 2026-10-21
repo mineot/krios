@@ -251,8 +251,10 @@ func (b migrationBeginner) Begin(ctx context.Context) (migrate.Tx, error) {
 // RunMigrations prepares the migrations configured in Open and applies the
 // resulting plan, returning the plan for inspection.
 //
-// Preparation is pure and reports every configuration, association, history
-// and atomicity problem before any migration statement runs. When a plan has
+// Preparation runs read-only inspection queries (history and managed-object
+// existence) but no migration statement, and reports every configuration,
+// association, history and atomicity problem before any migration statement
+// runs. When a plan has
 // no steps the schema is already at the target and nothing is executed. The
 // plan is returned even when applying fails, so the caller can see what was
 // attempted. The DB guards (ErrClosed) apply unchanged (E08-P02/P03).

@@ -30,7 +30,7 @@ O RF-09 prevê funções de validação e de formatação por campo, fornecidas 
 
 ## 4. Momento de execução
 
-- A validação é **explícita**: o consumidor chama `Validate`/`ValidateAll` quando desejar. Não há validação automática na leitura de E04-P02 nem na escrita (ainda inexistente).
+- A validação é **explícita na leitura**: o consumidor chama `Validate`/`ValidateAll` quando desejar. Na escrita, porém, `SetValues` passou a executar `Entity.Validate` **automaticamente** (fail-fast) — ver [E06-P01_decisions.md](E06-P01_decisions.md) §8, que supersede a nota histórica "(ainda inexistente)".
 - Os escritores de E06 **reutilizarão** o mesmo motor interno antes de gravar, mantendo um único ponto de verdade para as regras.
 - A formatação é igualmente explícita e destina-se à apresentação.
 
