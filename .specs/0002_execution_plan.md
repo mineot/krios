@@ -34,7 +34,9 @@ O [plano de consolidação C01–C07](0005_consolidation_plan.md) passa a ser co
 
 As marcações e evidências anteriores permanecem como registro das entregas realizadas. O estado atual inclui consolidação pendente: contratos, correções e regressões locais, reconciliação de exemplos/documentos, preparação do roteiro e verificação consolidada. Pela revisão de escopo que acrescenta E10, a integração real automatizada dos três bancos será entregue nessa nova etapa; E09 fará a conferência final dos requisitos e a distribuição. Nenhuma correção foi implementada na criação desses planos.
 
-**Atualização (2026-10-21):** C05-P02 concluída conforme [registro D30–D34](C05-P02_decisions.md): exemplos de consumo reconciliados com o código, ciclo de migrações avanço/reversão/reaplicação executado em SQLite e `make check`/`make race` aprovados em Go 1.26.8 e 1.27.2. C05-P03, C06–C07 e a integração real de E10 permanecem pendentes.
+**Atualização (2026-10-21):** C05-P02 concluída conforme [registro D30–D34](C05-P02_decisions.md): exemplos de consumo reconciliados com o código, ciclo de migrações avanço/reversão/reaplicação executado em SQLite e `make check`/`make race` aprovados em Go 1.26.8 e 1.27.2. C05-P03 foi concluída na revisão abaixo; C06–C07 e a integração real de E10 permanecem pendentes.
+
+**Rastreabilidade (2026-10-21):** [C05-P03](C05-P03_traceability.md) relaciona RF-01–RF-09, treze critérios, API, testes e lacunas; [D35–D38](C05-P03_decisions.md) registra a revisão dirigida. Base `9dd207e`, suíte local sem cache aprovada com Go 1.26.8. `ColumnTypes` permanece pendência contratual a avaliar em E09-P01; integração real e publicação não foram declaradas entregues.
 
 ## 3. Visão geral das entregas
 

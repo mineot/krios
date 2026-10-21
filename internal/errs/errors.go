@@ -59,9 +59,10 @@ var (
 	ErrFileNotFound = errors.New("krios: embedded SQL file not found or invalid")
 
 	// ErrPartialMigration indicates that a migration run cannot proceed
-	// because the history holds an in_progress or failed record, or because a
-	// database without history already has managed objects. It is never
-	// continued automatically; the consumer must resolve it explicitly. Use
+	// because a version is incomplete or history holds an in_progress or
+	// failed record. Managed objects without history cause ErrInvalidQuery.
+	// An incomplete migration is never continued automatically; the consumer
+	// must resolve it explicitly. Use
 	// errors.As with *PartialMigrationError for the structured context.
 	ErrPartialMigration = errors.New("krios: partial migration state blocks execution")
 )

@@ -1,5 +1,8 @@
 # E05-P01 — Decisões: Expressões e contratos dos dialetos
 
+> **Rastreabilidade atualizada em C05-P03 (2026-10-21):** os encaminhamentos históricos de `ColumnTypes` para E04/E07 não representam entrega. A avaliação permanece pendente em E09-P01, conforme D01 da [matriz](C05-P03_traceability.md). Aliases de resultados já são suportados; alias de tabela/esquema no builder são extensões registradas (D02), distintas de `ManagedObjects` qualificado.
+
+
 Data: 2026-10-19. Resolve as pendências de E05-P01 em [0002_execution_plan.md](0002_execution_plan.md) e as seções §6.2, §6.3 (construtores) e §6.5 de [0001_planning.md](0001_planning.md). Contratos de consumidor decididos pelo consumidor em 2026-10-19.
 
 ## 1. Contexto

@@ -40,6 +40,8 @@ Casos negativos usam ambientes próprios para não contaminar o fluxo principal.
 
 ## 4. Matriz de cobertura exigida
 
+A [matriz C05-P03](C05-P03_traceability.md) fornece contratos, implementação, testes locais e pendências por RF/critério/API. E10-P02 deve vinculá-los aos IDs dos cenários reais; a evidência local não substitui os resultados de E10.
+
 “Nos três bancos” significa executar o contrato aplicável em cada um. Recursos sem suporte devem ter testes de rejeição antes de efeitos, com o erro esperado. Não se exige SQL idêntico nem capacidades inexistentes em todos os motores.
 
 | Área                     | Cenários mínimos contra banco real                                                                                                                                                  | Diferenças e verificações                                                                                                                                                           |

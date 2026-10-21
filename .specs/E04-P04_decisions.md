@@ -1,5 +1,8 @@
 # E04-P04 — Decisões: Validação do mapeamento
 
+> **Rastreabilidade atualizada em C05-P03 (2026-10-21):** os encaminhamentos históricos de `ColumnTypes` para E04/E07 não representam entrega. A avaliação permanece pendente em E09-P01, conforme D01 da [matriz](C05-P03_traceability.md). Aliases de resultados já são suportados; alias de tabela/esquema no builder são extensões registradas (D02), distintas de `ManagedObjects` qualificado.
+
+
 Data: 2026-10-19. Encerra a entrega E04, cobrindo o que E04-P01–E04-P03 implementaram. Depende de [E04-P02_decisions.md](E04-P02_decisions.md) e [E04-P03_decisions.md](E04-P03_decisions.md).
 
 ## 1. Contexto

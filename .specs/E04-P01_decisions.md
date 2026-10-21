@@ -1,5 +1,8 @@
 # E04-P01 — Decisões: Mapeamento por reflexão
 
+> **Rastreabilidade atualizada em C05-P03 (2026-10-21):** os encaminhamentos históricos de `ColumnTypes` para E04/E07 não representam entrega. A avaliação permanece pendente em E09-P01, conforme D01 da [matriz](C05-P03_traceability.md). Aliases de resultados já são suportados; alias de tabela/esquema no builder são extensões registradas (D02), distintas de `ManagedObjects` qualificado.
+
+
 Data: 2026-10-19. Substitui a proposta de entidade explícita descrita originalmente no RF-09.
 
 > **Revisado por [C05-P01_decisions.md](C05-P01_decisions.md) (D25, 2026-10-21):** este documento ainda descrevia a **tabela** como derivada de "tag de struct". Go não permite tag no tipo struct — apenas em campos —, logo a tabela **não** vem de tag. O contrato vigente é `snake_case` do nome do tipo, sobreponível por `TableName() string`, sem esquema/alias expostos ([E04-P02_decisions.md](E04-P02_decisions.md) §3). As menções a "tag de struct" para a tabela abaixo são históricas; as tags de **campo** (nome de coluna, `pk`, `-`) permanecem válidas.

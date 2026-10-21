@@ -225,7 +225,7 @@ A execução deve permitir fornecer valores de parâmetros separadamente do text
 
 Deve ser possível definir um objeto que identifique um arquivo SQL incorporado e permita executá-lo. O nome do arquivo apenas identifica um recurso já incorporado pelo consumidor; aplica-se a distinção entre compilação e configuração descrita no RF-04.
 
-A preferência é disponibilizar resultados compatíveis com `database/sql`. Os contratos de execução de escrita, consulta com retorno de linhas, mapeamento dos resultados e associação a transações permanecem pendentes; um método conceitual `Exec` ainda não resolve todos esses contratos.
+Os contratos de execução, leitura, mapeamento e associação a transações estão definidos em [E07-P01_decisions.md](E07-P01_decisions.md): `Exec`, `Query`, `QueryRow`, `One` e `All` no runner de DB/Tx, com wrappers Krios sobre `database/sql`. A pendência de metadados `ColumnTypes` permanece identificada em [C05-P03_traceability.md](C05-P03_traceability.md), D01.
 
 ### RF-09 — Mapear entidades, colunas e resultados
 
@@ -249,7 +249,7 @@ As respostas do consumidor foram incorporadas às seções anteriores. Esta seç
 
 Campos de conexão, obrigatoriedade, portas, unidades, padrões, valores omitidos, timeout, contexto e erros foram resolvidos em [E02-P01_decisions.md](E02-P01_decisions.md), com revisão M01–M06. A configuração é recebida por valor, e a biblioteca não retém a configuração completa no DB/Tx.
 
-Os tipos e assinaturas de execução e resultados foram resolvidos em [E03-P01_decisions.md](E03-P01_decisions.md). O modelo de entidades foi resolvido por reflexão em [E04-P01_decisions.md](E04-P01_decisions.md). Permanecem pendentes os contratos dos construtores e o conteúdo de `MigrationsConfig`, nas entregas correspondentes.
+Os tipos e assinaturas de execução e resultados foram resolvidos em [E03-P01_decisions.md](E03-P01_decisions.md). O modelo de entidades foi resolvido por reflexão em [E04-P01_decisions.md](E04-P01_decisions.md). Os contratos dos construtores estão em E05-P01/E05-P03/E06-P01 e o conteúdo de `MigrationsConfig` em E08-P01, revisado por C01–C03. As lacunas atuais estão na [matriz C05-P03](C05-P03_traceability.md).
 
 ### 6.2. Drivers e dialetos
 
@@ -257,9 +257,9 @@ Os tipos e assinaturas de execução e resultados foram resolvidos em [E03-P01_d
 - Qual será a interface dos dialetos e como cada dialeto será selecionado ou associado ao driver?
   _Parcialmente resolvido em [E08-P01_decisions.md](E08-P01_decisions.md): contrato mínimo de capacidades transacionais para migrações (`SupportsTransactionalDDL`, `IsTransactionalStatement`) por dialeto, selecionado por `Config.Type`. Interface completa resolvida em [E05-P01_decisions.md](E05-P01_decisions.md): pacote `internal/dialect` com a interface `Dialect` (nome, marcador de parâmetro, aspas de identificador) e a `MigrationDialect` no mesmo tipo concreto; seleção por `Config.Type`, retenção do dialeto em `DB`/`Tx` e renderizador único compartilhado. Sem extensão pública de dialetos nesta versão._
 - Quais drivers e versões de MySQL e PostgreSQL serão usados na validação manual posterior? Quais capacidades serão garantidas por banco, especialmente retorno de campos e transações em migrações?
-  _Transações em migrações resolvidas em [E08-P01_decisions.md](E08-P01_decisions.md) (escopo condicional por dialeto); retorno de campos em escritas resolvido em [E06-P01_decisions.md](E06-P01_decisions.md); drivers/versões de validação permanecem para E09._
+  _Transações em migrações resolvidas em [E08-P01_decisions.md](E08-P01_decisions.md) (escopo condicional por dialeto); retorno de campos em escritas resolvido em [E06-P01_decisions.md](E06-P01_decisions.md); drivers/versões da integração real permanecem para E10-P01, com conferência em E09._
 
-A responsabilidade de escolher e importar o driver já está definida como sendo do consumidor. Permanecem pendentes os dialetos e a evidência de integração real MySQL/PostgreSQL em E09, conforme o [roteiro manual](E09_manual_validation.md).
+A responsabilidade de escolher e importar o driver já está definida como sendo do consumidor. Os dialetos foram definidos em E05-P01/E08-P01. A integração real automatizada permanece em [E10](E10_integration_plan.md); E09 confere a evidência e os casos residuais do [roteiro manual](E09_manual_validation.md).
 
 Para a validação do projeto, foi escolhido `modernc.org/sqlite` nos testes automatizados com banco. Em 18/10/2026, o consumidor aceitou o SQLite 3.53.4 incorporado pelo driver v1.60.1. A política é usar o SQLite fornecido pela versão estável selecionada do driver, sem exigir coincidência com a versão upstream mais recente; atualizações devem ser deliberadas e validadas. MySQL e PostgreSQL serão validados manualmente pelo consumidor posteriormente, e testes unitários cobrirão as regras e a geração de SQL dos dialetos. O plano de execução registra a preparação do SQLite, o uso local de `dev.db` e os lembretes para as validações restantes.
 
@@ -334,9 +334,9 @@ A exigência de `Where` em atualizações e exclusões e o retorno de campos ape
   _Resolvido em [E04-P01_decisions.md](E04-P01_decisions.md): a ordem é a de declaração dos campos do struct, preservada por `reflect`; a busca por nome usa um índice derivado._
 - Quando a validação será executada: na atribuição, antes da escrita ou também na leitura? Como comunicar valor inválido e erro da função de validação?
 - Quando a formatação será executada e como seu resultado se relacionará com o valor original utilizado nas operações de banco?
-  _Ambas permanecem para E04-P03, com as funções associadas a campos conforme [E04-P01_decisions.md](E04-P01_decisions.md)._
+  _Resolvidas em [E04-P03_decisions.md](E04-P03_decisions.md) e [E06-P01_decisions.md](E06-P01_decisions.md) §8: validação explícita nas leituras, automática em SetValues; formatação explícita para apresentação, preservando o valor persistido._
 
-O modelo de entidades por reflexão, a ordem das colunas, a representação de `NULL`, as junções e as operações tipadas nos campos estão definidos em [E04-P01_decisions.md](E04-P01_decisions.md); as regras restantes de validação/formatação e de tags dependem de E04-P02/E04-P03.
+O modelo de entidades por reflexão, a ordem das colunas, a representação de `NULL`, as junções e as operações tipadas nos campos estão definidos em [E04-P01_decisions.md](E04-P01_decisions.md); as regras de tags e validação/formatação estão em E04-P02/E04-P03, com validação automática de escrita em E06-P01.
 
 ### 6.8. SQL incorporado
 
@@ -374,3 +374,7 @@ O escopo descrito neste documento será atendido quando for possível:
 13. Retornar informações sobre linhas afetadas quando disponíveis, permitir a solicitação explícita de campos gerados ou alterados em escritas e rejeitar solicitações não suportadas antes da execução.
 
 Esses critérios orientam as especificações seguintes; sua validação depende da definição dos contratos pendentes na seção 6.
+
+### Rastreabilidade vigente (C05-P03, 2026-10-21)
+
+A [matriz C05-P03](C05-P03_traceability.md) relaciona RF-01–RF-09 e os treze critérios com contratos, código, testes e pendências. A classificação D01 mantém `ColumnTypes` como pendência contratual a resolver em E09-P01; não o considera implementado nem o converte em extensão. A evidência real de E10 e a distribuição E09 permanecem necessárias.

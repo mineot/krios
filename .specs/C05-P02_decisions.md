@@ -6,7 +6,7 @@ Data: 2026-10-21. Escopo: [C05-P02](0005_consolidation_plan.md#7-documentação-
 
 [0001_use_examples.md](0001_use_examples.md) distingue blocos Go extraídos literalmente de `examples/` de fragmentos ilustrativos. A compilação e execução do pacote sustentam os primeiros; os fragmentos ilustrativos não são apresentados como programas compilados. Os 25 blocos extraídos foram comparados com os arquivos citados, como substrings contíguas.
 
-`Exec` devolve `(Result, error)`; `QueryContext` devolve `(*Rows, error)` e `QueryRowContext` devolve `*Row`, com erro observado em `Scan`. `One`/`File.One` leem posicionalmente: a seleção deve respeitar a ordem dos campos mapeados do destino. `All`/`File.All` mapeiam por nome e encerram o iterador conforme C04, preservando o destino em falha. `sql.Scanner` e `time.Time` mantêm tratamento escalar.
+`Exec` devolve `(Result, error)`; `QueryContext` devolve `(*Rows, error)` e `QueryRowContext` devolve `Row`, com erro observado em `Scan`. `One`/`File.One` leem posicionalmente: a seleção deve respeitar a ordem dos campos mapeados do destino. `All`/`File.All` mapeiam por nome e encerram o iterador conforme C04, preservando o destino em falha. `sql.Scanner` e `time.Time` mantêm tratamento escalar.
 
 O documento de E07 foi reconciliado: arquivo vazio/ausente em `NewSQLFile` produz `ErrFileNotFound`; runner sem arquivo ou executor produz `ErrInvalidQuery`. Não houve mudança de contrato.
 

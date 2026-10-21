@@ -1,5 +1,8 @@
 # E04-P03 — Decisões: Validação e formatação por campo
 
+> **Rastreabilidade atualizada em C05-P03 (2026-10-21):** os encaminhamentos históricos de `ColumnTypes` para E04/E07 não representam entrega. A avaliação permanece pendente em E09-P01, conforme D01 da [matriz](C05-P03_traceability.md). Aliases de resultados já são suportados; alias de tabela/esquema no builder são extensões registradas (D02), distintas de `ManagedObjects` qualificado.
+
+
 Data: 2026-10-19. Continua [E04-P02_decisions.md](E04-P02_decisions.md) e resolve as pendências de §6.7 apontadas em [0002_execution_plan.md](0002_execution_plan.md).
 
 ## 1. Contexto

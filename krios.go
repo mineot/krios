@@ -148,9 +148,9 @@ var (
 	// loaded (nil file system, invalid or missing path, directory or blank
 	// file).
 	ErrFileNotFound = errs.ErrFileNotFound
-	// ErrPartialMigration indicates that a migration run is blocked by an
-	// in_progress or failed record, or by managed objects in a database
-	// without history. Use errors.As with *PartialMigrationError for context.
+	// ErrPartialMigration indicates an incomplete migration version or an
+	// in_progress/failed record. Use errors.As with *PartialMigrationError
+	// for context. Managed objects without history cause ErrInvalidQuery.
 	ErrPartialMigration = errs.ErrPartialMigration
 )
 
