@@ -40,6 +40,8 @@ As marcações e evidências anteriores permanecem como registro das entregas re
 
 **Preparação de E06/E07 (2026-10-21):** C06-P01 concluída com [consumidor separado e cenários W/F](consumers/e06e07/README.md), conforme [D39–D41](C06-P01_decisions.md). SQLite executado em Go 1.26.8/1.27.2; servidores permanecem não executados. C06-P02/P03, C07 e E10 continuam pendentes.
 
+**Preparação de migrações (2026-10-21):** C06-P02 concluiu [M01–M14](C06-P02_migration_scenarios.md), incluindo consumidor de ciclos. A ampliação revelou **A16**, sucesso aparente na segunda reversão após reaplicação, reproduzido em SQLite na base `efb3869`. [D42–D44](C06-P02_decisions.md) registra a evidência e a correção funcional obrigatória antes de C07-P03; o escopo de preparação não encerra esse defeito.
+
 ## 3. Visão geral das entregas
 
 | Entrega | Resultado                                       | Depende de | Requisitos principais              |

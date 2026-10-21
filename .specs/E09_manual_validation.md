@@ -472,19 +472,34 @@ Resultado esperado: `consultas E05 validadas`, com a linha de collation registra
 
 V11 não autoriza repetir automaticamente a escrita: confirmar a situação por outra conexão. Se o ambiente não permitir injeção controlada, registrar o cenário como não executado; os testes simulados continuam sendo evidência somente do contrato local.
 
-### 4.1 Cenários de migrações — estado parcial (E08)
+### 4.1 Cenários de migrações — C06-P02
 
-Aplicam-se a E08, já implementado localmente; falta a evidência real. Ver [E08-P01_decisions.md](E08-P01_decisions.md) e [C01-P01_decisions.md](C01-P01_decisions.md), que fixam `MigrationsConfig{FS, TargetVersion *int, Versions, ManagedObjects}` e `RunMigrations(ctx)`. As migrações são configuradas em código: `ManagedObjects` deve listar as tabelas geridas pelo cenário para a verificação de banco sem histórico (§6 de E08-P01). A verificação simulada de E08-P04 (testes em [tests/migrations_test.go](../tests/migrations_test.go) e [internal/migrate/apply_test.go](../internal/migrate/apply_test.go)) cobre o contrato local dos percursos e do estado parcial; os cenários abaixo pedem a evidência real em MySQL/PostgreSQL. Utilize um helper `ptr(int) *int` ou variável local para preencher `TargetVersion`.
+O [catálogo reproduzível M01–M14](C06-P02_migration_scenarios.md) define fixtures,
+pré-condições, passos, resultados esperados, inspeção e limpeza. Usa um statement
+por arquivo no percurso portátil; multi-statement é variante separada (M13).
+Contratos: E08 e C01–C03; rastreabilidade RF-04/05 e CA-05/11/12.
 
-| ID  | Procedimento                                                                                                                                            | Resultado esperado                                                                                                                  |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| M01 | MySQL: migração com DDL não-transacional seguido de comando que falha no meio do arquivo                                                                | Arquivo registrado com `in_progress`/`failed`; erro com contexto; `applied_at` não preenchido para o arquivo falho                  |
-| M02 | Após M01, chamar `RunMigrations` novamente                                                                                                              | Bloqueio com `ErrPartialMigration` (`Direction`, `TargetVersion`, `LastVersion`, `LastFile`, `Status`); nenhuma execução automática |
-| M03 | Após M01, inspecionar o banco                                                                                                                           | DDL já executado **não** revertido (sem rollback de commit implícito); estado real registrado como evidência                        |
-| M04 | Recuperar conforme política: concluir manualmente e marcar registro como `applied` (ou reverter manualmente e limpar registro); repetir `RunMigrations` | Execução segue da versão correta até a desejada                                                                                     |
-| M05 | PostgreSQL e SQLite: sequência com falha deliberada em arquivo                                                                                          | Rollback da versão em execução; versão anterior permanece aplicada; nenhum registro `in_progress` remanescente                      |
-| M06 | Estado `0` e versão desejada                                                                                                                            | `TargetVersion: ptr(0)` reverte tudo; `TargetVersion: nil` e `Migrations` ausente/`ManagedObjects` vazio retornam erro antes de executar |
-| M07 | Banco sem histórico: declarar `ManagedObjects` inclui uma tabela existente; repetir com `ManagedObjects` apontando só para tabelas ausentes; em MySQL/PostgreSQL, criar tabela homônima em **outro esquema** e declará-la (com e sem qualificação) | Com objeto gerido presente no esquema da conexão → erro antes de executar; homônimo apenas em outro esquema → **não** bloqueia nome simples (filtro `DATABASE()`/`current_schema()`), e `schema.tabela` qualificado aponta o esquema declarado; sem nenhum objeto gerido presente → versão atual `0` e percursos normais. Nome qualificado em SQLite → `ErrInvalidConfig` |
+| ID | Cenário | Resultado exigido / limite |
+| --- | --- | --- |
+| M01 | MySQL, versão com dois arquivos DDL, segundo falha | Primeiro efeito permanece; arquivo falho failed, ErrPartialMigration e LastVersion da última versão completa |
+| M02 | Reabrir após M01 | Preparação bloqueada, plano nil, sem reaplicar nem modificar histórico |
+| M03 | Inspecionar efeitos de M01 | Esquema e histórico confirmam prefixo persistido; versão não é completa |
+| M04 | Recuperação explícita do prefixo | Reconciliar esquema, remover somente linhas exatas da tentativa revertida, corrigir fixture e reaplicar; nunca limpar falhas sem provar os efeitos |
+| M05 | Falha na versão 2 em SQLite/PostgreSQL | Rollback da versão 2; versão 1 e infraestrutura migrations permanecem; erro comum quando rollback conclui |
+| M06 | Alvo/configuração ausente, zero, inválido e já alcançado | Open sem Migrations é permitido; RunMigrations sem config falha. TargetVersion nil é inválido; ponteiro para zero reverte; alvo positivo não declarado falha na preparação |
+| M07 | Objetos gerenciados e homônimos em esquemas | Objeto declarado presente sem histórico → ErrInvalidQuery; escopo conforme conexão/qualificação; falha de inspeção não é ausência |
+| M08 | Ciclos C02 e segunda reversão/reaplicação | Conferir schema e seed em cada reabertura, inclusive múltiplos arquivos. **A16 aberto:** segunda reversão pode retornar sucesso aparente |
+| M09 | MySQL transacional por arquivo | Falha original comum, primeiro arquivo persistido; reabertura detecta versão parcial e bloqueia |
+| M10 | Falhas de registro/markFailed/markApplied/commit | Causas preservadas; parcial/incerto conforme C03-P03; evidência simulada explicitamente separada de real |
+| M11 | Down parcial, versões 1/3 | Conferir prefixo, LastVersion/LastFile e estado final 1, sem pressupor versão 2 |
+| M12 | Histórico incompatível | Rejeição antes de aplicar; comparar snapshot e não deduzir completude por MAX(version) |
+| M13 | Multi-statement opcional | Registrar configuração/protocolo do driver e provar suporte antes da injeção; não contar rejeição inicial como efeito parcial |
+| M14 | Cancelamento entre passos | Escopos já confirmados permanecem; erro de contexto e limpeza observáveis |
+
+**Estado:** comandos locais existentes aprovados e consumidor SQLite M08
+compilado/executado. A reprodução estendida encontrou **A16**, documentado em
+[C06-P02_decisions.md](C06-P02_decisions.md); não corrigido nesta preparação,
+bloqueia a passagem C07-P03. MySQL/PostgreSQL reais permanecem não executados.
 
 ### 4.2 Escritas e SQL incorporado — C06-P01
 
@@ -513,7 +528,7 @@ imports de drivers não encerra os cenários reais dos servidores.
 
 | Banco      | Driver/versão | Servidor/versão | Go/revisão Krios | Cenários | Resultado     | Pendências      |
 | ---------- | ------------- | --------------- | ---------------- | -------- | ------------- | --------------- |
-| MySQL      | A preencher   | A preencher     | A preencher      | Nenhum (V01–V23/M01–M07/W01–W07/F01–F05) | Não executado | Integração real |
-| PostgreSQL | A preencher   | A preencher     | A preencher      | Nenhum (V01–V23/M01–M07/W01–W07/F01–F05) | Não executado | Integração real |
+| MySQL      | A preencher   | A preencher     | A preencher      | Nenhum (V01–V23/M01–M14/W01–W07/F01–F05) | Não executado | Integração real |
+| PostgreSQL | A preencher   | A preencher     | A preencher      | Nenhum (V01–V23/M01–M14/W01–W07/F01–F05) | Não executado | Integração real |
 
 Para cada cenário, guardar: data, configuração sem segredos, passos executados, resultado esperado, resultado observado e limitação do ambiente. Falha conhecida deve gerar correção e nova evidência. Ao completar os cenários aplicáveis, atualizar E02-P04 e a validação final E09; ausência de evidência não deve ser marcada como sucesso.

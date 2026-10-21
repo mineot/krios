@@ -57,3 +57,14 @@ Não se compara `RowsAffected` de UPDATE sem mudança entre drivers: W06 altera 
 ## Evidência
 
 Ver [C06-P01_decisions.md](../../C06-P01_decisions.md). Compilar com os drivers não prova conectividade nem comportamento do servidor. A construção deste consumidor não inicia a automação de infraestrutura/CI de E10. C06-P02 continua responsável pelos ciclos e falhas de migração; C06-P03 consolidará o formato de registro de ambiente/resultados.
+
+## Migrações — C06-P02
+
+O comando adicional `go run ./cmd/migration-cycles -targets 1,0,1` observa
+M08 em SQLite isolado, com SQL incorporado e reabertura entre alvos.
+`-targets 2,1,2` inclui versão com dois arquivos up. O percurso
+`-targets 1,0,1,0` reproduz o defeito A16 e termina com código não zero;
+não integra os marcadores PASS de W/F. Ver [catálogo M01–M14](../../C06-P02_migration_scenarios.md)
+e [evidência/limites](../../C06-P02_decisions.md). Os demais cenários continuam
+com procedimentos e reproduções indicados no catálogo; o comando não é
+harness completo nem validação de servidores.

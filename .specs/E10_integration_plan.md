@@ -101,3 +101,7 @@ Ordem: P01 → P02 → P03 → P04 → P05 → P06 → P07 → P08. A infraestru
 | E10-P08 | Pendente | —         |
 
 Este documento planeja testes e automação. Não instala drivers, inicia servidores, altera o workflow nem comprova compatibilidade com bancos reais.
+
+## Entrada C06-P02
+
+O [catálogo M01–M14](C06-P02_migration_scenarios.md) revisa escopos e define ciclos/falhas de RF-04/05. E10-P03/P05 deve vincular seus cenários e distinguir injeção simulada de real. **A16** foi reproduzido localmente em C06-P02 e exige correção antes da passagem C07-P03; E10 não deve considerar o ciclo concluído apenas por verificar `0 → 1 → 0 → 1`, sem segunda reversão.
