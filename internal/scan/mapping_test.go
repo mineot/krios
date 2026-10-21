@@ -337,6 +337,39 @@ func TestRowsAllFailureKeepsDestinationAndCloses(t *testing.T) {
 	}
 }
 
+// TestRowsAllPreservesPrimaryAndCleanupFailure: D04 §5. A scan failure and a
+// concurrent close failure are both preserved; the consumer still observes the
+// original cause and the cleanup error through errors.Is/errors.As.
+func TestRowsAllPreservesPrimaryAndCleanupFailure(t *testing.T) {
+	closeCause := errors.New("close failed")
+	native := &tableRows{
+		columns:  []string{"id", "name", "bio"},
+		values:   [][]driver.Value{{"not an integer", "bob", "b"}},
+		closeErr: closeCause,
+	}
+	db := openMapped(t, native)
+
+	rows, err := db.QueryContext(context.Background(), "read")
+	if err != nil {
+		t.Fatalf("QueryContext() = %v", err)
+	}
+
+	var users []mapUser
+	allErr := rows.All(&users)
+	if allErr == nil {
+		t.Fatal("All() = nil, want a conversion error")
+	}
+	if !errors.Is(allErr, closeCause) {
+		t.Errorf("All() = %v, want it to preserve the cleanup failure", allErr)
+	}
+	if !strings.Contains(allErr.Error(), "map map_user") {
+		t.Errorf("All() = %v, want it to preserve the primary mapping cause", allErr)
+	}
+	if native.closes.Load() != 1 {
+		t.Errorf("closes = %d, want 1", native.closes.Load())
+	}
+}
+
 func TestRowsAllEmptyResultReplacesDestination(t *testing.T) {
 	db := openMapped(t, &tableRows{columns: []string{"id"}})
 

@@ -127,14 +127,27 @@ func allDest(dest any) (reflect.Value, reflect.Type, error) {
 // dest, which must be *[]T with T a struct type. Result columns are matched to
 // fields by name: exact match first, then case-insensitive. Columns without a
 // mapped field are discarded and fields without a column stay zero. The
-// iterator is always closed; on success the destination slice is replaced with
-// the mapped rows, on failure it is left unchanged. Scan and iteration failures
-// are recorded on the owning transaction and block Commit.
+// iterator is closed on every path, including invalid destination, invalid
+// entity, metadata failure, scan failure and iteration failure; on success the
+// destination slice is replaced with the mapped rows, on failure it is left
+// unchanged. Failures are recorded on the owning transaction and block Commit.
+// When the primary failure and the cleanup failure concur, both are preserved
+// as a joined error so the consumer still sees the original cause.
 func (rw *Rows) All(dest any) error {
 	if rw == nil || rw.r == nil {
 		return errors.New("krios: rows are closed or invalid")
 	}
 
+	err := rw.all(dest)
+
+	if err != nil {
+		rw.record(err)
+	}
+
+	return rw.withClose(err)
+}
+
+func (rw *Rows) all(dest any) error {
 	slice, elemType, err := allDest(dest)
 
 	if err != nil {
@@ -180,25 +193,32 @@ func (rw *Rows) All(dest any) error {
 		}
 
 		if err := rw.r.Scan(dests...); err != nil {
-			mappedErr := fmt.Errorf("krios: map %s: %w", ent.Table(), err)
-			rw.record(mappedErr)
-			_ = rw.Close()
-
-			return mappedErr
+			return fmt.Errorf("krios: map %s: %w", ent.Table(), err)
 		}
 
 		mapped = reflect.Append(mapped, elem.Elem())
 	}
 
 	if err := rw.Err(); err != nil {
-		_ = rw.Close()
-		return err
-	}
-
-	if err := rw.Close(); err != nil {
 		return err
 	}
 
 	slice.Set(mapped)
 	return nil
+}
+
+// withClose closes the iterator, preserving primary as the leading cause and
+// joining any cleanup failure. A nil primary with a cleanup failure returns the
+// cleanup failure alone.
+func (rw *Rows) withClose(primary error) error {
+	closeErr := rw.Close()
+
+	switch {
+	case primary != nil && closeErr != nil:
+		return errors.Join(primary, closeErr)
+	case primary != nil:
+		return primary
+	default:
+		return closeErr
+	}
 }

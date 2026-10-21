@@ -43,6 +43,8 @@ func (rw Row) Scan(dest ...any) error {
 
 		if err != nil {
 			rw.record(err)
+			rw.releaseRow()
+
 			return err
 		}
 
@@ -55,6 +57,15 @@ func (rw Row) Scan(dest ...any) error {
 	rw.record(err)
 
 	return errs.NormalizeTxError(err)
+}
+
+// releaseRow concludes the native row lifecycle when Scan rejects the
+// destination before consuming it. database/sql only releases the underlying
+// result set through (*sql.Row).Scan, so a rejected destination that skips it
+// would leak the native rows. The discarded error only reports the destination
+// arity mismatch; the caller's cause is the rejected destination itself.
+func (rw Row) releaseRow() {
+	_ = rw.r.Scan()
 }
 
 func (rw Row) record(err error) {

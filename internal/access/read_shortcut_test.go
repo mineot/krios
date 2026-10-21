@@ -123,13 +123,13 @@ func TestReadShortcutsCloseOnInvalidDestination(t *testing.T) {
 			t.Errorf("closes = %d, want 1 (Tx.Select.All leaked on invalid destination)", got)
 		}
 
-		// A rejected destination is a read-mapping failure observed on the Tx:
-		// until C04-P02 records it, Commit is not blocked.
-		if err := tx.Commit(context.Background()); err != nil {
-			t.Fatalf("Commit() = %v, want nil (mapping failure not yet recorded)", err)
+		// A rejected destination is a read-mapping failure observed after the
+		// query started on the Tx: it is recorded and blocks Commit (D04 §5).
+		if err := tx.Commit(context.Background()); err == nil {
+			t.Fatal("Commit() = nil, want blocked commit after mapping failure")
 		}
-		if d.Commits.Load() != 1 || d.Rollbacks.Load() != 0 {
-			t.Errorf("commits=%d rollbacks=%d, want 1/0", d.Commits.Load(), d.Rollbacks.Load())
+		if d.Commits.Load() != 0 || d.Rollbacks.Load() != 1 {
+			t.Errorf("commits=%d rollbacks=%d, want 0/1", d.Commits.Load(), d.Rollbacks.Load())
 		}
 	})
 }
