@@ -81,7 +81,7 @@ target=1 current=0 steps=1 table_exists=1 error=<nil>   // antes: steps=0, table
 - **MySQL — arquivo 100% transacional:** transação por arquivo. Arquivos anteriores permanecem aplicados.
 - **MySQL — arquivo com DDL de commit implícito:** sem transação. Falha pode deixar estado parcial **deste arquivo**; nunca tentar reverter DDL já confirmado; registrar `failed`/`ErrPartialMigration`.
 - **Limite explícito:** não há rollback de **todo o percurso** até o alvo. Versões anteriormente confirmadas não são revertidas por uma falha em versão posterior.
-- A criação da tabela de infraestrutura `migrations` é fora do escopo transacional dos arquivos de aplicação; seu comportamento em falha de commit é documentado em C03-P03, não prometido como revertível.
+- A criação da tabela de infraestrutura `migrations` é fora do escopo transacional dos arquivos de aplicação; seu comportamento em falha de commit é documentado em C03-P03, não prometido como revertível. Resolvido em [C03-P03_decisions.md](C03-P03_decisions.md) (D16): falha de `Commit` tenta limpeza defensiva e reporta desfecho incerto, sem prometer reversão nem emitir `ErrPartialMigration`.
 - `TestMigrationsFailureRollsBackSQLite` deve ser reinterpretado como **rollback da versão em execução** (a versão anterior `applied` permanece), e não como rollback do percurso completo.
 
 **Alternativas rejeitadas.**

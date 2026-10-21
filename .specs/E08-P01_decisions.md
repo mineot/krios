@@ -148,6 +148,8 @@ Comportamento:
 
 A mensagem resume o estado; o contexto é exposto por um tipo de erro estruturado que satisfaz `errors.As` e carrega os campos acima. A implementação do tipo e da sentinela fica em E08-P02 (`internal/errs`), no padrão de `NormalizeTxError` ([E03-P01_decisions.md](E03-P01_decisions.md)).
 
+> **Revisado por [C03-P03_decisions.md](C03-P03_decisions.md) (D14–D15, 2026-10-20):** o bloqueio por `ErrPartialMigration` é mantido mesmo quando o corpo sem transação commitou e a atualização do histórico também falhou. `markFailed` que falha → `*PartialMigrationError` com status `failed` e ambas as causas preservadas; `markApplied` que falha após corpo commitado → `*PartialMigrationError` com status `in_progress` e estado incerto. Preservar `%w` alcança a causa do corpo e a falha de registro. A limpeza e o desfecho incerto de `Commit` (D16) não criam estado parcial.
+
 ## 10. Capacidades transacionais por dialeto
 
 O dialeto já implementa esta capacidade em `internal/dialect.migration.go`; o contrato está fixado aqui e é consumido pela camada de migrações pela interface `MigrationDialect` (segregação no mesmo tipo concreto, padrão de [E06-P01_decisions.md](E06-P01_decisions.md) §7):
@@ -184,6 +186,8 @@ Detecção por statement deve ignorar case, comentários e espaços. Palavras-ch
 | MySQL – arquivo contém DDL não-transacional | Sem transação                                       | Executar statements sequencialmente. Falha em statement pode deixar banco em estado parcial deste arquivo. **Não** tentar reverter statements já executados/commitados. |
 
 Nunca dividir um único arquivo. Se qualquer arquivo da sequência (MySQL) for não-transacional, não usar transação por versão.
+
+> **Revisado por [C03-P03_decisions.md](C03-P03_decisions.md) (D14–D17, 2026-10-20):** falha de `Commit` em qualquer escopo tenta `Rollback` defensivo e reporta desfecho incerto preservando os dois erros, sem emitir `ErrPartialMigration` (D16). Cancelamento entre passos preserva `context.Canceled` sem criar estado parcial; falha de `insertInProgress`/`Begin` é erro comum com causa preservada (D17).
 
 ## 12. Itens resolvidos e permanentes
 

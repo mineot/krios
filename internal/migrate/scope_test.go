@@ -174,18 +174,30 @@ func TestLoadStepTransactionalScope(t *testing.T) {
 }
 
 // scopeExecutor satisfies the internal executor contract for Apply. The
-// history probe reports a missing table so Apply creates it on demand.
+// history probe reports a missing table so Apply creates it on demand. The
+// optional hooks let tests inject failures on specific statements.
 type scopeExecutor struct {
-	execs []string
+	execs    []string
+	queryErr error
+	execHook func(query string) error
+	rowProbe func(query string) error
 }
 
 func (e *scopeExecutor) ExecContext(_ context.Context, query string, _ ...any) (result.Result, error) {
 	e.execs = append(e.execs, query)
 
+	if e.execHook != nil {
+		return nil, e.execHook(query)
+	}
+
 	return nil, nil
 }
 
-func (e *scopeExecutor) QueryContext(context.Context, string, ...any) (*scan.Rows, error) {
+func (e *scopeExecutor) QueryContext(_ context.Context, query string, _ ...any) (*scan.Rows, error) {
+	if e.queryErr != nil {
+		return nil, e.queryErr
+	}
+
 	return nil, errors.New("Table 'app.migrations' doesn't exist")
 }
 
@@ -205,6 +217,9 @@ func (e *scopeExecutor) ran(sub string) bool {
 
 type scopeTx struct {
 	execs     []string
+	execErr   error
+	commitErr error
+	rollErr   error
 	committed bool
 	rolled    bool
 }
@@ -212,10 +227,18 @@ type scopeTx struct {
 func (tx *scopeTx) ExecContext(_ context.Context, query string, _ ...any) (result.Result, error) {
 	tx.execs = append(tx.execs, query)
 
+	if tx.execErr != nil {
+		return nil, tx.execErr
+	}
+
 	return nil, nil
 }
 
 func (tx *scopeTx) Commit(context.Context) error {
+	if tx.commitErr != nil {
+		return tx.commitErr
+	}
+
 	tx.committed = true
 
 	return nil
@@ -224,7 +247,7 @@ func (tx *scopeTx) Commit(context.Context) error {
 func (tx *scopeTx) Rollback(context.Context) error {
 	tx.rolled = true
 
-	return nil
+	return tx.rollErr
 }
 
 func (tx *scopeTx) ran(sub string) bool {
@@ -238,11 +261,18 @@ func (tx *scopeTx) ran(sub string) bool {
 }
 
 type scopeBeginner struct {
-	txs []*scopeTx
+	txs       []*scopeTx
+	beginErr  error
+	commitErr error
+	rollErr   error
 }
 
 func (b *scopeBeginner) Begin(context.Context) (Tx, error) {
-	tx := &scopeTx{}
+	if b.beginErr != nil {
+		return nil, b.beginErr
+	}
+
+	tx := &scopeTx{commitErr: b.commitErr, rollErr: b.rollErr}
 	b.txs = append(b.txs, tx)
 
 	return tx, nil

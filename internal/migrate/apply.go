@@ -198,10 +198,23 @@ func runVersionScope(ctx context.Context, begin Beginner, group []Step, d dialec
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("krios: migrations: commit version scope: %w", err)
+		return commitScope(ctx, tx, fmt.Errorf("krios: migrations: commit version scope: %w", err))
 	}
 
 	return nil
+}
+
+// commitScope reports a commit failure of a migration scope. A failed commit
+// does not establish the remote outcome, so the scope must not leave a
+// possibly-active transaction behind: a defensive rollback is attempted and
+// its outcome preserved, and the error states that the state is uncertain
+// (C03-P03 D16). The commit cause is always preserved.
+func commitScope(ctx context.Context, tx Tx, cause error) error {
+	if rbErr := tx.Rollback(ctx); rbErr != nil {
+		return fmt.Errorf("%w (state uncertain; cleanup rollback failed: %w)", cause, rbErr)
+	}
+
+	return fmt.Errorf("%w (state uncertain; transaction cleanup attempted)", cause)
 }
 
 // rollbackVersion rolls the failed version back and reports the failure. The
@@ -237,7 +250,7 @@ func runFileScope(ctx context.Context, begin Beginner, step Step, d dialect.Dial
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("krios: migrations: commit %s: %w", step.File.Name(), err)
+		return commitScope(ctx, tx, fmt.Errorf("krios: migrations: commit %s: %w", step.File.Name(), err))
 	}
 
 	return nil
@@ -247,6 +260,11 @@ func runFileScope(ctx context.Context, begin Beginner, step Step, d dialect.Dial
 // The file is recorded in_progress before running and applied or failed after.
 // A failure can leave this file's committed statements in place; it blocks
 // with ErrPartialMigration and never reverts them (E08-P01 §11).
+//
+// Failure diagnosis (C03-P03 D14/D15): a body failure is reported as partial
+// even when the failed-record update also fails; a markApplied failure after a
+// committed body is reported as an uncertain partial state instead of a plain
+// error, because the SQL already took effect without a confirmed record.
 func runNoTxScope(ctx context.Context, exec executor, step Step, d dialect.Dialect, cfg *config.MigrationsConfig, lastApplied int) error {
 	if err := insertInProgress(ctx, exec, d, step); err != nil {
 		return fmt.Errorf("krios: migrations: record %s: %w", step.File.Name(), err)
@@ -257,7 +275,7 @@ func runNoTxScope(ctx context.Context, exec executor, step Step, d dialect.Diale
 	}
 
 	if err := markApplied(ctx, exec, d, step); err != nil {
-		return fmt.Errorf("krios: migrations: mark %s applied: %w", step.File.Name(), err)
+		return uncertainPartial(step, cfg, lastApplied, fmt.Errorf("mark %s applied: %w", step.File.Name(), err))
 	}
 
 	return nil
@@ -285,11 +303,37 @@ func executeFile(ctx context.Context, tx Tx, step Step, d dialect.Dialect) error
 // partialFailure records the step as failed and returns an ErrPartialMigration
 // describing the blocked state without reverting anything already committed.
 // lastApplied is the highest version applied before this step.
+//
+// When marking the failure also fails, the run must still block unsafe
+// retries: the returned error keeps ErrPartialMigration identity and preserves
+// both the original cause and the record failure (C03-P03 D14).
 func partialFailure(ctx context.Context, exec executor, step Step, d dialect.Dialect, cfg *config.MigrationsConfig, lastApplied int, cause error) error {
 	if err := markFailed(ctx, exec, d, step, cause); err != nil {
-		return fmt.Errorf("krios: migrations: record %s failure: %w (cause: %w)", step.File.Name(), err, cause)
+		recordErr := fmt.Errorf("record %s failure: %w", step.File.Name(), err)
+		combined := fmt.Errorf("%w (record failure: %w)", cause, recordErr)
+
+		return partial(step, cfg, lastApplied, StatusFailed,
+			"a non-transactional file failed after committing statements and its failure record could not be updated; the state is uncertain, resolve it manually before retrying",
+			combined)
 	}
 
+	return partial(step, cfg, lastApplied, StatusFailed,
+		"a non-transactional file failed after committing statements; resolve the partial state before retrying",
+		cause)
+}
+
+// uncertainPartial reports a committed but unrecorded state: the body ran (or
+// may have run) without a confirmed history record, so a plain error would let
+// the consumer retry unsafely. The returned *PartialMigrationError keeps the
+// ErrPartialMigration identity and preserves the cause (C03-P03 D15).
+func uncertainPartial(step Step, cfg *config.MigrationsConfig, lastApplied int, cause error) error {
+	return partial(step, cfg, lastApplied, StatusInProgress,
+		"a non-transactional file committed without a confirmed history record; the state is uncertain, resolve it manually before retrying",
+		cause)
+}
+
+// partial builds the structured blocked state shared by the uncertain paths.
+func partial(step Step, cfg *config.MigrationsConfig, lastApplied int, status, message string, cause error) error {
 	target := 0
 
 	if cfg.TargetVersion != nil {
@@ -297,8 +341,8 @@ func partialFailure(ctx context.Context, exec executor, step Step, d dialect.Dia
 	}
 
 	return errs.NewPartialMigrationError(
-		step.Direction, target, lastApplied, step.File.Name(), StatusFailed,
-		"a non-transactional file failed after committing statements; resolve the partial state before retrying",
+		step.Direction, target, lastApplied, step.File.Name(), status,
+		message,
 		cause,
 	)
 }
