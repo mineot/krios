@@ -509,3 +509,66 @@ func equalStrings(got, want []string) bool {
 	}
 	return true
 }
+
+// embeddedEntity is a struct with an embedded field: allDest accepts a slice of
+// it, but entity.OfType rejects it, exercising the entity-validation early
+// return of Rows.All.
+type embeddedEntity struct {
+	mapUser
+}
+
+// TestRowsAllClosesOnInvalidDestination: A05 regression. An invalid destination
+// must not leak the native iterator: Rows.All returns before consuming rows, so
+// the resource is only released if All closes it on every path.
+func TestRowsAllClosesOnInvalidDestination(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		dest any
+	}{
+		{"nil", nil},
+		{"not a pointer", []mapUser{}},
+		{"pointer to struct", &mapUser{}},
+		{"slice of non-struct", new([]int)},
+		{"slice of pointers", new([]*mapUser)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			native := &tableRows{columns: []string{"id"}}
+			db := openMapped(t, native)
+
+			rows, err := db.QueryContext(context.Background(), "read")
+			if err != nil {
+				t.Fatalf("QueryContext() = %v", err)
+			}
+
+			if err := rows.All(tc.dest); !errors.Is(err, errs.ErrInvalidEntity) {
+				t.Fatalf("All() = %v, want errs.ErrInvalidEntity", err)
+			}
+
+			if native.closes.Load() != 1 {
+				t.Errorf("closes = %d, want 1 (resource leaked on invalid destination)", native.closes.Load())
+			}
+		})
+	}
+}
+
+// TestRowsAllClosesOnInvalidEntity: A05 regression. A destination that passes
+// allDest but yields no usable entity (embedded field) must still release the
+// native iterator.
+func TestRowsAllClosesOnInvalidEntity(t *testing.T) {
+	native := &tableRows{columns: []string{"id", "name", "bio"}}
+	db := openMapped(t, native)
+
+	rows, err := db.QueryContext(context.Background(), "read")
+	if err != nil {
+		t.Fatalf("QueryContext() = %v", err)
+	}
+
+	var dest []embeddedEntity
+	if err := rows.All(&dest); !errors.Is(err, errs.ErrInvalidEntity) {
+		t.Fatalf("All() = %v, want errs.ErrInvalidEntity", err)
+	}
+
+	if native.closes.Load() != 1 {
+		t.Errorf("closes = %d, want 1 (resource leaked on invalid entity)", native.closes.Load())
+	}
+}

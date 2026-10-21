@@ -213,8 +213,9 @@ func TestFileQueryRowNoRowsPreserved(t *testing.T) {
 func TestFileOneAndAllRejectInvalidDest(t *testing.T) {
 	f := mustFile(t, fsFixture(), "queries/list.sql")
 
+	native := &testutil.Rows{Values: []driver.Value{int64(1)}}
 	d := &testutil.Driver{Query: func() (driver.Rows, error) {
-		return &testutil.Rows{Values: []driver.Value{int64(1)}}, nil
+		return native, nil
 	}}
 	db := openDriver(t, d)
 
@@ -224,6 +225,10 @@ func TestFileOneAndAllRejectInvalidDest(t *testing.T) {
 
 	if err := db.File(f).All(context.Background(), 0); !errors.Is(err, errs.ErrInvalidEntity) {
 		t.Fatalf("All(non-pointer) = %v, want errs.ErrInvalidEntity", err)
+	}
+
+	if got := native.Closes.Load(); got != 2 {
+		t.Errorf("native rows closed %d times, want 2 (resource leaked on invalid destination)", got)
 	}
 }
 

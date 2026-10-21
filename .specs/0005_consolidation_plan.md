@@ -120,7 +120,7 @@ Depende de D02/D03 e do modelo de estado de C02; a reprodução pode começar an
 
 Depende de D04. Pode avançar independentemente de C02/C03.
 
-- [ ] **C04-P01 — Demonstrar recursos retidos.** Usar contadores do driver simulado para conferir fechamento após destino inválido, entidade inválida, erro de metadados, conversão, iteração e fechamento. Cobrir `Rows.All` e `Row.Scan`, incluindo ponteiro de entidade nil. O teste deve observar a limpeza antes de qualquer `defer` do próprio teste que possa mascarar o defeito.
+- [x] **C04-P01 — Demonstrar recursos retidos.** Usar contadores do driver simulado para conferir fechamento após destino inválido, entidade inválida, erro de metadados, conversão, iteração e fechamento. Cobrir `Rows.All` e `Row.Scan`, incluindo ponteiro de entidade nil. O teste deve observar a limpeza antes de qualquer `defer` do próprio teste que possa mascarar o defeito. Concluída (2026-10-20); regressões em [C04-P01_decisions.md](C04-P01_decisions.md) D21 — falham por design até C04-P02. "Erro de metadados" não é injetável via driver simulado (D21).
 - [ ] **C04-P02 — Corrigir o ciclo de vida.** Garantir fechamento/consumo na responsabilidade do wrapper e propagação conforme D04, sem substituir a causa original por erro de limpeza. Preservar o destino de `All` em falha e a substituição por slice vazio em sucesso sem linhas. Manter leitura posicional de `One` e por nome de `All`.
 - [ ] **C04-P03 — Exercitar os atalhos públicos.** Verificar `Select.One/All/Paginate`, `File.One/All` e escritas com `Returning().One/All`, em DB e Tx. Conferir liberação de recursos, bloqueio de commit quando aplicável e exclusão de `sql.ErrNoRows`. Erros de construção anteriores ao executor continuam sem iniciar consultas ou escritas.
 
@@ -165,7 +165,7 @@ Sequência: C01 → C02 → C03 → C05 → C06 → C07 → E10 → conclusão d
 | C01     | Contratos e impactos decididos                                  | Concluída  | [C01-P01_decisions.md](C01-P01_decisions.md); reconciliado em 0001/0002/E08/E09 2026-10-20 |
 | C02     | Estado de migração e ciclos corretos                            | Concluída  | `TargetVersion` → `*int`, versão efetiva por completude, reaplicação após down; regressões R01–R04; `go test ./...` OK (2026-10-20) |
 | C03     | Preparação, atomicidade e falhas coerentes                      | Concluída  | C03-P01–P04 concluídos (2026-10-20): inspeção de objetos, classificação transacional, diagnóstico/limpeza e progresso parcial; ver [C03-P01_decisions.md](C03-P01_decisions.md), [C03-P02_decisions.md](C03-P02_decisions.md), [C03-P03_decisions.md](C03-P03_decisions.md) e [C03-P04_decisions.md](C03-P04_decisions.md) |
-| C04     | Recursos e erros de leitura corrigidos                          | Pendente | —                      |
+| C04     | Recursos e erros de leitura corrigidos                          | Em curso | C04-P01 concluído (2026-10-20): regressões de recursos retidos em [C04-P01_decisions.md](C04-P01_decisions.md) D21 (vermelhas até C04-P02); correção P02 e atalhos P03 pendentes |
 | C05     | Documentos, exemplos e rastreabilidade reconciliados            | Pendente | —                      |
 | C06     | Cenários reproduzíveis para automação E10 e casos residuais E09 | Pendente | —                      |
 | C07     | Verificações e passagem registradas                             | Pendente | —                      |

@@ -128,6 +128,26 @@ func TestQueryRowErrors(t *testing.T) {
 	}
 }
 
+// TestRowScanReleasesNativeRowOnRejectedEntity: A05 regression. When Scan
+// rejects the destination before consuming the native row (nil entity pointer),
+// it must still conclude the native row lifecycle so the driver's result set is
+// released. database/sql only releases the row through (*sql.Row).Scan, so a
+// rejected entity that skips it leaks the underlying driver.Rows.
+func TestRowScanReleasesNativeRowOnRejectedEntity(t *testing.T) {
+	native := &testutil.Rows{Values: []driver.Value{int64(7)}}
+	db := openDriver(t, &testutil.Driver{Query: func() (driver.Rows, error) { return native, nil }})
+
+	var user *mapUser
+	err := db.QueryRowContext(context.Background(), "SELECT value").Scan(user)
+	if !errors.Is(err, errs.ErrInvalidEntity) {
+		t.Fatalf("Scan() = %v, want errs.ErrInvalidEntity", err)
+	}
+
+	if native.Closes.Load() != 1 {
+		t.Errorf("native rows closed %d times, want 1 (resource leaked on rejected entity)", native.Closes.Load())
+	}
+}
+
 func TestRowsLifecycle(t *testing.T) {
 	for _, scenario := range []string{"partial", "eof", "iteration", "close", "conversion"} {
 		t.Run(scenario, func(t *testing.T) {
