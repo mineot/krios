@@ -12,6 +12,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func ptrInt(i int) *int { v := i; return &v }
+
 // This file validates the migration paths and failures of E08 against a real
 // SQLite database, checking both the resulting schema and the migrations
 // history table. MySQL/PostgreSQL paths are covered by simulated tests in
@@ -115,7 +117,7 @@ func TestMigrationsEmptyDatabaseAdvances(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "krios.db")
 	db, raw := openMigrations(t, path, &krios.MigrationsConfig{
 		FS:             migrationFiles(),
-		TargetVersion:  2,
+		TargetVersion: ptrInt(2),
 		Versions:       migrationVersions(),
 		ManagedObjects: []string{"users", "posts"},
 	})
@@ -160,7 +162,7 @@ func TestMigrationsAlreadyAtTarget(t *testing.T) {
 	cfg := func() *krios.MigrationsConfig {
 		return &krios.MigrationsConfig{
 			FS:             migrationFiles(),
-			TargetVersion:  2,
+			TargetVersion: ptrInt(2),
 			Versions:       migrationVersions(),
 			ManagedObjects: []string{"users", "posts"},
 		}
@@ -197,7 +199,7 @@ func TestMigrationsPartialRevert(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "krios.db")
 	db, raw := openMigrations(t, path, &krios.MigrationsConfig{
 		FS:             migrationFiles(),
-		TargetVersion:  2,
+		TargetVersion: ptrInt(2),
 		Versions:       migrationVersions(),
 		ManagedObjects: []string{"users", "posts"},
 	})
@@ -211,7 +213,7 @@ func TestMigrationsPartialRevert(t *testing.T) {
 
 	db2, raw2 := openMigrations(t, path, &krios.MigrationsConfig{
 		FS:             migrationFiles(),
-		TargetVersion:  1,
+		TargetVersion: ptrInt(1),
 		Versions:       migrationVersions(),
 		ManagedObjects: []string{"users", "posts"},
 	})
@@ -240,7 +242,7 @@ func TestMigrationsRevertToZero(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "krios.db")
 	db, raw := openMigrations(t, path, &krios.MigrationsConfig{
 		FS:             migrationFiles(),
-		TargetVersion:  2,
+		TargetVersion: ptrInt(2),
 		Versions:       migrationVersions(),
 		ManagedObjects: []string{"users", "posts"},
 	})
@@ -253,7 +255,7 @@ func TestMigrationsRevertToZero(t *testing.T) {
 
 	db2, raw2 := openMigrations(t, path, &krios.MigrationsConfig{
 		FS:             migrationFiles(),
-		TargetVersion:  0,
+		TargetVersion: ptrInt(0),
 		Versions:       migrationVersions(),
 		ManagedObjects: []string{"users", "posts"},
 	})
@@ -281,7 +283,7 @@ func TestMigrationsFailureRollsBackSQLite(t *testing.T) {
 
 	db, raw := openMigrations(t, path, &krios.MigrationsConfig{
 		FS:             files,
-		TargetVersion:  2,
+		TargetVersion: ptrInt(2),
 		Versions:       migrationVersions(),
 		ManagedObjects: []string{"users", "posts"},
 	})
@@ -318,7 +320,7 @@ func TestMigrationsMissingDownDirection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "krios.db")
 	db, raw := openMigrations(t, path, &krios.MigrationsConfig{
 		FS:             migrationFiles(),
-		TargetVersion:  2,
+		TargetVersion: ptrInt(2),
 		Versions:       migrationVersions(),
 		ManagedObjects: []string{"users", "posts"},
 	})
@@ -334,7 +336,7 @@ func TestMigrationsMissingDownDirection(t *testing.T) {
 
 	db2, raw2 := openMigrations(t, path, &krios.MigrationsConfig{
 		FS:             migrationFiles(),
-		TargetVersion:  1,
+		TargetVersion: ptrInt(1),
 		Versions:       versions,
 		ManagedObjects: []string{"users", "posts"},
 	})
@@ -354,7 +356,7 @@ func TestMigrationsMissingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "krios.db")
 	db, raw := openMigrations(t, path, &krios.MigrationsConfig{
 		FS:            migrationFiles(),
-		TargetVersion: 1,
+		TargetVersion: ptrInt(1),
 		Versions: []krios.MigrationVersion{
 			{Version: 1, Up: []string{"m/does_not_exist.sql"}},
 		},
@@ -385,7 +387,7 @@ func TestMigrationsSchemaWithoutHistory(t *testing.T) {
 
 		db, raw := openMigrations(t, path, &krios.MigrationsConfig{
 			FS:             migrationFiles(),
-			TargetVersion:  2,
+			TargetVersion: ptrInt(2),
 			Versions:       migrationVersions(),
 			ManagedObjects: []string{"users"},
 		})
@@ -405,7 +407,7 @@ func TestMigrationsSchemaWithoutHistory(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "krios.db")
 		db, raw := openMigrations(t, path, &krios.MigrationsConfig{
 			FS:             migrationFiles(),
-			TargetVersion:  1,
+			TargetVersion: ptrInt(1),
 			Versions:       migrationVersions(),
 			ManagedObjects: []string{"users", "posts"},
 		})
@@ -446,7 +448,7 @@ func TestMigrationsContextCancelled(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "krios.db")
 	db, raw := openMigrations(t, path, &krios.MigrationsConfig{
 		FS:             migrationFiles(),
-		TargetVersion:  2,
+		TargetVersion: ptrInt(2),
 		Versions:       migrationVersions(),
 		ManagedObjects: []string{"users", "posts"},
 	})

@@ -79,9 +79,9 @@ type MigrationsConfig struct {
 	// FS receives the consumer's embedded resources (for example an embed.FS).
 	FS fs.FS
 
-	// TargetVersion is the desired version. Always explicit; 0 requests
-	// reverting all applied migrations.
-	TargetVersion int
+	// TargetVersion is the desired version. Always explicit (pointer); nil is
+	// invalid, &0 requests reverting all applied migrations.
+	TargetVersion *int
 
 	// Versions associates versions with files. The declared order defines the
 	// sequence between versions.
@@ -203,6 +203,14 @@ func (m MigrationsConfig) Validate() error {
 
 	if len(m.Versions) == 0 {
 		return fmt.Errorf("%w: migrations require at least one version", errs.ErrInvalidConfig)
+	}
+
+	if m.TargetVersion == nil {
+		return fmt.Errorf("%w: migrations require TargetVersion", errs.ErrInvalidConfig)
+	}
+
+	if *m.TargetVersion < 0 {
+		return fmt.Errorf("%w: migration target version must be >= 0", errs.ErrInvalidConfig)
 	}
 
 	seen := make(map[int]bool, len(m.Versions))

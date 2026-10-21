@@ -143,19 +143,29 @@ func Prepare(ctx context.Context, exec executor, cfg *config.MigrationsConfig, d
 		return nil, fmt.Errorf("krios: migrations prepare: %w", err)
 	}
 
+	if cfg.TargetVersion == nil {
+		return nil, fmt.Errorf("%w: migrations require TargetVersion", errs.ErrInvalidConfig)
+	}
+
+	target := *cfg.TargetVersion
+
+	if target < 0 {
+		return nil, fmt.Errorf("%w: migration target version must be >= 0", errs.ErrInvalidConfig)
+	}
+
 	current, err := currentVersion(ctx, exec, cfg, d)
 
 	if err != nil {
 		return nil, err
 	}
 
-	plan := &Plan{CurrentVersion: current, TargetVersion: cfg.TargetVersion}
+	plan := &Plan{CurrentVersion: current, TargetVersion: target}
 
 	switch {
-	case current == cfg.TargetVersion:
+	case current == target:
 		return plan, nil
-	case current < cfg.TargetVersion:
-		steps, err := upSteps(cfg, current, migrationDialect)
+	case current < target:
+		steps, err := upSteps(cfg, current, target, migrationDialect)
 
 		if err != nil {
 			return nil, err
@@ -163,7 +173,7 @@ func Prepare(ctx context.Context, exec executor, cfg *config.MigrationsConfig, d
 
 		plan.Steps = steps
 	default:
-		steps, err := downSteps(cfg, current, migrationDialect)
+		steps, err := downSteps(cfg, current, target, migrationDialect)
 
 		if err != nil {
 			return nil, err
@@ -177,16 +187,16 @@ func Prepare(ctx context.Context, exec executor, cfg *config.MigrationsConfig, d
 
 // upSteps builds the up sequence from current+1 up to the target, in declared
 // order, loading and classifying every file.
-func upSteps(cfg *config.MigrationsConfig, current int, md dialect.MigrationDialect) ([]Step, error) {
+func upSteps(cfg *config.MigrationsConfig, current, target int, md dialect.MigrationDialect) ([]Step, error) {
 	var steps []Step
 
 	for _, v := range cfg.Versions {
-		if v.Version <= current || v.Version > cfg.TargetVersion {
+		if v.Version <= current || v.Version > target {
 			continue
 		}
 
 		if len(v.Up) == 0 {
-			return nil, fmt.Errorf("%w: version %d has no up migration to reach target %d", errs.ErrInvalidQuery, v.Version, cfg.TargetVersion)
+			return nil, fmt.Errorf("%w: version %d has no up migration to reach target %d", errs.ErrInvalidQuery, v.Version, target)
 		}
 
 		for _, name := range v.Up {
@@ -200,24 +210,56 @@ func upSteps(cfg *config.MigrationsConfig, current int, md dialect.MigrationDial
 		}
 	}
 
+	if target > 0 {
+		maxVer := 0
+
+		for _, v := range cfg.Versions {
+			if v.Version > maxVer {
+				maxVer = v.Version
+			}
+		}
+
+		if maxVer < target {
+			return nil, fmt.Errorf("%w: cannot reach target version %d from declared versions", errs.ErrInvalidQuery, target)
+		}
+
+		// ensure target is declared/coverable in the planned range
+		found := false
+
+		for _, v := range cfg.Versions {
+			if v.Version == target {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return nil, fmt.Errorf("%w: cannot reach target version %d from declared versions", errs.ErrInvalidQuery, target)
+		}
+
+		if len(steps) == 0 && current < target {
+			return nil, fmt.Errorf("%w: cannot reach target version %d from declared versions", errs.ErrInvalidQuery, target)
+		}
+	}
+
 	return steps, nil
 }
 
 // downSteps builds the down sequence from the current version down to the
 // target (exclusive), highest version first, using each version's declared
 // Down order.
-func downSteps(cfg *config.MigrationsConfig, current int, md dialect.MigrationDialect) ([]Step, error) {
+func downSteps(cfg *config.MigrationsConfig, current, target int, md dialect.MigrationDialect) ([]Step, error) {
 	var steps []Step
 
 	for i := len(cfg.Versions) - 1; i >= 0; i-- {
 		v := cfg.Versions[i]
 
-		if v.Version > current || v.Version <= cfg.TargetVersion {
+		if v.Version > current || v.Version <= target {
 			continue
 		}
 
 		if len(v.Down) == 0 {
-			return nil, fmt.Errorf("%w: version %d has no down migration to reach target %d", errs.ErrInvalidQuery, v.Version, cfg.TargetVersion)
+			return nil, fmt.Errorf("%w: version %d has no down migration to reach target %d", errs.ErrInvalidQuery, v.Version, target)
 		}
 
 		for _, name := range v.Down {
@@ -228,6 +270,27 @@ func downSteps(cfg *config.MigrationsConfig, current int, md dialect.MigrationDi
 			}
 
 			steps = append(steps, step)
+		}
+	}
+
+	if target == 0 && current > 0 {
+		// must cover all versions above target; if any missing down -> error above
+	} else if target > 0 && current > target {
+		found := false
+
+		for _, v := range cfg.Versions {
+			if v.Version == target {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return nil, fmt.Errorf("%w: cannot reach target version %d from declared versions", errs.ErrInvalidQuery, target)
+		}
+
+		if len(steps) == 0 && current > target {
+			return nil, fmt.Errorf("%w: cannot reach target version %d from declared versions", errs.ErrInvalidQuery, target)
 		}
 	}
 
@@ -275,9 +338,9 @@ func fileTransactional(text string, md dialect.MigrationDialect) (bool, error) {
 	return true, nil
 }
 
-// currentVersion inspects the history to determine the current version. A
-// missing history table means version 0, and is verified against managed
-// objects.
+// currentVersion inspects the history to determine the current effective version.
+// A missing history table means version 0, and is verified against managed objects.
+// Version is effective only when completely applied and not completely reverted.
 func currentVersion(ctx context.Context, exec executor, cfg *config.MigrationsConfig, d dialect.Dialect) (int, error) {
 	records, exists, err := readHistory(ctx, exec, d)
 
@@ -293,16 +356,156 @@ func currentVersion(ctx context.Context, exec executor, cfg *config.MigrationsCo
 		return 0, nil
 	}
 
+	target := 0
+
+	if cfg.TargetVersion != nil {
+		target = *cfg.TargetVersion
+	}
+
 	for _, r := range records {
 		if r.Status == StatusInProgress || r.Status == StatusFailed {
+			last := lastAppliedComplete(records, cfg)
+
 			return 0, errs.NewPartialMigrationError(
-				r.Direction, cfg.TargetVersion, lastApplied(records), r.Filename, r.Status,
+				r.Direction, target, last, r.Filename, r.Status,
 				"history has an unresolved migration record", nil,
 			)
 		}
 	}
 
-	return lastApplied(records), nil
+	// detect partial versions
+	if err := detectPartial(records, cfg, target); err != nil {
+		return 0, err
+	}
+
+	return effectiveVersion(records, cfg), nil
+}
+
+// lastAppliedComplete returns the highest version that is completely up-applied.
+func lastAppliedComplete(records []record, cfg *config.MigrationsConfig) int {
+	last := 0
+
+	for _, v := range cfg.Versions {
+		if completeUp(records, v) {
+			if v.Version > last {
+				last = v.Version
+			}
+		}
+	}
+	
+	return last
+}
+
+// completeUp reports whether all up files of version v are applied.
+func completeUp(records []record, v config.MigrationVersion) bool {
+	if len(v.Up) == 0 {
+		return false
+	}
+
+	for _, name := range v.Up {
+		if !hasApplied(records, v.Version, name, DirectionUp) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// completeDown reports whether all down files of version v are applied.
+func completeDown(records []record, v config.MigrationVersion) bool {
+	if len(v.Down) == 0 {
+		return false
+	}
+
+	for _, name := range v.Down {
+		if !hasApplied(records, v.Version, name, DirectionDown) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func hasApplied(records []record, version int, filename, direction string) bool {
+	for _, r := range records {
+		if r.Version == version && r.Filename == filename && r.Direction == direction && r.Status == StatusApplied {
+			return true
+		}
+	}
+
+	return false
+}
+
+// effectiveVersion is the highest version completely up-applied and not completely reverted.
+func effectiveVersion(records []record, cfg *config.MigrationsConfig) int {
+	last := 0
+
+	for _, v := range cfg.Versions {
+		if completeUp(records, v) && !completeDown(records, v) {
+			if v.Version > last {
+				last = v.Version
+			}
+		}
+	}
+
+	return last
+}
+
+// detectPartial returns ErrPartialMigration if any version is partially applied.
+func detectPartial(records []record, cfg *config.MigrationsConfig, target int) error {
+	for _, v := range cfg.Versions {
+		// up partial
+		upApplied := 0
+		upTotal := len(v.Up)
+
+		for _, name := range v.Up {
+			if hasApplied(records, v.Version, name, DirectionUp) {
+				upApplied++
+			}
+		}
+
+		if upTotal > 0 && upApplied > 0 && upApplied < upTotal {
+			// find last applied file
+			lastFile := ""
+
+			for _, name := range v.Up {
+				if hasApplied(records, v.Version, name, DirectionUp) {
+					lastFile = name
+				} else {
+					break
+				}
+			}
+
+			lastVer := lastAppliedComplete(records, cfg)
+			return errs.NewPartialMigrationError(DirectionUp, target, lastVer, lastFile, StatusInProgress, "version partially applied", nil)
+		}
+
+		// down partial
+		downApplied := 0
+		downTotal := len(v.Down)
+
+		for _, name := range v.Down {
+			if hasApplied(records, v.Version, name, DirectionDown) {
+				downApplied++
+			}
+		}
+
+		if downTotal > 0 && downApplied > 0 && downApplied < downTotal {
+			lastFile := ""
+
+			for _, name := range v.Down {
+				if hasApplied(records, v.Version, name, DirectionDown) {
+					lastFile = name
+				} else {
+					break
+				}
+			}
+			
+			lastVer := lastAppliedComplete(records, cfg)
+			return errs.NewPartialMigrationError(DirectionDown, target, lastVer, lastFile, StatusInProgress, "version partially reverted", nil)
+		}
+	}
+	return nil
 }
 
 // lastApplied returns the highest version among applied records, or 0.

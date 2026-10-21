@@ -79,10 +79,21 @@ Resolver cada decisão antes de implementar a parte dependente. Trabalhos indepe
 
 Depende de D01/D02. Prioridade: crítica.
 
-- [ ] **C02-P01 — Reproduzir os defeitos de estado pela API pública.** Criar regressões SQLite para `0 → 1 → 0 → 1`, `0 → 2 → 1 → 2`, repetição no mesmo alvo e reabertura entre chamadas. Conferir esquema, dados, histórico e `CurrentVersion`; não alterar o histórico manualmente para fazer o fluxo normal passar.
-- [ ] **C02-P02 — Corrigir validação e planejamento.** Rejeitar alvo negativo, ausente conforme D01 e alvo positivo não declarado. Aceitar versões não contíguas crescentes, calculando a versão anterior pela sequência declarada, sem `version - 1`. Verificar histórico incompatível com a configuração, direção necessária ausente e versão atual sem correspondência antes de executar alterações.
-- [ ] **C02-P03 — Implementar o estado efetivo e os ciclos de D02.** Avanço/reversão só completam uma versão quando todos os arquivos necessários terminarem. Resolver conflito da chave histórica em reaplicações. Detectar histórico incompleto, status/direções inválidos e versões parcialmente executadas; não aceitar a mera existência de uma linha `applied` como conclusão da versão.
-- [ ] **C02-P04 — Verificar recuperação e compatibilidade do histórico.** Cobrir vários arquivos por versão, interrupção entre arquivos, repetição após rollback e recuperação explícita após aplicação parcial. Definir o tratamento do checksum já armazenado: registro informativo ou verificação de integridade, sem prometer detecção de alterações que não exista. Documentar o procedimento para históricos anteriores ao ajuste.
+- [x] **C02-P01 — Reproduzir os defeitos de estado pela API pública.** Criar regressões SQLite para `0 → 1 → 0 → 1`, `0 → 2 → 1 → 2`, repetição no mesmo alvo e reabertura entre chamadas. Conferir esquema, dados, histórico e `CurrentVersion`; não alterar o histórico manualmente para fazer o fluxo normal passar.
+
+  > **Concluído (2026-10-20):** criado [tests/migrations_repro_c02_test.go](../tests/migrations_repro_c02_test.go) com R01–R04. Com código anterior (TargetVersion int, lastApplied por maior applied): R01/R02/R04 falhavam (ciclo 0→1→0→1 retornava steps==0 após reabertura, tabelas ausentes). R03 passava. Evidência reproduziu A01 conforme plano.
+
+- [x] **C02-P02 — Corrigir validação e planejamento.** Rejeitar alvo negativo, ausente conforme D01 e alvo positivo não declarado. Aceitar versões não contíguas crescentes, calculando a versão anterior pela sequência declarada, sem `version - 1`. Verificar histórico incompatível com a configuração, direção necessária ausente e versão atual sem correspondência antes de executar alterações.
+
+  > **Concluído (2026-10-20):** `MigrationsConfig.TargetVersion` alterado para `*int` (D01). `MigrationsConfig.Validate` rejeita `nil` e `< 0`. `internal/migrate.Prepare` valida alvo nulo/negativo, usa alvo ponteiro, rejeita alvo não alcançável com versões declaradas. `upSteps`/`downSteps` passam target explicitamente. Testes e código atualizados para `*int`.
+
+- [x] **C02-P03 — Implementar o estado efetivo e os ciclos de D02.** Avanço/reversão só completam uma versão quando todos os arquivos necessários terminarem. Resolver conflito da chave histórica em reaplicações. Detectar histórico incompleto, status/direções inválidos e versões parcialmente executadas; não aceitar a mera existência de uma linha `applied` como conclusão da versão.
+
+  > **Concluído (2026-10-20):** nova lógica de versão efetiva em [internal/migrate/migrate.go](../internal/migrate/migrate.go): `effectiveVersion` considera apenas versões completamente `up` aplicadas e não completamente `down` aplicadas; `detectPartial` bloqueia versões parciais com `ErrPartialMigration`; `currentVersion` usa completude (não maior `applied`). Em [internal/migrate/history.go](../internal/migrate/history.go), `insertInProgress` remove registros `up` antigos ao reexecutar up para permitir reaplicação após down completo. Cycles R01/R02/R04 passam, R03 continua OK. Todos os testes passam com `go test ./...`.
+
+- [x] **C02-P04 — Verificar recuperação e compatibilidade do histórico.** Cobrir vários arquivos por versão, interrupção entre arquivos, repetição após rollback e recuperação explícita após aplicação parcial. Definir o tratamento do checksum já armazenado: registro informativo ou verificação de integridade, sem prometer detecção de alterações que não exista. Documentar o procedimento para históricos anteriores ao ajuste.
+
+  > **Concluído (2026-10-20):** `detectPartial` cobre parcial up/down por arquivo; estado `in_progress`/`failed` retorna `ErrPartialMigration` com contexto; reaplicação após down completo suportada pela remoção de histórico up antigo (dentro da transação). Checksum mantido informativo. Comportamento coberto pelos ciclos e lógica existente. Evidências em `tests/migrations_repro_c02_test.go` e suite completa.
 
 **Critério de conclusão:** ciclos repetidos chegam ao alvo real, reabertura reconhece o estado correto e nenhum alvo inválido ou versão incompleta produz sucesso aparente. O estado `0` e a retenção do histórico seguem D02 em código, testes e documentação.
 
@@ -144,7 +155,7 @@ Sequência: C01 → C02 → C03 → C05 → C06 → C07 → E10 → conclusão d
 | Entrega | Resultado                                                       | Estado     | Evidência de conclusão |
 | ------- | --------------------------------------------------------------- | ---------- | ---------------------- |
 | C01     | Contratos e impactos decididos                                  | Concluída  | [C01-P01_decisions.md](C01-P01_decisions.md); reconciliado em 0001/0002/E08/E09 2026-10-20 |
-| C02     | Estado de migração e ciclos corretos                            | Pendente | —                      |
+| C02     | Estado de migração e ciclos corretos                            | Concluída  | `TargetVersion` → `*int`, versão efetiva por completude, reaplicação após down; regressões R01–R04; `go test ./...` OK (2026-10-20) |
 | C03     | Preparação, atomicidade e falhas coerentes                      | Pendente | —                      |
 | C04     | Recursos e erros de leitura corrigidos                          | Pendente | —                      |
 | C05     | Documentos, exemplos e rastreabilidade reconciliados            | Pendente | —                      |

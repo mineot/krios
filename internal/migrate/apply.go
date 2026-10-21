@@ -290,8 +290,14 @@ func partialFailure(ctx context.Context, exec executor, step Step, d dialect.Dia
 		return fmt.Errorf("krios: migrations: record %s failure: %w (cause: %w)", step.File.Name(), err, cause)
 	}
 
+	target := 0
+
+	if cfg.TargetVersion != nil {
+		target = *cfg.TargetVersion
+	}
+
 	return errs.NewPartialMigrationError(
-		step.Direction, cfg.TargetVersion, lastApplied, step.File.Name(), StatusFailed,
+		step.Direction, target, lastApplied, step.File.Name(), StatusFailed,
 		"a non-transactional file failed after committing statements; resolve the partial state before retrying",
 		cause,
 	)

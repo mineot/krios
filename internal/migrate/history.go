@@ -55,6 +55,14 @@ func checksum(f *sqlfile.SQLFile) string {
 // insertInProgress records a step as in_progress with its checksum before the
 // file runs (E08-P01 §7.1). filename is the exact resource name.
 func insertInProgress(ctx context.Context, ex statement, d dialect.Dialect, step Step) error {
+	if step.Direction == DirectionUp {
+		del := fmt.Sprintf("DELETE FROM %s WHERE version = %s AND direction = %s", d.QuoteIdent(historyTable), placeholder(d, 1), placeholder(d, 2))
+
+		if _, err := ex.ExecContext(ctx, del, step.Version, DirectionUp); err != nil {
+			return err
+		}
+	}
+
 	query := fmt.Sprintf(
 		"INSERT INTO %s (version, filename, direction, status, checksum) VALUES (%s, %s, %s, %s, %s)",
 		d.QuoteIdent(historyTable), placeholder(d, 1), placeholder(d, 2), placeholder(d, 3), placeholder(d, 4), placeholder(d, 5),
