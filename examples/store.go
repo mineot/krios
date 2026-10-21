@@ -61,6 +61,10 @@ func (s *Store) Close() error { return s.db.Close() }
 // keeps owning its DDL directly instead of using versioned migrations
 // (DB.RunMigrations); Krios executes the file text without translation between
 // dialects.
+//
+// The migration example in migrations.go owns a separate schema (projects and
+// project_members) in the same database file, so the two owners never share a
+// table. A real application would pick one owner for its schema.
 func (s *Store) CreateSchema(ctx context.Context) error {
 	for _, schema := range []*krios.SQLFile{usersSchema, tasksSchema} {
 		if _, err := s.db.File(schema).Exec(ctx); err != nil {
@@ -72,10 +76,11 @@ func (s *Store) CreateSchema(ctx context.Context) error {
 
 // CreateUser validates user, inserts it with the entity write builder and
 // stores the generated id.
+//
+// The validation is not repeated here: SetValues runs the field validators of
+// the entity and fails fast with krios.ErrValidation before the statement
+// reaches the driver.
 func (s *Store) CreateUser(ctx context.Context, user *User) error {
-	if err := userEntity.Validate(user); err != nil {
-		return err
-	}
 	res, err := s.db.Insert(userEntity).SetValues(user).Omit("id").Exec(ctx)
 	if err != nil {
 		return err
@@ -87,11 +92,8 @@ func (s *Store) CreateUser(ctx context.Context, user *User) error {
 }
 
 // CreateTask inserts one task owned by task.OwnerID with the entity write
-// builder.
+// builder. As in CreateUser, the field validators run inside SetValues.
 func (s *Store) CreateTask(ctx context.Context, task *Task) error {
-	if err := taskEntity.Validate(task); err != nil {
-		return err
-	}
 	res, err := s.db.Insert(taskEntity).SetValues(task).Omit("id").Exec(ctx)
 	if err != nil {
 		return err
@@ -107,6 +109,9 @@ func (s *Store) CreateTask(ctx context.Context, task *Task) error {
 // group back through the deferred Rollback, so the user is never persisted
 // without its tasks.
 func (s *Store) CreateUserWithFirstTasks(ctx context.Context, user *User, titles ...string) error {
+	// The record is validated before the transaction starts, so an invalid user
+	// never opens one. SetValues validates again, since the write builder
+	// always runs the field validators.
 	if err := userEntity.Validate(user); err != nil {
 		return err
 	}
@@ -114,7 +119,9 @@ func (s *Store) CreateUserWithFirstTasks(ctx context.Context, user *User, titles
 	if err != nil {
 		return err
 	}
-	// Covers every early return; Rollback after a successful Commit is a no-op.
+	// Covers every early return. After a successful Commit this deferred
+	// Rollback returns krios.ErrTxDone, which the deferred call discards; a
+	// consumer that needs to observe it must check it with errors.Is.
 	defer tx.Rollback(ctx)
 
 	res, err := tx.Insert(userEntity).SetValues(user).Omit("id").Exec(ctx)
@@ -129,9 +136,7 @@ func (s *Store) CreateUserWithFirstTasks(ctx context.Context, user *User, titles
 			return errors.New("task title must not be empty")
 		}
 		task := &Task{Title: title, OwnerID: user.ID, Done: false}
-		if err := taskEntity.Validate(task); err != nil {
-			return err
-		}
+		// SetValues validates the task; a rejection aborts the group.
 		if _, err := tx.Insert(taskEntity).SetValues(task).Omit("id").Exec(ctx); err != nil {
 			return err
 		}
@@ -178,6 +183,10 @@ func (s *Store) TransferTasks(ctx context.Context, from, to int64) (int64, error
 // The transaction remembers that first error, so Commit rolls back
 // automatically and returns an error matching it with errors.Is. The first
 // insert is discarded with the rest of the group.
+//
+// The statements are written with "?" markers, the form accepted by SQLite
+// and MySQL; PostgreSQL would use $1..$n. Krios never translates markers in
+// consumer SQL.
 func (s *Store) RegisterAndCloneEmail(ctx context.Context, first, clone *User) error {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {

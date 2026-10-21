@@ -34,6 +34,8 @@ O [plano de consolidação C01–C07](0005_consolidation_plan.md) passa a ser co
 
 As marcações e evidências anteriores permanecem como registro das entregas realizadas. O estado atual inclui consolidação pendente: contratos, correções e regressões locais, reconciliação de exemplos/documentos, preparação do roteiro e verificação consolidada. Pela revisão de escopo que acrescenta E10, a integração real automatizada dos três bancos será entregue nessa nova etapa; E09 fará a conferência final dos requisitos e a distribuição. Nenhuma correção foi implementada na criação desses planos.
 
+**Atualização (2026-10-21):** C05-P02 concluída conforme [registro D30–D34](C05-P02_decisions.md): exemplos de consumo reconciliados com o código, ciclo de migrações avanço/reversão/reaplicação executado em SQLite e `make check`/`make race` aprovados em Go 1.26.8 e 1.27.2. C05-P03, C06–C07 e a integração real de E10 permanecem pendentes.
+
 ## 3. Visão geral das entregas
 
 | Entrega | Resultado                                       | Depende de | Requisitos principais              |

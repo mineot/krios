@@ -14,22 +14,39 @@ com tudo o que já foi implementado nas entregas **E01–E08**:
 | E08     | Migrações versionadas        | `MigrationsConfig`, `RunMigrations`, tabela `migrations`, avanço/reversão com histórico                        |
 
 As entregas E01–E08 estão implementadas. As consultas de leitura e as
-escritas usam os builders de E05/E06 e o esquema é SQL embutido de E07. As
-migrações de E08 existem no código, mas este exemplo mantém o DDL próprio
-(§4) em vez de usá-las. Pontos de extensão aparecem marcados ao longo do
-texto.
+escritas usam os builders de E05/E06 e o esquema é SQL embutido de E07.
 
-O código completo e compilável vive no pacote **`examples/`** deste módulo —
-os trechos abaixo são extraídos dele:
+## Convenção de extração
+
+Cada bloco de código deste documento é classificado:
+
+- **Extraído** — o código existe no pacote `examples/` deste módulo, com o
+  mesmo comportamento. A citação indica o arquivo de origem.
+- **Ilustrativo** — o código **não** está em `examples/`; existe para mostrar
+  uma variante (SQL direto, outra forma de API). Não é garantia de execução.
+
+Nenhum bloco é declarado "compilado" só por ser sintaticamente válido: o que
+está marcado como extraído é conferido contra o código, e o que está marcado
+como ilustrativo é identificado como tal.
 
 ```
 examples/
-├── doc.go        // visão geral do pacote
-├── config.go     // Config dos 3 bancos, OpenStore, classificação de erros
-├── models.go     // Status (Validator/Formatter), User, Task
-├── store.go      // Store: esquema, escritas, transações, leituras encadeadas
-├── store_test.go // verificação SQLite das leituras de E05
-└── run.go        // Run: narrativa completa passo a passo
+├── doc.go             // visão geral do pacote
+├── config.go          // Config dos 3 bancos, OpenStore, classificação de erros
+├── models.go          // Status (Validator/Formatter), User, Task
+├── store.go           // Store: esquema, escritas, transações, leituras encadeadas
+├── store_test.go      // verificação SQLite das leituras de E05
+├── migrations.go      // MigrationsConfig e a narrativa Migrate (E08)
+├── migrations_test.go // avanço → reversão → reaplicação contra SQLite
+├── run.go             // Run: narrativa completa passo a passo
+├── schema/            // DDL embutido de users e tasks (E07)
+│   ├── users.sql
+│   └── tasks.sql
+└── migrations/        // arquivos up/down versionados (E08)
+    ├── 001_projects.up.sql
+    ├── 001_projects.down.sql
+    ├── 002_project_members.up.sql
+    └── 002_project_members.down.sql
 ```
 
 ## 1. O projeto exemplo
@@ -56,11 +73,13 @@ registro manual de entidades:
 // the entity descriptor.
 type Status string
 
+// Supported account states.
 const (
 	StatusActive   Status = "active"
 	StatusInactive Status = "inactive"
 )
 
+// Validate implements krios.Validator and rejects unknown states.
 func (s Status) Validate() error {
 	switch s {
 	case StatusActive, StatusInactive:
@@ -70,6 +89,8 @@ func (s Status) Validate() error {
 	}
 }
 
+// Format implements krios.Formatter and returns the presentation text used by
+// Entity.Format. Database operations always use the original value.
 func (s Status) Format() (string, error) {
 	return strings.ToUpper(string(s)), nil
 }
@@ -77,26 +98,30 @@ func (s Status) Format() (string, error) {
 // User maps the users table. Tags name the columns; Bio is a pointer so a
 // missing value maps to SQL NULL.
 type User struct {
-	ID     int64  `krios:"id,pk"`
-	Name   string `krios:"name"`
-	Email  string `krios:"email"`
+	ID     int64   `krios:"id,pk"`
+	Name   string  `krios:"name"`
+	Email  string  `krios:"email"`
 	Bio    *string `krios:"bio"`
-	Status Status `krios:"status"`
+	Status Status  `krios:"status"`
 }
 
+// TableName overrides the snake_case derivation of the type name.
 func (User) TableName() string { return "users" }
 
 // Task maps the tasks table. OwnerID and Done carry no tag: their columns are
 // derived from the field names as snake_case (owner_id, done).
 type Task struct {
-	ID      int64 `krios:"id,pk"`
+	ID      int64  `krios:"id,pk"`
 	Title   string `krios:"title"`
 	OwnerID int64
 	Done    bool
 }
 
+// TableName overrides the snake_case derivation of the type name.
 func (Task) TableName() string { return "tasks" }
 ```
+
+> **Extraído de** [`examples/models.go`](../examples/models.go).
 
 Regras em uso (E04-P01/P02):
 
@@ -129,6 +154,9 @@ import (
 | MySQL      | `_ "github.com/go-sql-driver/mysql"`                                    | `"mysql"`       |
 | PostgreSQL | `_ "github.com/jackc/pgx/v5/stdlib"`                                    | `"pgx"`         |
 
+> **Ilustrativo** — o bloco acima mostra o formato do import; em `examples/`
+> o driver entra em `config.go`, e o exemplo roda com `modernc.org/sqlite`.
+
 A configuração é **código Go** (`krios.Config`): nenhum arquivo de configuração
 externo, nenhuma variável de ambiente obrigatória — tudo compila no
 executável.
@@ -136,6 +164,8 @@ executável.
 ## 3. Configuração e conexão (E02)
 
 ```go
+// SQLiteConfig returns the configuration used by Run: one local SQLite file
+// with a five second budget for opening the access.
 func SQLiteConfig(dbPath string) krios.Config {
 	return krios.Config{
 		Type:    krios.DBTypeSQLite,
@@ -145,6 +175,9 @@ func SQLiteConfig(dbPath string) krios.Config {
 	}
 }
 
+// MySQLConfig returns the equivalent configuration for MySQL. The consumer
+// registers the driver with _ "github.com/go-sql-driver/mysql"; Port zero
+// applies the MySQL default of 3306.
 func MySQLConfig(host, user, password, dbName string) krios.Config {
 	return krios.Config{
 		Type:   krios.DBTypeMySQL,
@@ -159,6 +192,9 @@ func MySQLConfig(host, user, password, dbName string) krios.Config {
 	}
 }
 
+// PostgresConfig returns the equivalent configuration for PostgreSQL. The
+// consumer registers the driver with _ "github.com/jackc/pgx/v5/stdlib";
+// Port zero applies the PostgreSQL default of 5432.
 func PostgresConfig(host, user, password, dbName string) krios.Config {
 	return krios.Config{
 		Type:   krios.DBTypePostgres,
@@ -173,6 +209,8 @@ func PostgresConfig(host, user, password, dbName string) krios.Config {
 	}
 }
 ```
+
+> **Extraído de** [`examples/config.go`](../examples/config.go).
 
 Pontos do contrato (E02-P01) visíveis acima: só o bloco do tipo escolhido pode
 ser preenchido (exclusão mútua validada); `Port == 0` aplica 3306/5432;
@@ -209,33 +247,60 @@ func OpenErrorKind(err error) string {
 }
 ```
 
+> **Extraído de** [`examples/config.go`](../examples/config.go).
+
 Cancelamento e deadline do `ctx` não viram `ErrConnectionFailed`: o erro
 original de `context` é preservado. `Close` é idempotente e, depois dele,
 qualquer operação no `*DB` retorna `krios.ErrClosed`:
 
 ```go
+// Store owns the database access for KriosTasks. A Store is safe for
+// concurrent use and typically serves the whole application.
 type Store struct {
 	db *krios.DB
 }
 
+// Close releases the database access. It is idempotent.
 func (s *Store) Close() error { return s.db.Close() }
 ```
+
+> **Extraído de** [`examples/store.go`](../examples/store.go).
 
 ## 4. Esquema com SQL puro (E03; embutido em E07)
 
 O Krios executa o SQL sem retraduzir entre dialetos — o que está no arquivo é o
 que vai ao banco. A partir de E07 o DDL deixa de ser strings em Go e passa a
-arquivos `.sql` embutidos com `go:embed`, um statement por arquivo. As
-migrações versionadas de E08 são a alternativa gerenciada (histórico e
-avanço/reversão); este exemplo opta por DDL direto:
+arquivos `.sql` embutidos com `go:embed`, um statement por arquivo:
 
 ```go
+// schemaFS embeds the DDL files into the executable, so the consumer does not
+// ship or read them at run time. Each file holds a single statement, since
+// Krios does not split multiple statements.
+//
 //go:embed schema/*.sql
 var schemaFS embed.FS
 
-var usersSchema = mustSQLFile(schemaFS, "schema/users.sql")
-var tasksSchema = mustSQLFile(schemaFS, "schema/tasks.sql")
+// Schema resources loaded once at startup. Eager loading surfaces a missing or
+// unreadable resource immediately, not on first use.
+var (
+	usersSchema = mustSQLFile(schemaFS, "schema/users.sql")
+	tasksSchema = mustSQLFile(schemaFS, "schema/tasks.sql")
+)
+```
 
+> **Extraído de** [`examples/store.go`](../examples/store.go) — o DDL vive em
+> [`examples/schema/users.sql`](../examples/schema/users.sql) e
+> [`examples/schema/tasks.sql`](../examples/schema/tasks.sql).
+
+```go
+// CreateSchema creates both tables from the embedded DDL files. This example
+// keeps owning its DDL directly instead of using versioned migrations
+// (DB.RunMigrations); Krios executes the file text without translation between
+// dialects.
+//
+// The migration example in migrations.go owns a separate schema (projects and
+// project_members) in the same database file, so the two owners never share a
+// table. A real application would pick one owner for its schema.
 func (s *Store) CreateSchema(ctx context.Context) error {
 	for _, schema := range []*krios.SQLFile{usersSchema, tasksSchema} {
 		if _, err := s.db.File(schema).Exec(ctx); err != nil {
@@ -246,26 +311,34 @@ func (s *Store) CreateSchema(ctx context.Context) error {
 }
 ```
 
+> **Extraído de** [`examples/store.go`](../examples/store.go).
+
 > **Dialeto:** os DDLs acima são SQLite. MySQL pede `ENGINE=InnoDB` e tipos
 > diferentes; PostgreSQL também. É SQL do consumidor, portanto escreva-o por
-> dialeto. O mesmo vale para as migrações de E08: cada arquivo up/down é
+> dialeto. O mesmo vale para as migrações de E08 (§10): cada arquivo up/down é
 > responsabilidade sua.
 
-## 5. Escrita básica e `Result` (E03)
+**Dois donos de esquema.** O exemplo de migrações (§10) administra um segundo
+conjunto de tabelas (`projects`, `project_members`) no mesmo arquivo SQLite.
+Os dois conjuntos são disjuntos, e cada um tem um dono: as migrações nunca
+tocam em `users`/`tasks`, e o DDL direto nunca toca em `projects`/
+`project_members`. Um projeto real escolhe um dono para o seu esquema; o
+exemplo usa os dois para exercitar E07 e E08 sem misturar responsabilidades.
 
-Placeholders seguem o dialeto do driver: `?` em SQLite e MySQL, `$1..$n` em
-PostgreSQL. `Result` expõe `RowsAffected` e `LastInsertId` com **flag de
-disponibilidade** — o driver pode não suportar a informação, e isso não é
-erro:
+## 5. Escrita, `Omit` e `Result` (E03/E06)
+
+As escritas do projeto exemplo usam o builder de escrita de E06, ancorado na
+entidade:
 
 ```go
+// CreateUser validates user, inserts it with the entity write builder and
+// stores the generated id.
+//
+// The validation is not repeated here: SetValues runs the field validators of
+// the entity and fails fast with krios.ErrValidation before the statement
+// reaches the driver.
 func (s *Store) CreateUser(ctx context.Context, user *User) error {
-	if err := userEntity.Validate(user); err != nil {
-		return err
-	}
-	res, err := s.db.ExecContext(ctx,
-		"INSERT INTO users (name, email, bio, status) VALUES (?, ?, ?, ?)",
-		user.Name, user.Email, user.Bio, user.Status)
+	res, err := s.db.Insert(userEntity).SetValues(user).Omit("id").Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -274,10 +347,88 @@ func (s *Store) CreateUser(ctx context.Context, user *User) error {
 	}
 	return nil
 }
+
+// CreateTask inserts one task owned by task.OwnerID with the entity write
+// builder. As in CreateUser, the field validators run inside SetValues.
+func (s *Store) CreateTask(ctx context.Context, task *Task) error {
+	res, err := s.db.Insert(taskEntity).SetValues(task).Omit("id").Exec(ctx)
+	if err != nil {
+		return err
+	}
+	if id, ok := res.LastInsertId(); ok {
+		task.ID = id
+	}
+	return nil
+}
 ```
 
-O argumento `user.Bio` (`*string`) converte sozinho: ponteiro não nulo vira o
-valor, `nil` vira SQL NULL.
+> **Extraído de** [`examples/store.go`](../examples/store.go).
+
+### 5.1 `Omit` e a política de valores
+
+`Omit` remove a coluna do `INSERT` (o banco aplica o default) ou do `SET` do
+`UPDATE` (a coluna mantém o valor anterior). Em `CreateUser` o `id` é omitido
+para o SQLite atribuir o `rowid`; em `TransferTasks` (§6.2) o `Omit("id",
+"title", "done")` restringe o `UPDATE` a `owner_id`.
+
+`SetValues` aplica a política de valores da entidade:
+
+| Valor do campo | INSERT | UPDATE |
+| --- | --- | --- |
+| Zero de tipo primitivo (`0`, `false`, `""`) | Grava o zero | Grava o zero |
+| Ponteiro `nil` | Grava `NULL` | Omite a coluna, preservando o valor atual |
+| Ponteiro não nulo | Grava o valor apontado, inclusive zero | Grava o valor apontado, inclusive zero |
+| `sql.Null*` com `Valid: false` | Grava `NULL` | Grava `NULL` |
+| Coluna em `Omit` | Usa o default do banco | Preserva o valor atual |
+
+Para gravar `false`, atribua esse valor ao campo e use `SetValues`; para
+preservar uma coluna primitiva no UPDATE, inclua-a em `Omit`. Não existe
+método `Set` nos builders de escrita.
+
+A validação dos campos roda **dentro de `SetValues`**, antes do statement
+chegar ao driver: um valor inválido falha com `krios.ErrValidation` e nada é
+gravado. Ver §8.
+
+### 5.2 `Result` e a disponibilidade das informações
+
+`Result` expõe `RowsAffected` e `LastInsertId` com **flag de
+disponibilidade** — o driver pode não suportar a informação, e isso não é
+erro:
+
+```go
+res, err := s.db.Insert(userEntity).SetValues(user).Omit("id").Exec(ctx)
+if err != nil {
+	return err
+}
+if id, ok := res.LastInsertId(); ok {
+	user.ID = id
+}
+```
+
+`ok == false` significa "o driver não informou o valor" — não "valor zero". O
+mesmo vale para `RowsAffected`.
+
+### 5.3 Variante em SQL direto
+
+O mesmo registro pode ser gravado sem o builder, com SQL do consumidor:
+
+```go
+res, err := s.db.ExecContext(ctx,
+	"INSERT INTO users (name, email, bio, status) VALUES (?, ?, ?, ?)",
+	user.Name, user.Email, user.Bio, user.Status)
+if err != nil {
+	return err
+}
+if id, ok := res.LastInsertId(); ok {
+	user.ID = id
+}
+```
+
+> **Ilustrativo** — variante equivalente à de §5, sem o builder de E06. O
+> argumento `user.Bio` (`*string`) converte sozinho: ponteiro não nulo vira o
+> valor, `nil` vira SQL NULL. Os placeholders seguem o dialeto do driver: `?`
+> em SQLite e MySQL, `$1..$n` em PostgreSQL — o Krios **não** traduz
+> marcadores no SQL do consumidor.
 
 ## 6. Transações (E03)
 
@@ -285,10 +436,15 @@ valor, `nil` vira SQL NULL.
 
 `Begin(ctx)` — o `ctx` governa a vida da transação. O padrão é
 `defer tx.Rollback(ctx)` logo após o `Begin`: cobre todos os returns
-antecipados e vira no-op após um `Commit` bem-sucedido:
+antecipados. **Depois de um `Commit` bem-sucedido esse `Rollback` devolve
+`krios.ErrTxDone`** — não é um no-op silencioso; o `defer` apenas descarta o
+erro. O exemplo usa esse padrão:
 
 ```go
 func (s *Store) CreateUserWithFirstTasks(ctx context.Context, user *User, titles ...string) error {
+	// The record is validated before the transaction starts, so an invalid user
+	// never opens one. SetValues validates again, since the write builder
+	// always runs the field validators.
 	if err := userEntity.Validate(user); err != nil {
 		return err
 	}
@@ -296,12 +452,12 @@ func (s *Store) CreateUserWithFirstTasks(ctx context.Context, user *User, titles
 	if err != nil {
 		return err
 	}
-	// Covers every early return; Rollback after a successful Commit is a no-op.
+	// Covers every early return. After a successful Commit this deferred
+	// Rollback returns krios.ErrTxDone, which the deferred call discards; a
+	// consumer that needs to observe it must check it with errors.Is.
 	defer tx.Rollback(ctx)
 
-	res, err := tx.ExecContext(ctx,
-		"INSERT INTO users (name, email, bio, status) VALUES (?, ?, ?, ?)",
-		user.Name, user.Email, user.Bio, user.Status)
+	res, err := tx.Insert(userEntity).SetValues(user).Omit("id").Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -312,9 +468,9 @@ func (s *Store) CreateUserWithFirstTasks(ctx context.Context, user *User, titles
 		if title == "" {
 			return errors.New("task title must not be empty")
 		}
-		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO tasks (title, owner_id, done) VALUES (?, ?, ?)",
-			title, user.ID, false); err != nil {
+		task := &Task{Title: title, OwnerID: user.ID, Done: false}
+		// SetValues validates the task; a rejection aborts the group.
+		if _, err := tx.Insert(taskEntity).SetValues(task).Omit("id").Exec(ctx); err != nil {
 			return err
 		}
 	}
@@ -322,13 +478,35 @@ func (s *Store) CreateUserWithFirstTasks(ctx context.Context, user *User, titles
 }
 ```
 
+> **Extraído de** [`examples/store.go`](../examples/store.go).
+
 Usuário e tarefas persistem juntos ou não persistem nada. Operações fora do
 grupo são independentes: um `INSERT` feito direto no `*DB` durante a transação
 não faz parte dela.
 
+Para quem quiser o `Rollback` explícito, o mesmo grupo fica assim:
+
+```go
+tx, err := s.db.Begin(ctx)
+if err != nil {
+	return err
+}
+defer func() {
+	if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, krios.ErrTxDone) {
+		// Registre rbErr como falha de limpeza.
+	}
+}()
+```
+
+> **Ilustrativo** — variante com o erro de limpeza observado. `ErrTxDone`
+> significa "a transação já foi finalizada" e é o resultado esperado depois de
+> um `Commit` bem-sucedido.
+
 ### 6.2 Commit com retorno de linhas afetadas
 
 ```go
+// TransferTasks reassigns every open task of one owner to another inside a
+// transaction using the UPDATE builder and reports how many rows moved.
 func (s *Store) TransferTasks(ctx context.Context, from, to int64) (int64, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -336,8 +514,8 @@ func (s *Store) TransferTasks(ctx context.Context, from, to int64) (int64, error
 	}
 	defer tx.Rollback(ctx)
 
-	var exists int
-	err = tx.QueryRowContext(ctx, "SELECT 1 FROM users WHERE id = ?", to).Scan(&exists)
+	var target User
+	err = tx.Select(userEntity).Where(userEntity.Col("id").Eq(to)).One(ctx, &target)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, fmt.Errorf("target user %d does not exist", to)
 	}
@@ -345,9 +523,11 @@ func (s *Store) TransferTasks(ctx context.Context, from, to int64) (int64, error
 		return 0, err
 	}
 
-	res, err := tx.ExecContext(ctx,
-		"UPDATE tasks SET owner_id = ? WHERE owner_id = ? AND done = ?",
-		to, from, false)
+	res, err := tx.Update(taskEntity).
+		SetValues(&Task{OwnerID: to}).
+		Omit("id", "title", "done").
+		Where(taskEntity.Col("owner_id").Eq(from), taskEntity.Col("done").Eq(false)).
+		Exec(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -359,6 +539,13 @@ func (s *Store) TransferTasks(ctx context.Context, from, to int64) (int64, error
 	return moved, nil
 }
 ```
+
+> **Extraído de** [`examples/store.go`](../examples/store.go).
+
+O `Omit("id", "title", "done")` limita o `UPDATE` à coluna `owner_id` — as
+outras mantêm o valor anterior, e `owner_id` zero seria omitido pela política
+de valores (§5.1). `RowsAffected` devolve o número de linhas movidas, com a
+mesma flag de disponibilidade de `Result`.
 
 Note o teste de existência: `sql.ErrNoRows` é **preservado** (não é embrulhado
 com camadas do Krios), então o idiomático `errors.Is(err, sql.ErrNoRows)`
@@ -401,6 +588,10 @@ func (s *Store) RegisterAndCloneEmail(ctx context.Context, first, clone *User) e
 }
 ```
 
+> **Extraído de** [`examples/store.go`](../examples/store.go). As instruções
+> usam marcadores `?` (SQLite/MySQL); PostgreSQL usaria `$1..$n`. O Krios
+> nunca traduz marcadores no SQL do consumidor.
+
 O `INSERT` do `first` também é descartado: ele pertence ao mesmo grupo. A
 recomendação continua sendo rollback explícito no primeiro erro — o commit
 bloqueado é a rede de proteção para o consumidor esquecer o caminho de falha.
@@ -425,11 +616,15 @@ _ = tx.Rollback(ctx)            // nil: a limpeza é tentada mesmo assim
 // tx.Commit(ctx) também devolveria o erro de conversão, com rollback automático.
 ```
 
+> **Ilustrativo** — o exemplo executável correspondente está em
+> [`tests/examples_test.go`](../tests/examples_test.go).
+
 ### 6.5 Estado terminal
 
 Depois do `Commit` ou do `Rollback` — inclusive do automático — a transação é
 terminal: qualquer operação posterior devolve `krios.ErrTxDone`
-(`errors.Is` funcional). Chamadas concorrentes no mesmo `*Tx` são serializadas
+(`errors.Is` funcional). Isso vale para o `Rollback` deferred de §6.1, que é
+por isso ignorado. Chamadas concorrentes no mesmo `*Tx` são serializadas
 por um mutex; falha nativa de finalização também é terminal (sem retry
 automático — o estado remoto pode ser incerto).
 
@@ -454,6 +649,8 @@ func mustEntity[T any]() *krios.Entity {
 }
 ```
 
+> **Extraído de** [`examples/store.go`](../examples/store.go).
+
 ### 7.1 Multi-linha: `Rows.All` casa colunas por **nome**
 
 A leitura usa o builder de E05: `Select(ent)` cria a consulta, `OrderBy`
@@ -468,6 +665,8 @@ func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 	return users, err
 }
 ```
+
+> **Extraído de** [`examples/store.go`](../examples/store.go).
 
 `All` exige `*[]T` com `T` struct: casa colunas com campos por nome (exato,
 depois case-insensitive), descarta colunas extras, deixa zero os campos sem
@@ -486,17 +685,22 @@ func (s *Store) UserByID(ctx context.Context, id int64) (User, error) {
 }
 ```
 
+> **Extraído de** [`examples/store.go`](../examples/store.go).
+
 `One` executa e faz `Scan` de um único registro esperado. Com destino `*T`
 struct (que não implementa `sql.Scanner`), o resultset deve seguir a ordem de
 declaração dos campos — por isso a seleção padrão do builder usa todas as
-colunas mapeadas nessa ordem. Tipos que implementam `sql.Scanner`
-(`time.Time`, `sql.Null*`) mantêm a semântica posicional e nunca são tratados
-como entidades. `sql.ErrNoRows` é preservado; falhas de conversão são
-contextualizadas preservando a causa:
+colunas mapeadas nessa ordem. `All`, ao contrário, casa **por nome**. Tipos que
+implementam `sql.Scanner` (como `sql.Null*`) e `time.Time` mantêm a semântica
+posicional e nunca são tratados como entidades. `sql.ErrNoRows` é preservado;
+falhas de conversão são contextualizadas preservando a causa:
 
 ```
-krios: map users: sql: Scan error on column index 4, name "status": ...
+krios: map tasks: sql: Scan error on column index 2, name "owner_id": converting driver.Value type string ("abc") to a int64: invalid syntax
 ```
+
+> Mensagem ilustrativa de conversão ao ler `owner_id` com texto inválido. O prefixo `krios: map <tabela>` vem do mapeamento; o resto
+> é o erro do `database/sql`.
 
 ### 7.3 NULL
 
@@ -504,42 +708,75 @@ krios: map users: sql: Scan error on column index 4, name "status": ...
 alternativa para quem prefere o par `(Valid, String)`:
 
 ```go
-bio := "leitora assídua"
-carol := &User{Name: "carol", Email: "carol@exemplo.dev", Bio: &bio, Status: StatusInactive}
-_ = s.CreateUser(ctx, carol) // bio presente
-
-// alice.Bio fica nil → NULL no banco; ao ler, Bio volta nil.
-// NULL em campo não anulável ou conversão impossível: erro com tabela e coluna.
+	// E04: Bio receives a value here and stays nil for alice (SQL NULL).
+	bio := "leitora assídua"
+	carol := &User{Name: "carol", Email: "carol@exemplo.dev", Bio: &bio, Status: StatusInactive}
+	if err := store.CreateUser(ctx, carol); err != nil {
+		return fmt.Errorf("carol: %w", err)
+	}
 ```
 
-## 8. Validação e formatação (E04)
+> **Extraído de** [`examples/run.go`](../examples/run.go). O `Bio` de alice fica
+> `nil` → `NULL` no banco; ao ler, volta `nil`. NULL em campo não anulável ou
+> conversão impossível vira erro com tabela e coluna (§7.2).
+
+## 8. Validação e formatação (E04/E06)
 
 As interfaces ficam no **tipo do campo** (receptor de valor ou ponteiro) e são
-detectadas automaticamente pelo descritor. A execução é **explícita** — o Krios
-não intercepta escritas:
+detectadas automaticamente pelo descritor:
 
 ```go
+// ValidateUsers reports whether a batch of users satisfies every field-level
+// Validator, stopping at the first invalid record with krios.ErrValidation.
 func (s *Store) ValidateUsers(users []User) error {
-	return userEntity.ValidateAll(users) // []User ou *[]User; para no primeiro inválido
+	return userEntity.ValidateAll(users)
 }
 
+// PresentUser returns the display text of every mapped column of user. The
+// formatted values are presentation-only; writes always use the original
+// fields.
 func (s *Store) PresentUser(user User) (map[string]string, error) {
-	return userEntity.Format(user) // texto por coluna, para TODAS as colunas
+	return userEntity.Format(user)
 }
 ```
+
+> **Extraído de** [`examples/store.go`](../examples/store.go). `ValidateAll`
+> aceita `[]User` ou `*[]User` e para no primeiro inválido; `Format` devolve o
+> texto de **todas** as colunas.
 
 Uso no fluxo:
 
 ```go
-err = s.ValidateUsers([]User{{Name: "dave", Email: "dave@x.dev", Status: "unknown"}})
-errors.Is(err, krios.ErrValidation) // true
-// err: krios: field validation failed: users: column "status": unsupported status "unknown"
-
-text, _ := s.PresentUser(user)
-text["status"] // "ACTIVE"  (Status.Format; o valor original no banco continua "active")
-text["bio"]    // ""        (ponteiro nil formata texto vazio)
-text["id"]     // "1"       (campos sem Formatter usam fmt.Sprint)
+	err = store.ValidateUsers([]User{{Name: "dave", Email: "dave@exemplo.dev", Status: "unknown"}})
+	fmt.Println("validação rejeitada:", errors.Is(err, krios.ErrValidation))
+	fmt.Println("  causa:", err)
 ```
+
+> **Extraído de** [`examples/run.go`](../examples/run.go). O erro devolvido é
+> `krios: field validation failed: users: column "status": unsupported status
+> "unknown"` e casa com `krios.ErrValidation`.
+
+```go
+		text, err := store.PresentUser(u)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("  usuário %s: %s <%s> status=%s bio=%q\n",
+			text["id"], text["name"], text["email"], text["status"], text["bio"])
+```
+
+> **Extraído de** [`examples/run.go`](../examples/run.go). `text["status"]` vale
+> `"ACTIVE"` (`Status.Format`; o valor original no banco continua `"active"`),
+> `text["bio"]` vale `""` para ponteiro `nil` e `text["id"]` vale `"1"` —
+> campos sem `Formatter` usam `fmt.Sprint`.
+
+**Onde a validação roda.** `ValidateAll` é a chamada explícita para validar um
+lote. Mas a validação **não é exclusiva dela**: o builder de escrita de E06
+roda os validadores dentro de `SetValues`, antes do statement chegar ao
+driver, e falha com `krios.ErrValidation` sem gravar nada. Por isso
+`CreateUser` (§5) não repete a chamada — ela é redundante — e
+`CreateUserWithFirstTasks` (§6.1) mantém uma validação *antes* do `Begin`
+para que um registro inválido nem abra transação.
 
 Contratos (E04-P03): fail-fast; campos nil são pulados na validação e formatam
 vazio; o valor formatado é **só apresentação** — operações de banco sempre
@@ -566,6 +803,8 @@ func (s *Store) CountOpenTasks(ctx context.Context, ownerID int64) (int64, error
 }
 ```
 
+> **Extraído de** [`examples/store.go`](../examples/store.go).
+
 `Count` conta por subconsulta (`SELECT COUNT(*) FROM (...) AS "krios_total"`),
 sem ordenação nem limite, então continua exato quando a consulta tem `DISTINCT`
 ou agrupamento.
@@ -587,18 +826,24 @@ func (s *Store) ListOpenTasksByOwnerEmail(ctx context.Context, email string) ([]
 }
 ```
 
+> **Extraído de** [`examples/store.go`](../examples/store.go).
+
 A entidade base é `tasks`; `users` participa só na junção e no filtro. Toda
 entidade citada precisa participar da consulta e a tabela não pode se repetir.
 
 ### 9.3 Agregação com `LEFT JOIN` e modelo de leitura
 
 ```go
+// UserTaskCount is a read model mapped by output alias. It demonstrates a
+// grouped projection built with Fields.
 type UserTaskCount struct {
 	ID    int64  `krios:"id"`
 	Name  string `krios:"name"`
 	Tasks int64  `krios:"tasks"`
 }
 
+// ListUserTaskCounts returns every user with their task count. The LEFT JOIN
+// keeps users without tasks, whose count is zero.
 func (s *Store) ListUserTaskCounts(ctx context.Context) ([]UserTaskCount, error) {
 	var counts []UserTaskCount
 	err := s.db.Select(userEntity).
@@ -614,6 +859,8 @@ func (s *Store) ListUserTaskCounts(ctx context.Context) ([]UserTaskCount, error)
 	return counts, err
 }
 ```
+
+> **Extraído de** [`examples/store.go`](../examples/store.go).
 
 `Fields` usa expressões; o alias `"tasks"` casa com o campo pelo nome. O
 `LEFT JOIN` mantém usuários sem tarefas, cuja contagem é `0`.
@@ -633,6 +880,8 @@ func (s *Store) ListUsersPage(ctx context.Context, limit, offset int) ([]User, k
 }
 ```
 
+> **Extraído de** [`examples/store.go`](../examples/store.go).
+
 `Paginate` devolve `krios.Paginate{Total, Limit, Offset, Page, Pages, HasNext,
 HasPrev}`. `limit` deve ser maior que zero e `offset` não pode ser negativo
 (`ErrInvalidQuery`). Na `*DB` a contagem e a página são consultas
@@ -643,7 +892,196 @@ As leituras são verificadas por `examples/store_test.go` (SQLite temporário),
 cobrindo filtros, contagem, junção, agrupamento e paginação. As decisões da API
 estão em [E05-P01](E05-P01_decisions.md) e [E05-P03](E05-P03_decisions.md).
 
-## 10. Erros sentinela — resumo
+## 10. Migrações versionadas (E08)
+
+O exemplo de migrações administra um **segundo esquema** no mesmo arquivo
+SQLite: `projects` e `project_members` (§4). Os arquivos up/down são embutidos
+com `go:embed` e declarados versão a versão:
+
+```go
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
+
+// MigrationVersions declares the schema versions in execution order. The
+// version number and the order come from this declaration; the numeric prefix
+// of the file name is only a convention. Every version declares both
+// directions, so the same configuration can advance and revert the schema.
+func MigrationVersions() []krios.MigrationVersion {
+	return []krios.MigrationVersion{
+		{
+			Version: 1,
+			Up:      []string{"migrations/001_projects.up.sql"},
+			Down:    []string{"migrations/001_projects.down.sql"},
+		},
+		{
+			Version: 2,
+			Up:      []string{"migrations/002_project_members.up.sql"},
+			Down:    []string{"migrations/002_project_members.down.sql"},
+		},
+	}
+}
+
+// MigrationsConfig returns the migration configuration for the given target
+// version. The target is always explicit: 2 advances the schema to the second
+// version and 0 reverts every applied version.
+//
+// The managed objects are the tables Krios owns in this database. They let
+// the library refuse to adopt a database that already has the schema without
+// a migration history, instead of silently assuming it was created by Krios.
+func MigrationsConfig(target int) *krios.MigrationsConfig {
+	return &krios.MigrationsConfig{
+		FS:             migrationsFS,
+		TargetVersion:  &target,
+		Versions:       MigrationVersions(),
+		ManagedObjects: []string{"projects", "project_members"},
+	}
+}
+```
+
+> **Extraído de** [`examples/migrations.go`](../examples/migrations.go).
+
+A configuração entra no `krios.Config`:
+
+```go
+cfg := SQLiteConfig(dbPath)
+cfg.Migrations = MigrationsConfig(2)
+
+db, err := krios.Open(ctx, cfg)
+if err != nil {
+	return err
+}
+defer db.Close()
+
+plan, err := db.RunMigrations(ctx)
+```
+
+> **Ilustrativo** — o corpo de `migratePhase` em
+> [`examples/migrations.go`](../examples/migrations.go) faz exatamente isto.
+
+Pontos do contrato (E08-P01):
+
+- `TargetVersion` é a versão desejada e é **sempre explícito** (ponteiro): `nil`
+  é inválido (`ErrInvalidConfig`) e o ponteiro para `0` **reverte** todas as
+  versões aplicadas.
+- `Versions` é a lista ordenada; as versões precisam ser crescentes, únicas e
+  maiores que zero, e os nomes de arquivo de uma direção não podem se repetir
+  nem ser vazios. A direção `down` só é exigida quando o consumidor pretende
+  reverter — a preparação falha com `ErrInvalidQuery` se faltar o arquivo
+  necessário.
+- `ManagedObjects` é **obrigatório** quando `Migrations != nil` (lista vazia é
+  `ErrInvalidConfig`): sem ela a biblioteca não distingue "banco vazio" de
+  "esquema preexistente".
+- Sem a tabela `migrations` e sem nenhum objeto gerido presente → versão atual
+  `0` e percursos normais. Sem a tabela `migrations` mas com algum objeto
+  gerido presente → erro **antes** de executar (`ErrInvalidQuery`): adotar
+  esquema preexistente sem histórico está fora do escopo.
+- Um registro `in_progress`/`failed` no histórico bloqueia a execução com
+  `krios.ErrPartialMigration` e contexto de recuperação.
+- A tabela `migrations` é criada pela própria biblioteca, com
+  `version, filename, direction, status, checksum, applied_at, error` e
+  unicidade em `(version, filename, direction)`.
+
+O escopo transacional é o máximo viável por dialeto (E08-P01 §11): por versão
+em SQLite/PostgreSQL (falha no meio reverte a versão inteira), por arquivo em
+MySQL transacional e sem transação quando o arquivo contém DDL não
+transacional. No MySQL, uma versão também pode ficar parcial quando um
+arquivo transacional termina e um arquivo seguinte falha. O histórico
+incompleto bloqueia a retomada automática. Em SQLite/PostgreSQL, versões já
+confirmadas permanecem se uma versão posterior falhar; não há rollback do
+percurso inteiro.
+
+A preparação consulta o banco. O plano retornado descreve os passos
+preparados, inclusive quando a aplicação falha; a presença de um passo no
+plano não comprova sua execução. `DB.Migrations()` retorna a configuração
+retida e mutável; alterá-la exige sincronização pelo consumidor. Este exemplo
+reabre o banco com um alvo explícito a cada fase.
+
+### 10.1 Avanço, reversão e reaplicação
+
+`Migrate` percorre as três fases, cada uma abrindo o acesso com o alvo
+próprio — o alvo faz parte da configuração, e a configuração é retida pelo
+`Open`:
+
+```go
+func Migrate(ctx context.Context, dbPath string) error {
+	advance, err := migratePhase(ctx, dbPath, 2)
+	if err != nil {
+		return fmt.Errorf("avanço: %w", err)
+	}
+
+	fmt.Printf("avanço: %s\n", describePlan(advance.plan))
+	fmt.Printf("  objetos: %s\n", describeTables(advance.tables))
+	fmt.Printf("  histórico: %d registro(s)\n", len(advance.history))
+
+	revert, err := migratePhase(ctx, dbPath, 0)
+	if err != nil {
+		return fmt.Errorf("reversão: %w", err)
+	}
+
+	fmt.Printf("reversão: %s\n", describePlan(revert.plan))
+	fmt.Printf("  objetos: %s\n", describeTables(revert.tables))
+	fmt.Printf("  histórico: %d registro(s)\n", len(revert.history))
+
+	reapply, err := migratePhase(ctx, dbPath, 2)
+	if err != nil {
+		return fmt.Errorf("reaplicação: %w", err)
+	}
+
+	fmt.Printf("reaplicação: %s\n", describePlan(reapply.plan))
+	fmt.Printf("  objetos: %s\n", describeTables(reapply.tables))
+	fmt.Printf("  histórico: %d registro(s)\n", len(reapply.history))
+
+	fmt.Println("execução de migrações concluída")
+	return nil
+}
+```
+
+> **Extraído de** [`examples/migrations.go`](../examples/migrations.go).
+
+Cada fase observa o resultado real — o plano aplicado, a existência das
+tabelas geridas e as linhas do histórico — em vez de confiar no retorno do
+método:
+
+```go
+func tableExists(ctx context.Context, db *krios.DB, name string) (bool, error) {
+	var count int
+
+	if err := db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", name).Scan(&count); err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+```
+
+> **Extraído de** [`examples/migrations.go`](../examples/migrations.go). A
+> consulta é do SQLite; em outro dialeto a introspecção do catálogo é
+> diferente — a biblioteca só usa `sqlite_master` para a verificação pontual
+> dos objetos declarados em `ManagedObjects`.
+
+Saída real (arquivo SQLite novo):
+
+```
+avanço: 0->2 (2 passo(s))
+  objetos: projects=true project_members=true
+  histórico: 2 registro(s)
+reversão: 2->0 (2 passo(s))
+  objetos: projects=false project_members=false
+  histórico: 4 registro(s)
+reaplicação: 0->2 (2 passo(s))
+  objetos: projects=true project_members=true
+  histórico: 4 registro(s)
+execução de migrações concluída
+```
+
+O histórico cresce de 2 para 4 registros na reversão (uma linha `down` por
+arquivo) e permanece em 4 na reaplicação: a linha `up` do próprio arquivo é
+substituída, não duplicada. As três fases são verificadas por
+[`examples/migrations_test.go`](../examples/migrations_test.go), que confere o
+plano, o esquema real e o histórico em cada fase.
+
+## 11. Erros sentinela — resumo
 
 Todos casam com `errors.Is` e preservam a causa original:
 
@@ -653,14 +1091,17 @@ Todos casam com `errors.Is` e preservam a causa original:
 | `krios.ErrDriverNotLoaded`              | driver não importado em branco ou nome divergente de `Config.Driver`                          |
 | `krios.ErrConnectionFailed`             | banco inacessível ao ping (causa do driver preservada)                                        |
 | `krios.ErrClosed`                       | operação após `store.Close()`                                                                 |
-| `krios.ErrTxDone`                       | operação em `*Tx` já finalizada                                                               |
+| `krios.ErrTxDone`                       | operação em `*Tx` já finalizada — inclusive o `Rollback` deferred depois do `Commit`          |
 | `krios.ErrInvalidEntity`                | struct inválida em `EntityOf` ou destino errado em `All`/`Validate`/`Format`                  |
-| `krios.ErrValidation`                   | `ValidateUsers` com campo que rejeita o valor                                                 |
+| `krios.ErrValidation`                   | campo que rejeita o valor, em `ValidateUsers` **ou** em `SetValues`                            |
 | `krios.ErrFormat`                       | `Format()` de um campo devolvendo erro                                                        |
+| `krios.ErrInvalidQuery`                 | `Paginate` com `limit <= 0` ou `offset < 0`; esquema preexistente sem histórico (§10)          |
+| `krios.ErrFileNotFound`                 | `NewSQLFile` com arquivo em branco ou ausente no `fs.FS`                                      |
+| `krios.ErrPartialMigration`             | histórico em `in_progress`/`failed` bloqueia a execução das migrações                          |
 | `sql.ErrNoRows`                         | `UserByID`/`UserByEmail` sem registro — preservado, não embrulhado                            |
 | `context.Canceled` / `DeadlineExceeded` | prazo estourado em `Open`/operações — preservados                                             |
 
-## 11. Fluxo completo — `Run`
+## 12. Fluxo completo — `Run`
 
 `Run` costura tudo: abre o banco, cria o esquema, demonstra validação,
 escrita em grupo com rollback, escrita simples, leituras mapeadas com o builder,
@@ -709,7 +1150,7 @@ func Run(ctx context.Context, dbPath string) error {
 	}
 	fmt.Printf("carol criada (id %d) com bio\n", carol.ID)
 
-	// E05: Rows.All maps by column name; Status.Format supplies the display text.
+	// E04: Rows.All maps by column name; Status.Format supplies the display text.
 	users, err := store.ListUsers(ctx)
 	if err != nil {
 		return err
@@ -734,7 +1175,7 @@ func Run(ctx context.Context, dbPath string) error {
 	}
 	fmt.Println()
 
-	// E05: single-row mapping; sql.ErrNoRows stays available for checks.
+	// E04: single-row mapping; sql.ErrNoRows stays available for checks.
 	one, err := store.UserByID(ctx, alice.ID)
 	if err != nil {
 		return err
@@ -745,7 +1186,7 @@ func Run(ctx context.Context, dbPath string) error {
 	}
 	fmt.Println("  id 999 ausente: true")
 
-	// E05: the transfer commits as one unit and reports the affected rows.
+	// E03: the transfer commits as one unit and reports the affected rows.
 	moved, err := store.TransferTasks(ctx, alice.ID, carol.ID)
 	if err != nil {
 		return fmt.Errorf("transferência: %w", err)
@@ -788,6 +1229,8 @@ func Run(ctx context.Context, dbPath string) error {
 }
 ```
 
+> **Extraído de** [`examples/run.go`](../examples/run.go).
+
 Saída real (arquivo SQLite novo):
 
 ```
@@ -816,38 +1259,60 @@ Observe o contraste didático: `PresentUser` mostra `status=ACTIVE`
 (formatação), `UserByID` imprime `active` (valor original), e `bio=""` de
 alice versus `bio="leitora assídua"` de carol evidencia o NULL via ponteiro.
 
-## 12. Como executar e verificar
+## 13. Fluxo de migrações — `Migrate`
 
-O pacote `examples` é biblioteca: o consumidor chama `Run` do próprio
-`main` (substituindo o caminho do arquivo):
+`Migrate` (§10.1) é a narrativa de E08: abre o acesso com o alvo 2, avança o
+esquema, reabre com o alvo 0 e reverte, reabre com o alvo 2 e reaplica —
+imprimindo o plano, o estado dos objetos geridos e o tamanho do histórico em
+cada fase. A saída real está em §10.1.
+
+## 14. Como executar e verificar
+
+O pacote `examples` é biblioteca: o consumidor chama `Run` e `Migrate` do
+próprio `main` (substituindo o caminho do arquivo):
 
 ```go
 func main() {
 	if err := examples.Run(context.Background(), "kriostasks.db"); err != nil {
 		log.Fatal(err)
 	}
+	if err := examples.Migrate(context.Background(), "kriostasks.db"); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
+
+> **Ilustrativo** — corpo do `main` do consumidor, com imports de
+> `context`, `log` e `github.com/mineot/krios/examples`. Use um arquivo SQLite
+> novo para reproduzir as saídas; `Run` insere dados a cada execução.
 
 Com o repositório na raiz do módulo:
 
 ```sh
-make check                       # fmt + build + vet + test (inclui ./examples)
-go test -run '^Example' -v ./tests   # exemplos executáveis das garantias de E03/E04
+make check                              # fmt + build + vet + test (inclui ./examples)
+go test -run '^Example' -v ./tests     # exemplos executáveis das garantias de E03/E04
+go test -run 'TestMigrat' -v ./examples # avanço, reversão e reaplicação de migrações
 ```
 
-## 13. Recursos disponíveis (E05–E08)
+## 15. Recursos disponíveis (E01–E08)
 
+- **E02 — usado pelo projeto.** `Config` dos três bancos, `Open`/`Close`,
+  classificação de erros de abertura.
+- **E03 — usado pelo projeto.** SQL puro com parâmetros, `Result` com flag de
+  disponibilidade, transações explícitas com commit bloqueado.
+- **E04 — usado pelo projeto.** Entidades por reflection com tags `krios`,
+  validação e formatação por campo, mapeamento posicional (`One`) e por nome
+  (`All`).
 - **E05 — usado pelo projeto.** As leituras usam o builder encadeado com
   filtros, joins, agregações e paginação (`krios.Paginate` com total).
-- **E06 — usado pelo projeto.** `CreateUser`/`CreateTask` usam o builder de
-  escrita, com `Where` obrigatório em UPDATE/DELETE e integração automática com
-  o motor de validação já usado em `ValidateUsers`.
+- **E06 — usado pelo projeto.** `CreateUser`/`CreateTask`/`TransferTasks` usam
+  o builder de escrita, com `Where` obrigatório em UPDATE/DELETE, política de
+  valores e `Omit`, e integração automática com o motor de validação.
 - **E07 — usado pelo projeto.** `CreateSchema` deixou de ser strings em Go e
   passou a arquivos `.sql` embutidos via `go:embed` (um statement por arquivo
   em `examples/schema/`), carregados com `krios.NewSQLFile` e executados por
   `db.File(f).Exec`. Ver `examples/store.go` e `examples/schema/`.
-- **E08 — disponível; não usado por este exemplo.** Migrações versionadas
-  up/down com histórico na tabela `migrations`, configuradas por
-  `krios.MigrationsConfig` e executadas por `DB.RunMigrations`. O exemplo
-  prefere manter o DDL próprio; ver `E08-P01_decisions.md`.
+- **E08 — usado pelo projeto.** Migrações versionadas up/down com histórico na
+  tabela `migrations`, configuradas por `krios.MigrationsConfig` e executadas
+  por `DB.RunMigrations`, com o exemplo de avanço, reversão e reaplicação em
+  `examples/migrations.go`. Ver `E08-P01_decisions.md`.

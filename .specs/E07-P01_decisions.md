@@ -109,7 +109,9 @@ A superfície cobre os dois modos pedidos por §6.8, sem estado mutuamente exclu
 | `One`      | `error` (destino) | destino `*T`, preenchido como `Row.Scan` (E04)                                           |
 | `All`      | `error` (destino) | destino `*[]T`, preenchido como `Rows.All` (E04): match por nome, subconjunto inalterado |
 
-- `One`/`All` reaproveitam o mapeamento de [E04-P02_decisions.md](E04-P02_decisions.md): correspondência por nome de coluna, `NULL` por ponteiro/`sql.Null*`, conversões com causa preservada e `sql.ErrNoRows` em `One` sem linha.
+- `One`/`All` reaproveitam o mapeamento de [E04-P02_decisions.md](E04-P02_decisions.md): `One` mapeia **posicionalmente** (como `Row.Scan`) e `All` casa colunas aos campos **por nome** (como `Rows.All`), `NULL` por ponteiro/`sql.Null*`, conversões com causa preservada e `sql.ErrNoRows` em `One` sem linha.
+
+> **Revisado por [C05-P02_decisions.md](C05-P02_decisions.md) (D30, 2026-10-21):** a redação anterior atribuía a `One` e `All` a mesma "correspondência por nome de coluna". O mapeamento de `One` é posicional desde E04-P02 §39 — o resultset deve seguir a ordem de declaração dos campos — e só `All` casa por nome. A distinção vale para `File.One` e `File.All` (§6), que reaproveitam os mesmos caminhos.
 - `One`/`All` não exigem entidade: a coluna selecionada vem do arquivo; o struct de destino é apenas preenchido — não há validação (`Entity.Validate`) nem formatação no caminho de leitura, exatamente como em `Row.Scan`/`Rows.All`.
 - Falhas de leitura tardia em `One`/`All` (conversão, iteração) são registradas na `Tx` e bloqueiam `Commit` (E03 §3.4.6); a back-reference vem do executor, sem código novo.
 
@@ -123,9 +125,11 @@ A superfície cobre os dois modos pedidos por §6.8, sem estado mutuamente exclu
 
 | Sentinela                | Quando                                                                        | Observação                                                             |
 | ------------------------ | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `ErrFileNotFound` (nova) | `NewSQLFile` com FS `nil`, caminho inválido, recurso inexistente ou diretório | `%w` sobre `fs.ErrNotExist` quando couber; nome do caminho na mensagem |
-| `ErrInvalidQuery`        | `NewSQLFile` com conteúdo vazio; `File(nil)` no primeiro método               | mesmas regras de construção de E05/E06                                 |
+| `ErrFileNotFound` (nova) | `NewSQLFile` com FS `nil`, caminho inválido, recurso inexistente, diretório **ou arquivo em branco** | `%w` sobre `fs.ErrNotExist` quando couber; nome do caminho na mensagem |
+| `ErrInvalidQuery`        | `File(nil)` no primeiro método; construtor de arquivo sem executor             | mesmas regras de construção de E05/E06                                 |
 | (sem sentinela)          | argumentos incompatíveis, falha de driver, contextos cancelados/expirados     | repassados como em E02/E03, `%w` preservado                            |
+
+> **Revisado por [C05-P02_decisions.md](C05-P02_decisions.md) (D30, 2026-10-21):** a linha de `ErrInvalidQuery` atribuía a esta sentinela o "conteúdo vazio" de `NewSQLFile`. O arquivo em branco é rejeitado no carregamento, com `ErrFileNotFound` (`internal/sqlfile/sqlfile.go`: texto vazio → `%w: %q is blank`). `ErrInvalidQuery` cobre o runner sem `SQLFile` e sem executor. A tabela de erros do [0001_use_examples.md](0001_use_examples.md) §11 passou a listar as duas sentinelas.
 
 - `ErrClosed`/`ErrTxDone` continuam indicando estado do acesso, nunca problema do arquivo.
 - Não há sentinela própria para falha de execução do driver: o SQL do consumidor falha como falharia um comando escrito em código.
