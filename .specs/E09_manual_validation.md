@@ -1,10 +1,10 @@
-# E09 — Roteiro manual da base E01–E05
+# E09 — Roteiro manual E01–E08
 
 Data: 2026-10-19. **Estado: preparado; MySQL e PostgreSQL ainda não executados.**
 
 > **Revisão de escopo (2026-10-20):** a [E10](E10_integration_plan.md) automatizará os cenários reproduzíveis contra SQLite, MySQL e PostgreSQL reais, com esquema criado por migrações e execução no GitHub Actions. Este roteiro alimenta a matriz da E10 e permanece como procedimento para casos residuais manuais. A consolidação C06 revisará os cenários antes da automação. As expectativas antigas de M05/M06 devem acompanhar os contratos decididos em C01; a criação da E10 não constitui evidência de execução.
 
-Este roteiro coleta evidência real de conexão, transações e consultas encadeadas. DSNs e drivers simulados já têm testes locais, mas não substituem este roteiro. As migrações (E08) já contam com os cenários M01–M07 em §4.1; faltam os cenários de escritas (E06) e de SQL incorporado (E07), a ampliar nesta entrega.
+Este roteiro coleta evidência real de conexão, transações e consultas encadeadas. DSNs e drivers simulados já têm testes locais, mas não substituem este roteiro. As migrações (E08) já contam com os cenários M01–M07 em §4.1; os cenários de escritas (E06) e SQL incorporado (E07) foram preparados em C06-P01 no §4.2, com consumidor separado e arquivos incorporados por dialeto.
 
 ## 1. Preparar e registrar o ambiente
 
@@ -486,11 +486,34 @@ Aplicam-se a E08, já implementado localmente; falta a evidência real. Ver [E08
 | M06 | Estado `0` e versão desejada                                                                                                                            | `TargetVersion: ptr(0)` reverte tudo; `TargetVersion: nil` e `Migrations` ausente/`ManagedObjects` vazio retornam erro antes de executar |
 | M07 | Banco sem histórico: declarar `ManagedObjects` inclui uma tabela existente; repetir com `ManagedObjects` apontando só para tabelas ausentes; em MySQL/PostgreSQL, criar tabela homônima em **outro esquema** e declará-la (com e sem qualificação) | Com objeto gerido presente no esquema da conexão → erro antes de executar; homônimo apenas em outro esquema → **não** bloqueia nome simples (filtro `DATABASE()`/`current_schema()`), e `schema.tabela` qualificado aponta o esquema declarado; sem nenhum objeto gerido presente → versão atual `0` e percursos normais. Nome qualificado em SQLite → `ErrInvalidConfig` |
 
+### 4.2 Escritas e SQL incorporado — C06-P01
+
+Usar o [módulo consumidor E06/E07](consumers/e06e07/README.md), cujo
+[main.go](consumers/e06e07/main.go) contém as verificações executáveis e cujo
+[go.mod](consumers/e06e07/go.mod) fixa os drivers fora do módulo da biblioteca.
+O README descreve pré-condições, comandos, dados, resultado esperado e limpeza
+para W01–W07/F01–F05. A [matriz C05-P03](C05-P03_traceability.md) fornece a
+rastreabilidade RF-03/07/08/09 e CA-04/08/09/13.
+
+- W01–W03: zeros/NULL/default/Omit, validação e filtros obrigatórios, sem efeitos em rejeições.
+- W04/W07: Returning suportado/rejeitado e ID gerado, com disponibilidade real de Result registrada.
+- W05/W06: commit/rollback e UPDATE/DELETE de múltiplas linhas, conferindo o estado persistido.
+- F01–F03: parâmetros por dialeto, One posicional/All por nome, arquivos inválidos e uso em DB/Tx.
+- F04/F05: erro tardio de conversão e erro SQL imediato bloqueiam commit e preservam a causa; ErrNoRows não bloqueia.
+
+Cada arquivo contém um statement; multi-statement não é pressuposto neste
+consumidor. As tabelas são criadas diretamente para isolar E06/E07. A E10
+integrará os cenários ao fluxo completo com esquema criado por migrações.
+
+**Estado:** preparação e validação SQLite locais; MySQL/PostgreSQL ainda não
+executados. Ver [evidências C06-P01](C06-P01_decisions.md). A compilação dos
+imports de drivers não encerra os cenários reais dos servidores.
+
 ## 5. Registro de evidências
 
 | Banco      | Driver/versão | Servidor/versão | Go/revisão Krios | Cenários | Resultado     | Pendências      |
 | ---------- | ------------- | --------------- | ---------------- | -------- | ------------- | --------------- |
-| MySQL      | A preencher   | A preencher     | A preencher      | Nenhum (V01–V23) | Não executado | Integração real |
-| PostgreSQL | A preencher   | A preencher     | A preencher      | Nenhum (V01–V23) | Não executado | Integração real |
+| MySQL      | A preencher   | A preencher     | A preencher      | Nenhum (V01–V23/M01–M07/W01–W07/F01–F05) | Não executado | Integração real |
+| PostgreSQL | A preencher   | A preencher     | A preencher      | Nenhum (V01–V23/M01–M07/W01–W07/F01–F05) | Não executado | Integração real |
 
 Para cada cenário, guardar: data, configuração sem segredos, passos executados, resultado esperado, resultado observado e limitação do ambiente. Falha conhecida deve gerar correção e nova evidência. Ao completar os cenários aplicáveis, atualizar E02-P04 e a validação final E09; ausência de evidência não deve ser marcada como sucesso.

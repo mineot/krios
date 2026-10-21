@@ -38,6 +38,8 @@ As marcações e evidências anteriores permanecem como registro das entregas re
 
 **Rastreabilidade (2026-10-21):** [C05-P03](C05-P03_traceability.md) relaciona RF-01–RF-09, treze critérios, API, testes e lacunas; [D35–D38](C05-P03_decisions.md) registra a revisão dirigida. Base `9dd207e`, suíte local sem cache aprovada com Go 1.26.8. `ColumnTypes` permanece pendência contratual a avaliar em E09-P01; integração real e publicação não foram declaradas entregues.
 
+**Preparação de E06/E07 (2026-10-21):** C06-P01 concluída com [consumidor separado e cenários W/F](consumers/e06e07/README.md), conforme [D39–D41](C06-P01_decisions.md). SQLite executado em Go 1.26.8/1.27.2; servidores permanecem não executados. C06-P02/P03, C07 e E10 continuam pendentes.
+
 ## 3. Visão geral das entregas
 
 | Entrega | Resultado                                       | Depende de | Requisitos principais              |

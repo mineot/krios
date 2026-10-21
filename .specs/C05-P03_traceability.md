@@ -89,3 +89,5 @@ A fachada usa aliases: seus métodos exportados também são API. A inspeção i
 ## 6. Passagem
 
 C06 recebe RF-07/08, ciclos/recuperação de RF-05 e disponibilidade de Result (CA-13) como cenários a preparar. E10-P02 deve transformar as referências desta matriz em cenários com IDs, banco, ambiente e resultado observado; E10-P08 devolve as evidências. E09-P01 encerra lacunas contratuais, incluindo D01, e confere todos os CA; E09-P03/P04 encerra distribuição. Não há pendência sem etapa responsável nem requisito declarado entregue apenas por existir código.
+
+**Atualização C06-P01 (2026-10-21):** os cenários de RF-07/08, transações RF-03 e Result/CA-13 agora têm [consumidor W01–W07/F01–F05](consumers/e06e07/README.md). [D39–D41](C06-P01_decisions.md) registra evidência SQLite em Go 1.26.8/1.27.2 na base `dcf7e52`; MySQL/PostgreSQL continuam pendentes em E10. Isso não substitui a evidência L1 da revisão C05 nem encerra a conferência E09.
