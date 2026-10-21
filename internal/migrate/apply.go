@@ -81,9 +81,13 @@ func ensureHistoryTable(ctx context.Context, exec executor, d dialect.Dialect) e
 }
 
 // applySteps runs the steps grouped by version and direction, choosing the
-// transactional scope from the dialect and the per-file classification. The
-// last successfully applied version is tracked so a partial failure reports
-// accurate context.
+// transactional scope from the dialect and the per-file classification.
+//
+// lastApplied tracks the last version that completed entirely, never the last
+// file that succeeded: a failure on the second file of a version must report
+// the previous complete version, not the in-flight one (C03-P04 D19). Within a
+// group the incoming complete version is passed to the partial error and the
+// reached version is assigned only after the whole group succeeds.
 func applySteps(ctx context.Context, exec executor, begin Beginner, plan *Plan, cfg *config.MigrationsConfig, d dialect.Dialect) error {
 	md := d.(dialect.MigrationDialect)
 
@@ -96,12 +100,14 @@ func applySteps(ctx context.Context, exec executor, begin Beginner, plan *Plan, 
 			return fmt.Errorf("krios: migrations apply: %w", err)
 		}
 
+		reached := appliedAfter(group, lastApplied)
+
 		if md.SupportsTransactionalDDL() && allTransactional(group) {
 			if err := runVersionScope(ctx, begin, group, d); err != nil {
 				return err
 			}
 
-			lastApplied = appliedAfter(group, lastApplied)
+			lastApplied = reached
 
 			continue
 		}
@@ -116,17 +122,15 @@ func applySteps(ctx context.Context, exec executor, begin Beginner, plan *Plan, 
 					return err
 				}
 
-				lastApplied = appliedAfter([]Step{step}, lastApplied)
-
 				continue
 			}
 
 			if err := runNoTxScope(ctx, exec, step, d, cfg, lastApplied); err != nil {
 				return err
 			}
-
-			lastApplied = appliedAfter([]Step{step}, lastApplied)
 		}
+
+		lastApplied = reached
 	}
 
 	return nil

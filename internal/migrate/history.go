@@ -54,11 +54,19 @@ func checksum(f *sqlfile.SQLFile) string {
 
 // insertInProgress records a step as in_progress with its checksum before the
 // file runs (E08-P01 §7.1). filename is the exact resource name.
+//
+// On up, only this file's own stale row is cleared before inserting, never the
+// whole version: a multi-file version records one row per (version, filename,
+// direction), so deleting by version alone would erase the already-applied
+// sibling files and prevent the version from ever completing (C03-P04 D18).
 func insertInProgress(ctx context.Context, ex statement, d dialect.Dialect, step Step) error {
 	if step.Direction == DirectionUp {
-		del := fmt.Sprintf("DELETE FROM %s WHERE version = %s AND direction = %s", d.QuoteIdent(historyTable), placeholder(d, 1), placeholder(d, 2))
+		del := fmt.Sprintf(
+			"DELETE FROM %s WHERE version = %s AND filename = %s AND direction = %s",
+			d.QuoteIdent(historyTable), placeholder(d, 1), placeholder(d, 2), placeholder(d, 3),
+		)
 
-		if _, err := ex.ExecContext(ctx, del, step.Version, DirectionUp); err != nil {
+		if _, err := ex.ExecContext(ctx, del, step.Version, step.File.Name(), DirectionUp); err != nil {
 			return err
 		}
 	}

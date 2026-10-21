@@ -96,6 +96,8 @@ Campos mínimos:
 
 Chave única: `(version, filename, direction)`. Histórico deve ser imutável em caso de falha: um registro `failed` nunca é sobrescrito para `applied` pela biblioteca.
 
+> **Revisado por [C03-P04_decisions.md](C03-P04_decisions.md) (D18, 2026-10-20):** uma versão com múltiplos arquivos por direção registra **uma linha por arquivo** (respeitando a chave única). `insertInProgress` limpa, no avanço, apenas a linha do próprio arquivo (`version, filename, direction`); antes limpava a versão inteira, apagando os irmãos já aplicados e impedindo a conclusão da versão.
+
 ### 7.1. Estados e transições
 
 - Iniciar arquivo → registrar `in_progress`.
@@ -125,6 +127,8 @@ func (db *DB) RunMigrations(ctx context.Context) (*Plan, error)
 - **Configuração obrigatória:** `Config.Migrations == nil` → `ErrInvalidConfig`. `TargetVersion` em `MigrationsConfig` é sempre um ponteiro explícito não-nulo (§4); `nil` → `ErrInvalidConfig`. A ausência de toda a config é o único "não configurado".
 - **Estado `0`:** `*TargetVersion == 0` solicita reversão de todas as migrações `applied`. Versões já confirmadas podem permanecer se a reversão falhar em uma versão posterior (escopo por versão), com bloqueio/estado parcial conforme D03.
 - **Comparação:** versão atual = versão efetiva derivada do histórico, considerando apenas versões **integralmente concluídas** (todos os arquivos da versão com `status='applied'`). A mera existência de uma linha `applied` não basta; versões parcialmente executadas são tratadas como inconsistentes. Igual a `TargetVersion` → nenhuma migração. Inferior → aplicar `up` até alcançar; superior → aplicar `down` até alcançar (§5). Ciclos repetidos (`0→1→0→1`) são suportados após redução do estado efetivo (D02).
+
+> **Revisado por [C03-P04_decisions.md](C03-P04_decisions.md) (D18–D20, 2026-10-20):** a conclusão "todos os arquivos da versão" é efetiva também na **execução** (não só na preparação): `LastVersion` do `*PartialMigrationError` de execução é a última versão **completa** (não a versão em curso). Em SQLite/PostgreSQL a versão de passos transacionais é atômica (escopo por versão), então uma falha no meio reverte a versão inteira e não gera estado parcial; em MySQL o estado parcial é registrado e bloqueia. Ver §9.
 - **Verificações antes de executar** (§6 e §7): ausência de histórico com objetos geridos presentes → erro; registro `in_progress`/`failed` → `ErrPartialMigration` (§9); direção necessária incompleta (§5) → `ErrInvalidQuery`.
 - **Concorrência:** a biblioteca não promete coordenação entre chamadas simultâneas de `RunMigrations` em processos distintos nem a mesma `DB`; a resolução de conflito de histórico é por erro (chave única da tabela, §7). Nada desta entrega cria caminho de execução alternativo ao `executor` de E03 — os statement e o DDL usam `DB.ExecContext`/`Begin`.
 
@@ -149,6 +153,8 @@ Comportamento:
 A mensagem resume o estado; o contexto é exposto por um tipo de erro estruturado que satisfaz `errors.As` e carrega os campos acima. A implementação do tipo e da sentinela fica em E08-P02 (`internal/errs`), no padrão de `NormalizeTxError` ([E03-P01_decisions.md](E03-P01_decisions.md)).
 
 > **Revisado por [C03-P03_decisions.md](C03-P03_decisions.md) (D14–D15, 2026-10-20):** o bloqueio por `ErrPartialMigration` é mantido mesmo quando o corpo sem transação commitou e a atualização do histórico também falhou. `markFailed` que falha → `*PartialMigrationError` com status `failed` e ambas as causas preservadas; `markApplied` que falha após corpo commitado → `*PartialMigrationError` com status `in_progress` e estado incerto. Preservar `%w` alcança a causa do corpo e a falha de registro. A limpeza e o desfecho incerto de `Commit` (D16) não criam estado parcial.
+
+> **Revisado por [C03-P04_decisions.md](C03-P04_decisions.md) (D19–D20, 2026-10-20):** `LastVersion` é sempre a última versão **integralmente** aplicada, na execução e na preparação (corrigido o caminho de execução, que inflava para a versão em curso). Em `down` não contíguo, `LastFile` nomeia o **último arquivo `applied` do prefixo** reaplicado (não o próximo pendente). Em SQLite/PostgreSQL a falha no meio de uma versão transacional é atômica e produz erro comum, sem estado parcial.
 
 ## 10. Capacidades transacionais por dialeto
 
@@ -177,6 +183,8 @@ Detecção por statement deve ignorar case, comentários e espaços. Palavras-ch
 
 > **Revisado por [C03-P02_decisions.md](C03-P02_decisions.md) (D10–D13, 2026-10-20):** o comportamento passou a ser uma allowlist de DML (`INSERT`, `UPDATE`, `DELETE`, `SELECT`, `REPLACE`, `WITH`) somada à denylist acima, ampliada para `GRANT`, `REVOKE`, `LOAD`, `CHECK`, `CACHE` e `RESET` conforme o §15.3.3 do manual MySQL; keyword fora das duas listas resulta em `false`. `SET` ficou fora da allowlist (`SET PASSWORD`/`SET autocommit` causam commit implícito). Comandos de controle (`BEGIN`, `START`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`, `END`, `ABORT`) retornam erro em todos os dialetos; e `fileTransactional` varre os statements também em SQLite/PostgreSQL, propagando esses erros e comentários de bloco não terminados.
 
+> **Revisado por [C03-P04_decisions.md](C03-P04_decisions.md) (D20, 2026-10-20):** a consequência de `fileTransactional` descartar o booleano quando `SupportsTransactionalDDL` é verdadeiro (D12) é que, em SQLite/PostgreSQL, arquivos de DDL também são tratados como transacionais e a versão inteira roda em escopo por versão. Assim, uma falha no meio de uma versão é **atômica** nesses dialetos (rollback de toda a versão, erro comum, sem `ErrPartialMigration`), enquanto o estado parcial permanece específico do MySQL. Ver §11.
+
 ## 11. Escopo transacional
 
 | Cenário                                     | Escopo                                              | Comportamento                                                                                                                                                           |
@@ -188,6 +196,8 @@ Detecção por statement deve ignorar case, comentários e espaços. Palavras-ch
 Nunca dividir um único arquivo. Se qualquer arquivo da sequência (MySQL) for não-transacional, não usar transação por versão.
 
 > **Revisado por [C03-P03_decisions.md](C03-P03_decisions.md) (D14–D17, 2026-10-20):** falha de `Commit` em qualquer escopo tenta `Rollback` defensivo e reporta desfecho incerto preservando os dois erros, sem emitir `ErrPartialMigration` (D16). Cancelamento entre passos preserva `context.Canceled` sem criar estado parcial; falha de `insertInProgress`/`Begin` é erro comum com causa preservada (D17).
+
+> **Revisado por [C03-P04_decisions.md](C03-P04_decisions.md) (D18–D20, 2026-10-20):** no escopo por arquivo (MySQL transacional) o histórico registra **uma linha por arquivo**; `insertInProgress` limpa apenas a linha do próprio arquivo, não a versão inteira, para que versões com múltiplos arquivos concluam (D18). No escopo por versão (PostgreSQL/SQLite) a falha no meio é atômica e resulta em erro comum, sem estado parcial (D20). No caminho sem transação, `LastVersion` reportado é a última versão **completa** (D19).
 
 ## 12. Itens resolvidos e permanentes
 

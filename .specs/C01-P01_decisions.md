@@ -84,6 +84,8 @@ target=1 current=0 steps=1 table_exists=1 error=<nil>   // antes: steps=0, table
 - A criação da tabela de infraestrutura `migrations` é fora do escopo transacional dos arquivos de aplicação; seu comportamento em falha de commit é documentado em C03-P03, não prometido como revertível. Resolvido em [C03-P03_decisions.md](C03-P03_decisions.md) (D16): falha de `Commit` tenta limpeza defensiva e reporta desfecho incerto, sem prometer reversão nem emitir `ErrPartialMigration`.
 - `TestMigrationsFailureRollsBackSQLite` deve ser reinterpretado como **rollback da versão em execução** (a versão anterior `applied` permanece), e não como rollback do percurso completo.
 
+> **Revisado por [C03-P04_decisions.md](C03-P04_decisions.md) (D18–D20, 2026-10-20):** a unidade "versão" pressupõe que o histórico registre **um arquivo por linha** (`(version, filename, direction)`); `insertInProgress` passou a limpar apenas a linha do próprio arquivo, e não a versão inteira, para que versões com múltiplos arquivos possam concluir. A atomicidade por versão em SQLite/PostgreSQL foi confirmada (falha no meio reverte a versão, versão anterior permanece) e `LastVersion` do estado parcial passou a ser sempre a última versão completa.
+
 **Alternativas rejeitadas.**
 
 - _Uma transação por todo o percurso até o alvo (rollback global).'_ Rejeitada: inviável no MySQL e desnecessária; viola "escopo máximo viável" de RF-05 e as versões confirmadas devem persistir.
