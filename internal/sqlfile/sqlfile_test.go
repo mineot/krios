@@ -292,3 +292,45 @@ func TestFileTxDone(t *testing.T) {
 		t.Fatalf("Exec() after finalize = %v, want errs.ErrTxDone", err)
 	}
 }
+
+// TestFileOneNoRowsPreserved: C04-P03. File.One preserves sql.ErrNoRows and
+// still releases the native result set.
+func TestFileOneNoRowsPreserved(t *testing.T) {
+	f := mustFile(t, fsFixture(), "queries/by_id.sql")
+
+	native := &testutil.Rows{NextErr: sql.ErrNoRows}
+	d := &testutil.Driver{Query: func() (driver.Rows, error) { return native, nil }}
+	db := openDriver(t, d)
+
+	var value int
+	if err := db.File(f).One(context.Background(), &value, 99); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("One() = %v, want sql.ErrNoRows", err)
+	}
+	if got := native.Closes.Load(); got != 1 {
+		t.Errorf("closes = %d, want 1", got)
+	}
+}
+
+// TestFileBuildErrorDoesNotStartQuery: C04-P03. A construction failure (nil
+// SQLFile) is reported before the executor is reached, so no statement starts
+// on the driver.
+func TestFileBuildErrorDoesNotStartQuery(t *testing.T) {
+	d := &testutil.Driver{}
+	db := openDriver(t, d)
+
+	if _, err := db.File(nil).Query(context.Background()); !errors.Is(err, errs.ErrInvalidQuery) {
+		t.Fatalf("Query() = %v, want errs.ErrInvalidQuery", err)
+	}
+
+	var value int
+	if err := db.File(nil).QueryRow(context.Background()).Scan(&value); !errors.Is(err, errs.ErrInvalidQuery) {
+		t.Fatalf("QueryRow().Scan() = %v, want errs.ErrInvalidQuery", err)
+	}
+
+	if got := d.Queries.Load(); got != 0 {
+		t.Errorf("Queries = %d, want 0 (statement started on build error)", got)
+	}
+	if got := d.LastQuery(); got != "" {
+		t.Errorf("LastQuery() = %q, want empty", got)
+	}
+}

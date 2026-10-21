@@ -33,6 +33,8 @@ type Driver struct {
 	Closes    atomic.Int32
 	Commits   atomic.Int32
 	Rollbacks atomic.Int32
+	Execs     atomic.Int32
+	Queries   atomic.Int32
 
 	lastQuery atomic.Value // string
 	lastArgs  atomic.Value // []driver.NamedValue
@@ -111,6 +113,7 @@ func (c *conn) Ping(ctx context.Context) error {
 func (c *conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	c.d.lastQuery.Store(query)
 	c.d.lastArgs.Store(args)
+	c.d.Execs.Add(1)
 
 	if c.d.Exec != nil {
 		if err := c.d.Exec(ctx); err != nil {
@@ -124,6 +127,7 @@ func (c *conn) ExecContext(ctx context.Context, query string, args []driver.Name
 func (c *conn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	c.d.lastQuery.Store(query)
 	c.d.lastArgs.Store(args)
+	c.d.Queries.Add(1)
 
 	if c.d.QueryContext != nil {
 		return c.d.QueryContext(ctx)
