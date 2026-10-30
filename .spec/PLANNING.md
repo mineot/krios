@@ -2,7 +2,7 @@
 
 - **Base do plano:** seguir [DEFINITIONS.md](DEFINITIONS.md) e [MANUAL.md](MANUAL.md); detalhar as etapas após as considerações sobre este esboço.
 - **Execução:** plano ainda não finalizado. Planejar cada passo antes de implementar, registrar dúvidas em [QUESTIONS.md](QUESTIONS.md) e aguardar respostas e autorização explícita do utilizador, conforme [AGENTS.md](../AGENTS.md). Nenhum passo está autorizado por este esboço.
-- **1. Consolidar os contratos:** revisar assinaturas, retornos, erros e limites de suporte por banco/versão.
+- **1. Consolidar os contratos:** revisar assinaturas, retornos, erros e limites de suporte por banco/versão. Planejamento em [001.md](001.md), aguardando revisão e autorização.
 - **2. Estruturar o projeto:** definir módulo Go, organização dos pacotes e separação dos drivers usados nos testes de integração.
 - **3. Implementar conexão:** configuração, `Open`, `Wrap`, `Close`, propriedade do pool e timeout de abertura.
 - **4. Implementar transações:** `Begin`, `Commit`, `Rollback`, contextos e ciclo de vida de `DB`/`Tx`.
@@ -18,3 +18,11 @@
 - **14. Criar testes unitários:** passo exclusivo para planejar e criar a suíte unitária, incluindo configuração, expressões, compilação SQL, builders, validações e regras de migração.
 - **15. Documentar o README:** aguardar a definição do conteúdo pelo utilizador nesse passo. Ignorar o arquivo e seu conteúdo por enquanto.
 - **16. Preparar a distribuição pelo GitHub:** planejar com o utilizador o módulo Go, repositório, licença, versionamento e preparação da biblioteca para consumo externo. Publicação, tags e releases dependem de autorização explícita.
+
+## Planejamento do passo 1
+
+- **Escopo:** consolidar documentalmente API pública, regras, resultados, erros e compatibilidade; detalhes em [001.md](001.md).
+- **Alterações previstas:** consolidar `DEFINITIONS.md`, ajustar exemplos afetados em `MANUAL.md` e manter os registros em `001.md`, `QUESTIONS.md` e neste plano, após autorização.
+- **Validações:** consistência de assinaturas e exemplos, regras de ciclo de vida, mapeamento de erros e matriz de suporte aprovada; sem implementação ou testes de código nesta etapa.
+- **Dúvidas pendentes:** `001-Q01` a `001-Q07`, em [QUESTIONS.md](QUESTIONS.md).
+- **Situação:** planejamento redigido para revisão. Consolidação ainda não executada; demais passos não iniciados.

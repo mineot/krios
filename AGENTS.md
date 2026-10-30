@@ -10,7 +10,8 @@
 - Registrar todas as dúvidas em [.spec/QUESTIONS.md](.spec/QUESTIONS.md), informar o utilizador e interromper a implementação até receber suas respostas e autorização explícita para continuar.
 - Respostas às dúvidas não equivalem a autorização para implementar. Silêncio ou tempo decorrido também não constituem autorização.
 - Se surgirem dúvidas durante um passo, registrar as novas questões e pausar novamente. Atualizar o planejamento conforme as respostas antes de retomar a implementação autorizada.
-- Preservar as perguntas, respostas e decisões do utilizador; não responder em seu nome nem sobrescrever suas respostas.
+- Enquanto houver questões pendentes, preservar as perguntas, respostas e decisões do utilizador; não responder em seu nome nem sobrescrever suas respostas.
+- Quando todas as questões estiverem resolvidas, registrar as decisões no planejamento do passo correspondente e limpar todo o conteúdo de `QUESTIONS.md`, mantendo o arquivo. Não limpar enquanto houver qualquer questão pendente. A limpeza não equivale a autorização para continuar a implementação.
 - Ao concluir um passo, registrar o resultado e as validações em `PLANNING.md`. Não iniciar automaticamente o passo seguinte.
 
 ## Documentação, testes e distribuição
