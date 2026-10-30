@@ -1,6 +1,10 @@
 # Manual Krios
 
-API prevista em [DEFINITIONS.md](DEFINITIONS.md). Trechos independentes; imports usuais omitidos. `krios` representa o pacote da biblioteca, cujo caminho de módulo ainda será definido. Exemplos com `return err` ficam em funções que retornam `error`.
+API prevista em [DEFINITIONS.md](DEFINITIONS.md). Requer Go 1.26+. Trechos independentes; imports usuais omitidos. `krios` representa o pacote `github.com/mineot/krios`. Exemplos com `return err` ficam em funções que retornam `error`.
+
+```go
+import "github.com/mineot/krios"
+```
 
 ## Configurar o banco
 
