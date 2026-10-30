@@ -4,7 +4,7 @@
 - **Execução:** plano ainda não finalizado. Planejar cada passo antes de implementar, registrar dúvidas em [QUESTIONS.md](QUESTIONS.md) e aguardar respostas e autorização explícita do utilizador, conforme [AGENTS.md](../AGENTS.md). Nenhum passo está autorizado por este esboço.
 - **1. Consolidar os contratos:** revisar assinaturas, retornos, erros e limites de suporte por banco/versão. Consolidação documental concluída em 30/10/2026; planejamento, decisões e respostas em [001.md](001.md).
 - **2. Estruturar o projeto:** definir módulo Go, organização dos pacotes e separação dos drivers usados nos testes de integração. Estrutura inicial concluída em 30/10/2026; decisões e validações em [002.md](002.md).
-- **3. Implementar conexão:** configuração, `Open`, `Wrap`, `Close`, propriedade do pool e timeout de abertura.
+- **3. Implementar conexão:** configuração, `Open`, `Wrap`, `Close`, propriedade do pool e timeout de abertura. Implementação concluída em 30/10/2026; decisões, resultados e limites da validação em [003.md](003.md).
 - **4. Implementar transações:** `Begin`, `Commit`, `Rollback`, contextos e ciclo de vida de `DB`/`Tx`.
 - **5. Implementar SQL direto e arquivos:** `Query`, `Exec`, `QueryFile` e `ExecFile`, com parâmetros e `fs.FS`/`embed.FS`.
 - **6. Implementar expressões:** tabelas, colunas, `As`, valores, operadores, agrupamentos e validações da AST.
@@ -39,4 +39,16 @@
 - **Situação:** passo 2 concluído em 30/10/2026, após autorização do utilizador.
 - **Resultado:** `go.mod` e `doc.go` criados; módulo `github.com/mineot/krios`, Go 1.26+, pacote público `krios` e importação atualizada no manual. Pacotes `internal/` serão definidos posteriormente; módulo de integração reservado ao passo 12.
 - **Validações realizadas:** `gofmt`, resolução do módulo/pacote, ausência de dependências externas, `go build ./...`, `go vet ./...` e `git diff --check`, com sucesso em Go 1.26.8. Nenhum teste criado ou executado.
-- **Próximos passos:** passos 3 a 16 não iniciados; aguardam planejamento e autorização próprios.
+- **Continuidade:** passo 3 registrado na seção seguinte; demais passos dependem de planejamento e autorização próprios.
+
+## Planejamento do passo 3
+
+- **Escopo:** configuração, conexão própria/externa, detecção automática de versão/capacidades, timeout e fechamento; detalhes em [003.md](003.md).
+- **Alterações previstas:** wrappers públicos, pacotes internos aprovados para conexão/dialeto/erros, documentação afetada e registros do plano.
+- **Validações:** formatação, compilação, análise estática, dependências, revisão de ciclo de vida e consistência documental. Testes reais de conexão e transações permanecem nas etapas correspondentes.
+- **Dúvidas pendentes:** nenhuma; decisões registradas em `003.md`.
+- **Situação:** passo 3 concluído em 30/10/2026, após aprovação das respostas e autorização explícita.
+- **Resultado:** configuração, wrappers de conexão, detecção de versão/capacidades, propriedade do pool, fechamento sincronizado e erros implementados nos pacotes aprovados; manual e definições atualizados.
+- **Validações realizadas:** formatação, listagem de pacotes/dependências, `go build ./...`, `go vet ./...`, revisão de código/documentação e `git diff --check`, com sucesso em Go 1.26.8.
+- **Limites:** sem testes ou conexão com bancos reais; contagem de transações será integrada no passo 4. Questões resolvidas, respostas registradas em `003.md` e `QUESTIONS.md` limpo.
+- **Próximos passos:** passos 4 a 16 não iniciados; dependem de planejamento e autorização próprios.

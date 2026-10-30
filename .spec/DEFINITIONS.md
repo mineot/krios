@@ -30,9 +30,11 @@ cfg := krios.Config{
 
 `Dialect` define a geração de SQL; `Driver` identifica o driver registrado em `database/sql`; `DSN` contém os parâmetros de conexão no formato aceito pelo driver. Para SQLite, o caminho do arquivo integra o DSN.
 
-A versão e as capacidades são detectadas automaticamente na inicialização, inclusive em `Wrap` e na conexão usada por migrações. Falha na detecção ou interpretação da versão retorna erro e impede o uso da instância; não há fallback silencioso. Os builders usam as capacidades identificadas ao validar `Build` e executar comandos. Versões abaixo dos mínimos não são suportadas.
+A versão e as capacidades são detectadas automaticamente na inicialização, inclusive em `Wrap` e na conexão usada por migrações. Falha na detecção ou interpretação da versão retorna `ErrVersionDetection`, preservando a causa, e impede o uso da instância; não há fallback silencioso. Os builders usam as capacidades identificadas ao validar `Build` e executar comandos. Versões abaixo dos mínimos retornam `ErrUnsupported`.
 
-`Timeout` limita a abertura/verificação da conexão: negativo retorna `ErrInvalidConfig`; zero mantém o prazo de `ctx`; positivo aplica `context.WithTimeout`, respeitando eventual prazo menor do contexto. O prazo de cada comando é definido pelo contexto da operação.
+`Timeout` limita a abertura/verificação da conexão: negativo retorna `ErrInvalidConfig`; zero mantém o prazo de `ctx`; positivo aplica `context.WithTimeout`, respeitando eventual prazo menor do contexto. Ping e detecção compartilham o mesmo prazo, sem reiniciá-lo entre operações. `sql.Open` não recebe contexto e não possui garantia de interrupção por esse prazo. O prazo de cada comando é definido pelo contexto da operação.
+
+Dialeto desconhecido, driver vazio, timeout negativo, contexto nulo e pool nulo em `Wrap` retornam `ErrInvalidConfig`. O DSN é repassado sem alteração, inclusive se vazio; sua interpretação cabe ao driver.
 
 Para migrações, a aplicação incorpora os arquivos em uma variável de pacote:
 
@@ -89,19 +91,19 @@ if err != nil {
 defer db.Close()
 ```
 
-`Open(ctx, cfg) (*DB, error)` valida a configuração, chama `sql.Open` e verifica a conexão com `PingContext`. Se a verificação falhar, fecha o pool criado.
+`Open(ctx, cfg) (*DB, error)` valida a configuração, chama `sql.Open` e verifica a conexão com `PingContext`. Depois do ping, detecta versão/capacidades. Se a inicialização falhar, fecha o pool criado e preserva a causa do erro.
 
 Também será permitido usar um pool existente:
 
 ```go
-db, err := krios.Wrap(existingSQLDB, krios.Postgres)
+db, err := krios.Wrap(ctx, existingSQLDB, krios.Postgres)
 if err != nil {
     return err
 }
 defer db.Close()
 ```
 
-`Wrap` recebe um `*sql.DB` e não assume sua propriedade. `Close` retorna erro informando a existência de transações ativas e não fecha nem invalida a instância nesse caso: todas devem terminar antes do fechamento. Essa regra vale tanto para `Open` quanto para `Wrap`. Quando não há transações ativas, o fechamento é idempotente e invalida a instância Krios; fecha o pool somente quando criado por `Open`. O utilizador continua responsável pelo pool fornecido a `Wrap`, inclusive por transações criadas diretamente nele, fora do controle do Krios.
+`Wrap(ctx, pool, dialect)` recebe um `*sql.DB` e não assume sua propriedade. Verifica conectividade e versão/capacidades usando o contexto fornecido, sem criar timeout adicional ou reconfigurar o pool. Em falha, não fecha o pool externo. `Close` retorna `ErrActiveTransactions` informando a existência de transações ativas e não fecha nem invalida a instância nesse caso: todas devem terminar antes do fechamento. Essa regra vale tanto para `Open` quanto para `Wrap`. Quando não há transações ativas, o fechamento é idempotente e invalida a instância Krios; fecha o pool somente quando criado por `Open`. O utilizador continua responsável pelo pool fornecido a `Wrap`, inclusive por transações criadas diretamente nele, fora do controle do Krios.
 
 `DB` pode ser compartilhado entre goroutines. Novas operações em uma instância fechada retornam `ErrClosed`.
 
@@ -482,7 +484,7 @@ Os métodos aceitam `args ...any`; valores são enviados separadamente do texto 
 
 ## Erros e validação
 
-- Erros sentinela: `ErrInvalidConfig`, `ErrInvalidQuery`, `ErrMissingWhere`, `ErrUnsupported`, `ErrClosed` e `ErrMigrationDirty`.
+- Erros sentinela: `ErrInvalidConfig`, `ErrInvalidQuery`, `ErrMissingWhere`, `ErrUnsupported`, `ErrClosed`, `ErrMigrationDirty`, `ErrActiveTransactions` e `ErrVersionDetection`.
 - Preservar causas com `%w` e permitir `errors.Is/As`, incluindo erros de contexto e `sql.ErrTxDone`.
 - Mensagens produzidas pela biblioteca e logs não devem incluir DSN nem valores de parâmetros; erros do driver preservados podem conter detalhes fornecidos pelo próprio driver.
 - Validar compilação por dialeto: placeholders, identificadores, argumentos, grupos, NULL, IN vazio e comparação entre colunas.
@@ -494,8 +496,9 @@ Os métodos aceitam `args ...any`; valores são enviados separadamente do texto 
 | Condição | Retorno / momento |
 | --- | --- |
 | Configuração inválida, incluindo timeout negativo | `ErrInvalidConfig` na inicialização. |
-| Detecção automática falha ou versão não pode ser interpretada | Erro na inicialização; nenhuma instância utilizável. |
-| Fechar instância com transações Krios ativas | Erro de `Close` informando as transações ativas; instância permanece aberta. |
+| Detecção automática falha ou versão não pode ser interpretada | `ErrVersionDetection`, preservando a causa; nenhuma instância utilizável. |
+| Versão inferior à mínima | `ErrUnsupported` na inicialização. |
+| Fechar instância com transações Krios ativas | `ErrActiveTransactions`; instância permanece aberta. |
 | Operação em `DB` fechado / execução em `Tx` encerrada | `ErrClosed` / `sql.ErrTxDone`. |
 | UPDATE/DELETE sem WHERE ou com condição constante verdadeira | `ErrMissingWhere` na validação do builder. |
 | Grupo/predicado vazio ou inválido, coluna vazia, quantidade de valores inválida | `ErrInvalidQuery` em `Build` ou antes da execução. |
@@ -554,7 +557,7 @@ type MigrationConfig struct {
 }
 
 func Open(ctx context.Context, cfg Config) (*DB, error)
-func Wrap(pool *sql.DB, dialect Dialect) (*DB, error)
+func Wrap(ctx context.Context, pool *sql.DB, dialect Dialect) (*DB, error)
 func (db *DB) Close() error
 func (db *DB) Begin(ctx context.Context, opts *sql.TxOptions) (*Tx, error)
 func (tx *Tx) Commit() error

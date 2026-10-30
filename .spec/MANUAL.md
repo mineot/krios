@@ -68,11 +68,16 @@ cfg := krios.Config{
 Arquivo e parâmetros de conexão: [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite#Driver.Open).
 
 ```go
-// Timeout limita a abertura/ping, não cada consulta.
+// Timeout compartilha um prazo entre ping e detecção, não cada consulta.
+// sql.Open não recebe contexto; não há garantia de interrompê-lo pelo timeout.
 // Timeout == 0: usar o prazo do contexto.
 // Timeout < 0: ErrInvalidConfig.
 // Dialect gera SQL; Driver seleciona o driver; DSN configura a conexão.
 // Open/Wrap detectam versão e capacidades; falha impede o uso da instância.
+// Wrap recebe ctx e respeita seu prazo, sem timeout adicional.
+// Versão abaixo do mínimo: ErrUnsupported.
+// Contexto/pool nulos, dialeto desconhecido ou driver vazio: ErrInvalidConfig.
+// DSN, inclusive vazio, é interpretado pelo driver.
 ```
 
 ## Migrações
@@ -231,7 +236,7 @@ if err := pool.PingContext(ctx); err != nil {
     return err
 }
 
-db, err := krios.Wrap(pool, cfg.Dialect)
+db, err := krios.Wrap(ctx, pool, cfg.Dialect)
 if err != nil {
     return err
 }
@@ -240,7 +245,7 @@ defer db.Close() // exige transações encerradas; não fecha pool
 
 ```go
 // Open e Wrap: encerrar todas as transações Krios antes de Close.
-// Se houver transação ativa, Close retorna erro e mantém a instância aberta.
+// Se houver transação ativa, Close retorna ErrActiveTransactions e mantém a instância aberta.
 if err := db.Close(); err != nil {
     return err
 }
@@ -857,7 +862,11 @@ case errors.Is(err, krios.ErrInvalidQuery):
 case errors.Is(err, krios.ErrMissingWhere):
     // UPDATE/DELETE sem restrição válida.
 case errors.Is(err, krios.ErrUnsupported):
-    // Recurso não suportado pelo banco/versão.
+    // Versão abaixo da mínima ou recurso não suportado.
+case errors.Is(err, krios.ErrVersionDetection):
+    // Não foi possível consultar ou interpretar a versão.
+case errors.Is(err, krios.ErrActiveTransactions):
+    // Encerrar todas as transações Krios antes de Close.
 case errors.Is(err, krios.ErrMigrationDirty):
     // Inspecionar e reparar migração antes de tentar novamente.
 case errors.Is(err, krios.ErrClosed):
