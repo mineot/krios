@@ -5,7 +5,7 @@
 - **1. Consolidar os contratos:** revisar assinaturas, retornos, erros e limites de suporte por banco/versão. Consolidação documental concluída em 30/10/2026; planejamento, decisões e respostas em [001.md](001.md).
 - **2. Estruturar o projeto:** definir módulo Go, organização dos pacotes e separação dos drivers usados nos testes de integração. Estrutura inicial concluída em 30/10/2026; decisões e validações em [002.md](002.md).
 - **3. Implementar conexão:** configuração, `Open`, `Wrap`, `Close`, propriedade do pool e timeout de abertura. Implementação concluída em 30/10/2026; decisões, resultados e limites da validação em [003.md](003.md).
-- **4. Implementar transações:** `Begin`, `Commit`, `Rollback`, contextos e ciclo de vida de `DB`/`Tx`.
+- **4. Implementar transações:** `Begin`, `Commit`, `Rollback`, contextos e ciclo de vida de `DB`/`Tx`. Planejamento em [004.md](004.md), aguardando decisões e autorização para implementar.
 - **5. Implementar SQL direto e arquivos:** `Query`, `Exec`, `QueryFile` e `ExecFile`, com parâmetros e `fs.FS`/`embed.FS`.
 - **6. Implementar expressões:** tabelas, colunas, `As`, valores, operadores, agrupamentos e validações da AST.
 - **7. Implementar dialetos e compilação:** placeholders, escape de identificadores, capacidades e `Build` nos três bancos.
@@ -52,3 +52,11 @@
 - **Validações realizadas:** formatação, listagem de pacotes/dependências, `go build ./...`, `go vet ./...`, revisão de código/documentação e `git diff --check`, com sucesso em Go 1.26.8.
 - **Limites:** sem testes ou conexão com bancos reais; contagem de transações será integrada no passo 4. Questões resolvidas, respostas registradas em `003.md` e `QUESTIONS.md` limpo.
 - **Próximos passos:** passos 4 a 16 não iniciados; dependem de planejamento e autorização próprios.
+
+## Planejamento do passo 4
+
+- **Escopo:** `DB.Begin`, `Tx.Commit`, `Tx.Rollback`, contexto e integração da contagem de transações com `DB.Close`; detalhes em [004.md](004.md).
+- **Alterações previstas:** wrappers públicos, pacote interno de transações e integração com conexão/contador, além das definições, manual e registros do plano.
+- **Validações:** formatação, compilação, análise estática, dependências e revisão dos caminhos de abertura, finalização e cancelamento. Testes de execução e concorrência permanecem nas etapas próprias.
+- **Dúvidas pendentes:** `004-Q01` a `004-Q05`, em [QUESTIONS.md](QUESTIONS.md).
+- **Situação:** planejamento apresentado para revisão; nenhum código de transação criado. Passos 5 a 16 não iniciados.
