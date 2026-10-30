@@ -4,7 +4,7 @@ API prevista em [DEFINITIONS.md](DEFINITIONS.md). Trechos independentes; imports
 
 ## Configurar o banco
 
-Escolha um driver e registre-o com import. Conexões abaixo são exemplos locais.
+PostgreSQL 16+, MySQL 8.0+ e SQLite 3.39+. Escolha um driver e registre-o com import. Conexões abaixo são exemplos locais.
 
 ### PostgreSQL
 
@@ -68,6 +68,7 @@ Arquivo e parâmetros de conexão: [modernc.org/sqlite](https://pkg.go.dev/moder
 // Timeout == 0: usar o prazo do contexto.
 // Timeout < 0: ErrInvalidConfig.
 // Dialect gera SQL; Driver seleciona o driver; DSN configura a conexão.
+// Open/Wrap detectam versão e capacidades; falha impede o uso da instância.
 ```
 
 ## Migrações
@@ -194,7 +195,9 @@ Migrate: abre pool → bloqueia concorrência → valida → migra → libera �
 Versões positivas e únicas; destino zero ou versão existente.
 Histórico: migrations(version, checksum, applied_at).
 Não editar arquivos já aplicados: checksum divergente bloqueia a execução.
-Atômico: falha desfaz todas as etapas da chamada.
+Atômico: utilizador garante compatibilidade das instruções com a transação.
+Erro do banco: tentar rollback e retornar o erro original, mesmo se rollback falhar.
+Instruções incompatíveis podem deixar efeitos; Krios não certifica SQL arbitrário.
 Não atômico: falha pode deixar mudanças; dirty bloqueia nova execução.
 Recuperação dirty: inspeção/reparo manual; sem repetição automática.
 ```
@@ -228,7 +231,15 @@ db, err := krios.Wrap(pool, cfg.Dialect)
 if err != nil {
     return err
 }
-defer db.Close() // invalida o wrapper; não fecha pool
+defer db.Close() // exige transações encerradas; não fecha pool
+```
+
+```go
+// Open e Wrap: encerrar todas as transações Krios antes de Close.
+// Se houver transação ativa, Close retorna erro e mantém a instância aberta.
+if err := db.Close(); err != nil {
+    return err
+}
 ```
 
 ## Transação e contexto
@@ -327,7 +338,11 @@ query = query.Where(krios.IsNull("deleted_at")) // AND com WHERE anterior
 all := tx.Select(krios.Table("users")).All() // SELECT *
 names := tx.Select(krios.Table("users")).
     Columns(krios.Column("name")).Distinct()
-// All/Columns substituem a projeção; adaptar Scan às colunas selecionadas.
+// All/Columns de SELECT substituem a projeção; adaptar Scan às colunas.
+// OrderBy/GroupBy acumulam na ordem das chamadas; Having acumula por AND.
+
+aliased := tx.Select(krios.Table("users")).
+    Columns(krios.Column("name").As("user_name"))
 
 // Referências de tabela, alternativas por banco:
 pgTable := krios.Table("users").As("u").InSchema("public")
@@ -368,13 +383,33 @@ predicates := []krios.Predicate{
     krios.Gte("created_at", time.Now().UTC().Add(-24*time.Hour)),
 }
 
-// Eq("deleted_at", nil) → IS NULL; Ne(..., nil) → IS NOT NULL.
+// Eq/Ne aceitam nil, ponteiros nulos e valores especiais NULL.
+// Eq mantém =; Ne mantém <>; NULL segue como parâmetro, sem reescrita.
+// Para testar nulidade, usar IsNull/IsNotNull.
+// In/NotIn aceitam NULL entre os itens, preservando a semântica SQL.
 // In("id") → falso; NotIn("id") → verdadeiro.
 // And(), Or(), Where() e On() vazios → erro.
 // Eq("name", "u.name") compara com texto, não com coluna.
 // Colunas: EqExpr(Column("u.id"), Column("o.user_id")).
 // Outras comparações: NeExpr, LtExpr, LteExpr, GtExpr, GteExpr.
 ```
+
+### Comparações com NULL
+
+Exemplo sem reescrita automática:
+
+```go
+nullQuery := tx.Select(krios.Table("users")).
+    Where(krios.Eq("deleted_at", nil))
+// Para localizar registros sem data de exclusão, usar IsNull("deleted_at").
+```
+
+```sql
+-- PostgreSQL: $1 recebe NULL; não é convertido para IS NULL.
+SELECT * FROM users WHERE deleted_at = $1;
+```
+
+Comparar com NULL pode não selecionar linhas, sem gerar erro. Isso também afeta `NOT IN` com itens NULL; Krios mantém a semântica do banco. Referência: [expressões e NULL no SQLite](https://www.sqlite.org/lang_expr.html).
 
 ### Paginação e contagem
 
@@ -529,6 +564,24 @@ fmt.Println(id)
 // PostgreSQL: usar Returning no lugar desta execução.
 ```
 
+### Várias linhas
+
+```go
+insert := tx.Insert(krios.Table("users")).
+    Columns("name").
+    Columns("active").
+    Values("John", true).
+    Values("Jane", false)
+if _, err := insert.Exec(ctx); err != nil {
+    return err
+}
+```
+
+```sql
+-- PostgreSQL: argumentos "John", true, "Jane", false.
+INSERT INTO users (name, active) VALUES ($1, $2), ($3, $4);
+```
+
 ### Returning
 
 Uma execução alternativa ao INSERT anterior; depende do banco/versão.
@@ -548,6 +601,7 @@ if err != nil {
 }
 fmt.Println(inserted)
 
+// Returning acumula colunas na ordem das chamadas.
 // Returning + Exec → ErrInvalidQuery.
 // Query sem Returning, em builder de escrita → ErrInvalidQuery.
 // Returning sem suporte → ErrUnsupported.
@@ -572,6 +626,7 @@ fmt.Println(affected)
 
 // Para retornar linhas: Returning("id", "name").Query(ctx).
 // UPDATE não possui "último ID alterado".
+// Set repetido na mesma coluna substitui o valor anterior.
 ```
 
 ## Delete
@@ -591,7 +646,10 @@ fmt.Println(affected)
 
 // Resultado dispensável: _, err := deletion.Exec(ctx).
 // Returning também depende do suporte do banco/versão.
-// UPDATE/DELETE sem WHERE, vazio ou sempre verdadeiro → ErrMissingWhere.
+// UPDATE/DELETE sem WHERE → ErrMissingWhere.
+// Where(And()) e predicados inválidos → ErrInvalidQuery.
+// Se ambos ocorrerem, prevalece ErrMissingWhere.
+// Condições constantes verdadeiras continuam rejeitadas.
 ```
 
 ## SQL direto

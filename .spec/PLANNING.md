@@ -2,7 +2,7 @@
 
 - **Base do plano:** seguir [DEFINITIONS.md](DEFINITIONS.md) e [MANUAL.md](MANUAL.md); detalhar as etapas após as considerações sobre este esboço.
 - **Execução:** plano ainda não finalizado. Planejar cada passo antes de implementar, registrar dúvidas em [QUESTIONS.md](QUESTIONS.md) e aguardar respostas e autorização explícita do utilizador, conforme [AGENTS.md](../AGENTS.md). Nenhum passo está autorizado por este esboço.
-- **1. Consolidar os contratos:** revisar assinaturas, retornos, erros e limites de suporte por banco/versão. Planejamento e decisões em [001.md](001.md); aguardando complementos às respostas e autorização para retomar.
+- **1. Consolidar os contratos:** revisar assinaturas, retornos, erros e limites de suporte por banco/versão. Consolidação documental concluída em 30/10/2026; planejamento, decisões e respostas em [001.md](001.md).
 - **2. Estruturar o projeto:** definir módulo Go, organização dos pacotes e separação dos drivers usados nos testes de integração.
 - **3. Implementar conexão:** configuração, `Open`, `Wrap`, `Close`, propriedade do pool e timeout de abertura.
 - **4. Implementar transações:** `Begin`, `Commit`, `Rollback`, contextos e ciclo de vida de `DB`/`Tx`.
@@ -24,5 +24,8 @@
 - **Escopo:** consolidar documentalmente API pública, regras, resultados, erros e compatibilidade; detalhes em [001.md](001.md).
 - **Alterações previstas:** consolidar `DEFINITIONS.md`, ajustar exemplos afetados em `MANUAL.md` e manter os registros em `001.md`, `QUESTIONS.md` e neste plano, após autorização.
 - **Validações:** consistência de assinaturas e exemplos, regras de ciclo de vida, mapeamento de erros e matriz de suporte aprovada; sem implementação ou testes de código nesta etapa.
-- **Dúvidas pendentes:** `001-Q08` a `001-Q10`, complementando as respostas de `001-Q02`, `001-Q04` e `001-Q07`, em [QUESTIONS.md](QUESTIONS.md).
-- **Situação:** respostas revisadas em 30/10/2026 e decisões registradas em `001.md`. Autorização para continuar condicionada à resolução das dúvidas; consolidação aguarda os complementos e autorização para retomar. Demais passos não iniciados.
+- **Dúvidas pendentes:** nenhuma; respostas de `001-Q01` a `001-Q10` registradas em `001.md` e `QUESTIONS.md` limpo.
+- **Situação:** passo 1 concluído documentalmente em 30/10/2026, sob a autorização do utilizador para continuar quando as dúvidas fossem resolvidas.
+- **Resultado:** definições e manual alinhados às respostas; catálogo de contratos, regras de erro e matriz de compatibilidade registrados.
+- **Validações realizadas:** revisão documental, referências oficiais, links locais, blocos Markdown e verificação de diferenças. Nenhuma implementação ou suíte de testes executada.
+- **Próximos passos:** não iniciados; dependem de planejamento e autorização próprios.

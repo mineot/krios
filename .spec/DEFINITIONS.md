@@ -5,7 +5,7 @@ Vamos criar uma biblioteca Go para manipulação de bancos de dados SQL, chamada
 ## Requisitos
 
 - Usar `database/sql` e a biblioteca padrão do Go; o utilizador instala e registra o driver.
-- Suportar inicialmente MySQL, PostgreSQL e SQLite, respeitando as capacidades de cada banco e versão.
+- Suportar PostgreSQL 16+, MySQL 8.0+ e SQLite 3.39+, detectando automaticamente as capacidades do banco conectado.
 - Trabalhar com instâncias `DB` e `Tx`, sem conexão, configuração ou transação global.
 - Executar SELECT, INSERT, UPDATE, DELETE e SQL direto por uma transação explícita, com `context.Context`.
 - Disponibilizar builders imutáveis: cada método retorna uma nova versão, que deve ser reatribuída ou encadeada.
@@ -29,6 +29,8 @@ cfg := krios.Config{
 ```
 
 `Dialect` define a geração de SQL; `Driver` identifica o driver registrado em `database/sql`; `DSN` contém os parâmetros de conexão no formato aceito pelo driver. Para SQLite, o caminho do arquivo integra o DSN.
+
+A versão e as capacidades são detectadas automaticamente na inicialização, inclusive em `Wrap` e na conexão usada por migrações. Falha na detecção ou interpretação da versão retorna erro e impede o uso da instância; não há fallback silencioso. Os builders usam as capacidades identificadas ao validar `Build` e executar comandos. Versões abaixo dos mínimos não são suportadas.
 
 `Timeout` limita a abertura/verificação da conexão: negativo retorna `ErrInvalidConfig`; zero mantém o prazo de `ctx`; positivo aplica `context.WithTimeout`, respeitando eventual prazo menor do contexto. O prazo de cada comando é definido pelo contexto da operação.
 
@@ -73,7 +75,7 @@ A tabela `migrations` registra `version` (chave primária), `checksum` e `applie
 
 `Migrate` abre seu próprio pool, adquire exclusividade, valida o histórico, executa as etapas, libera a exclusividade e fecha o pool, inclusive em caso de erro. O bloqueio cobre toda a operação: lock de sessão PostgreSQL/MySQL em conexão fixada com `sql.Conn`; transação de escrita no SQLite.
 
-No modo atômico, todas as etapas e alterações de histórico usam a mesma transação; falha exige rollback. Comandos incompatíveis com essa garantia devem ser rejeitados. DDL com commit implícito, como no MySQL, exige o modo não atômico; a biblioteca não promete rollback integral nesses casos.
+No modo atômico, Krios executa as etapas e o histórico na mesma transação. O utilizador é responsável por garantir que as instruções sejam compatíveis com essa atomicidade; Krios não analisa SQL arbitrário para certificar essa garantia. Se o banco retornar erro, Krios tenta rollback e retorna o erro original, independentemente do resultado do rollback. Não há garantia de desfazer efeitos de instruções incompatíveis ou com commit implícito. Para scripts deliberadamente não atômicos, o utilizador deve selecionar `AllowNonAtomic: true`.
 
 O modo não atômico exige `AllowNonAtomic: true`. Antes de cada etapa, persiste em `migration_state` a versão, direção, índice e indicador `dirty`. O estado só é limpo após confirmação da execução e atualização do histórico. Estado `dirty` bloqueia novas migrações até recuperação manual; instruções com resultado incerto não são repetidas automaticamente.
 
@@ -99,7 +101,7 @@ if err != nil {
 defer db.Close()
 ```
 
-`Wrap` recebe um `*sql.DB` e não assume sua propriedade. `Close` é idempotente e invalida a instância Krios; fecha o pool somente quando criado por `Open`. O utilizador continua responsável por fechar um pool fornecido a `Wrap`.
+`Wrap` recebe um `*sql.DB` e não assume sua propriedade. `Close` retorna erro informando a existência de transações ativas e não fecha nem invalida a instância nesse caso: todas devem terminar antes do fechamento. Essa regra vale tanto para `Open` quanto para `Wrap`. Quando não há transações ativas, o fechamento é idempotente e invalida a instância Krios; fecha o pool somente quando criado por `Open`. O utilizador continua responsável pelo pool fornecido a `Wrap`, inclusive por transações criadas diretamente nele, fora do controle do Krios.
 
 `DB` pode ser compartilhado entre goroutines. Novas operações em uma instância fechada retornam `ErrClosed`.
 
@@ -180,8 +182,9 @@ predicates := []krios.Predicate{
 
 - Comparações recebem valores `any` compatíveis com `database/sql`, incluindo números, strings, `time.Time`, `[]byte`, `sql.Null*` e `driver.Valuer`.
 - Valores seguem para o driver como parâmetros, sem interpolação ou conversão textual de datas.
-- `Eq("col", nil)` gera `IS NULL`; `Ne("col", nil)` gera `IS NOT NULL`. Demais operadores de comparação rejeitam argumento literal `nil`.
-- `In("col")` representa falso; `NotIn("col")` representa verdadeiro.
+- Valores nulos são aceitos e enviados ao banco como NULL, inclusive `nil`, ponteiros nulos, `sql.Null*` inválidos e valores NULL produzidos por `driver.Valuer`. Krios não converte comparações para `IS NULL`/`IS NOT NULL`: `Eq` usa `=` e `Ne` usa `<>`, com o valor parametrizado. Para testar nulidade, o utilizador deve escolher `IsNull`/`IsNotNull`.
+- Krios não corrige a semântica SQL escolhida pelo utilizador. Erros de conversão do driver ou de execução do banco são retornados; uma comparação com NULL pode não corresponder a linhas, sem produzir erro.
+- `In("col")` representa falso; `NotIn("col")` representa verdadeiro. Listas não vazias aceitam itens NULL e preservam a semântica SQL de IN/NOT IN, sem reescrita para testes de nulidade.
 - `Between` e `NotBetween` recebem exatamente dois limites; `Like` e `NotLike` recebem padrão textual.
 - Comparar coluna com coluna exige expressões explícitas; uma string passada a `Eq` sempre é valor.
 
@@ -227,7 +230,7 @@ condition := krios.And(
 - `krios.Min("col")`
 - `krios.Max("col")`
 
-Expressões de seleção aceitam `.As("alias")`. Filtros sobre agregações usam `Having`, com as mesmas regras de agrupamento de WHERE.
+Expressões de seleção, incluindo `Column("name").As("user_name")`, aceitam `.As("alias")`. Filtros sobre agregações usam `Having`, com as mesmas regras de agrupamento de WHERE.
 
 ## Select
 
@@ -258,7 +261,7 @@ query = query.Where(
 )
 ```
 
-`All` e `Columns` substituem a projeção anterior. `Schema` representa schema no PostgreSQL, database no MySQL e banco anexado no SQLite. Identificadores qualificados são escapados por componente; `*` é aceito somente nas posições apropriadas.
+`All` e `Columns` de SELECT substituem a projeção anterior. `OrderBy` e `GroupBy` acumulam itens, respeitando a ordem das chamadas; `Having` acumula por AND. `Returning`, nos builders de escrita, também acumula colunas na ordem informada. `Schema` representa schema no PostgreSQL, database no MySQL e banco anexado no SQLite. Identificadores qualificados são escapados por componente; `*` é aceito somente nas posições apropriadas.
 
 JOINs usam `TableRef` e `On`, que segue as regras de predicados de WHERE:
 
@@ -352,7 +355,7 @@ if err != nil {
 }
 ```
 
-Schema é opcional, como em SELECT. A quantidade de valores deve corresponder às colunas informadas; configuração inválida retorna `ErrInvalidQuery` antes da execução.
+Schema é opcional, como em SELECT. `Columns` acumula colunas na ordem das chamadas. Cada `Values` acrescenta uma linha; todas as linhas devem ter a quantidade de valores correspondente ao total de colunas. Configuração inválida retorna `ErrInvalidQuery` antes da execução.
 
 ### Resultado
 
@@ -385,7 +388,7 @@ if err != nil {
 }
 ```
 
-É obrigatório informar ao menos uma atribuição e um WHERE válido. WHERE ausente, vazio ou constante verdadeiro retorna `ErrMissingWhere`.
+É obrigatório informar ao menos uma atribuição e um WHERE válido. `Set` repetido para a mesma coluna substitui o valor anterior. WHERE ausente retorna `ErrMissingWhere`; grupos vazios, como `Where(And())`, e predicados inválidos retornam `ErrInvalidQuery`. A proteção contra condição constante verdadeira permanece. Se ocorrerem simultaneamente condições de `ErrMissingWhere` e `ErrInvalidQuery`, prevalece `ErrMissingWhere`.
 
 ### Resultado
 
@@ -485,3 +488,125 @@ Os métodos aceitam `args ...any`; valores são enviados separadamente do texto 
 - Validar compilação por dialeto: placeholders, identificadores, argumentos, grupos, NULL, IN vazio e comparação entre colunas.
 - Validar integração nos três bancos: commit/rollback, cancelamento, paginação, retornos, concorrência e falhas de migração.
 - Manter drivers nos testes de integração e executar `go test -race`.
+
+### Momento e prioridade dos erros
+
+| Condição | Retorno / momento |
+| --- | --- |
+| Configuração inválida, incluindo timeout negativo | `ErrInvalidConfig` na inicialização. |
+| Detecção automática falha ou versão não pode ser interpretada | Erro na inicialização; nenhuma instância utilizável. |
+| Fechar instância com transações Krios ativas | Erro de `Close` informando as transações ativas; instância permanece aberta. |
+| Operação em `DB` fechado / execução em `Tx` encerrada | `ErrClosed` / `sql.ErrTxDone`. |
+| UPDATE/DELETE sem WHERE ou com condição constante verdadeira | `ErrMissingWhere` na validação do builder. |
+| Grupo/predicado vazio ou inválido, coluna vazia, quantidade de valores inválida | `ErrInvalidQuery` em `Build` ou antes da execução. |
+| `ErrMissingWhere` e `ErrInvalidQuery` simultâneos | Prevalece `ErrMissingWhere`. |
+| Recurso de builder sem suporte | `ErrUnsupported` em `Build` ou antes da execução. |
+| Escrita com `Returning` executada por `Exec`, ou `Query` sem `Returning` | `ErrInvalidQuery` antes da execução. |
+| Falha de consulta em `First/Last`, incluindo ausência de registro | Erro em `Scan`; ausência retorna `sql.ErrNoRows`. |
+| Falha durante iteração de `Rows` | Erro em `Scan` ou `Rows.Err`; o utilizador fecha as linhas. |
+| Falha do driver/banco ou cancelamento | Preservar a causa; não corrigir o SQL escolhido pelo utilizador. |
+| Migração não atômica com estado `dirty` | `ErrMigrationDirty`; requer recuperação manual. |
+
+## Compatibilidade por banco
+
+Mínimos escolhidos pelo utilizador: PostgreSQL 16, MySQL 8.0 e SQLite 3.39. A matriz descreve esses mínimos; a detecção automática deve considerar os recursos da versão efetivamente conectada, sem presumir recursos futuros.
+
+| Recurso | PostgreSQL 16 | MySQL 8.0 | SQLite 3.39 |
+| --- | --- | --- | --- |
+| INNER / LEFT / RIGHT JOIN | Sim | Sim | Sim |
+| FULL JOIN | Sim | Não nativo | Sim |
+| `NULLS FIRST/LAST` explícito | Sim | Não nativo | Sim |
+| INSERT/UPDATE/DELETE com `RETURNING` | Sim | Não nativo | Sim, com restrições do SQLite |
+| Qualificação de tabela | Schema | Database | Banco principal/anexado |
+| Placeholders dos builders | `$1`, `$2`, ... | `?` | `?` |
+
+JOINs e ordenação: [PostgreSQL SELECT](https://www.postgresql.org/docs/16/sql-select.html), [MySQL JOIN](https://dev.mysql.com/doc/refman/8.0/en/join.html), [MySQL SELECT](https://dev.mysql.com/doc/refman/8.0/en/select.html), [SQLite 3.39](https://www.sqlite.org/releaselog/3_39_0.html) e [SQLite SELECT](https://www.sqlite.org/lang_select.html).
+
+Retorno de escritas: [PostgreSQL INSERT](https://www.postgresql.org/docs/16/sql-insert.html), [UPDATE](https://www.postgresql.org/docs/16/sql-update.html) e [DELETE](https://www.postgresql.org/docs/16/sql-delete.html); sintaxes MySQL [INSERT](https://dev.mysql.com/doc/refman/8.0/en/insert.html), [UPDATE](https://dev.mysql.com/doc/refman/8.0/en/update.html) e [DELETE](https://dev.mysql.com/doc/refman/8.0/en/delete.html); [SQLite RETURNING](https://www.sqlite.org/lang_returning.html). No SQLite, UPDATE/DELETE de tabelas virtuais não suportam RETURNING; a ordem das linhas retornadas não é garantida. Limitações dependentes do objeto podem ser informadas pelo banco na execução.
+
+`Last` inverte a ordenação sem emular recursos indisponíveis. No MySQL, inverter ASC/DESC também inverte a posição padrão dos NULLs; solicitar `NullsFirst/NullsLast` explicitamente não ganha emulação automática.
+
+Atomicidade não é uma capacidade universal de qualquer script: depende das instruções e do banco. DDL MySQL pode realizar commit implícito; SQLite permite transações explícitas, com as restrições documentadas. O utilizador deve escolher scripts compatíveis com o modo selecionado. Fontes: [MySQL commits implícitos](https://dev.mysql.com/doc/refman/8.0/en/implicit-commit.html) e [SQLite transações](https://www.sqlite.org/lang_transaction.html).
+
+## Catálogo dos contratos públicos
+
+Assinaturas documentais; não representam implementação. Os nomes `DB`, `Tx` e builders referem-se às instâncias descritas neste documento. A representação interna dos tipos pertence à implementação das etapas seguintes.
+
+```go
+type Dialect string // Postgres = "pg"; MySQL = "mysql"; SQLite = "sqlite"
+type Config struct {
+    Dialect Dialect
+    Driver  string
+    DSN     string
+    Timeout time.Duration
+}
+type Page struct { Offset, Limit, Total int64 }
+type Migration struct {
+    Version int64
+    Up      []string
+    Down    []string
+}
+type MigrationConfig struct {
+    TargetVersion  int64
+    Files          fs.FS
+    Migrations     []Migration
+    AllowNonAtomic bool
+}
+
+func Open(ctx context.Context, cfg Config) (*DB, error)
+func Wrap(pool *sql.DB, dialect Dialect) (*DB, error)
+func (db *DB) Close() error
+func (db *DB) Begin(ctx context.Context, opts *sql.TxOptions) (*Tx, error)
+func (tx *Tx) Commit() error
+func (tx *Tx) Rollback() error
+func Migrate(ctx context.Context, cfg Config, migrations MigrationConfig) error
+
+func (tx *Tx) Query(ctx context.Context, sqlText string, args ...any) (*sql.Rows, error)
+func (tx *Tx) Exec(ctx context.Context, sqlText string, args ...any) (sql.Result, error)
+func (tx *Tx) QueryFile(ctx context.Context, files fs.FS, path string, args ...any) (*sql.Rows, error)
+func (tx *Tx) ExecFile(ctx context.Context, files fs.FS, path string, args ...any) (sql.Result, error)
+
+func (tx *Tx) Select(table TableRef) SelectBuilder
+func (tx *Tx) Insert(table TableRef) InsertBuilder
+func (tx *Tx) Update(table TableRef) UpdateBuilder
+func (tx *Tx) Delete(table TableRef) DeleteBuilder
+
+func (q SelectBuilder) Build() (string, []any, error)
+func (q SelectBuilder) Exec(ctx context.Context) (*sql.Rows, error)
+func (q SelectBuilder) ExecPage(ctx context.Context) (*sql.Rows, Page, error)
+func (q SelectBuilder) Count(ctx context.Context) (int64, error)
+func (q SelectBuilder) First(ctx context.Context) (*sql.Row, error)
+func (q SelectBuilder) Last(ctx context.Context) (*sql.Row, error)
+```
+
+Cada builder de escrita oferece `Build() (string, []any, error)`, `Exec(ctx context.Context) (sql.Result, error)` e `Query(ctx context.Context) (*sql.Rows, error)`. Todos os modificadores retornam o mesmo tipo de builder, com estado independente.
+
+| Construção / modificador | Argumentos | Retorno e composição |
+| --- | --- | --- |
+| `Table` | Nome `string` | `TableRef`; aceita `As(alias string)` e `InSchema(schema string)`, retornando `TableRef`. |
+| `Column` | Nome `string` | Expressão `Expr` com `As(alias string)`, retornando expressão com alias. |
+| `Count`, `Avg`, `Sum`, `Min`, `Max` | Coluna `string`; `Count` também aceita `"*"` | Expressão de agregação com `As(alias string)`. |
+| `Value` | `any` | Expressão de parâmetro. |
+| `Eq`, `Ne`, `Lt`, `Lte`, `Gt`, `Gte` | Coluna `string`, valor `any` | `Predicate`. |
+| Variantes `EqExpr`, `NeExpr`, `LtExpr`, `LteExpr`, `GtExpr`, `GteExpr` | Duas expressões `Expr` | `Predicate`. |
+| `In`, `NotIn` | Coluna `string`, valores `...any` | `Predicate`. |
+| `Like`, `NotLike` | Coluna e padrão `string` | `Predicate`. |
+| `Between`, `NotBetween` | Coluna `string`, dois limites `any` | `Predicate`. |
+| `IsNull`, `IsNotNull` | Coluna `string` | `Predicate`. |
+| `Exists`, `NotExists` | `SelectBuilder` | `Predicate` de subconsulta. |
+| `And`, `Or`, `Where`, `On` | `...Predicate` | `Predicate` agrupado; WHERE/ON usam AND. |
+| `Asc`, `Desc` | Coluna `string` | Termo de ordenação; `NullsFirst()` e `NullsLast()` retornam o termo configurado. |
+| SELECT `Distinct`, `All` | Sem argumentos | `SelectBuilder`. |
+| SELECT `Columns` | `...Expr` | `SelectBuilder`; substitui projeção. |
+| SELECT `Where`, `Having` | `...Predicate` | `SelectBuilder`; acumula por AND. |
+| SELECT `OrderBy` | Termos retornados por `Asc/Desc`, variádicos | `SelectBuilder`; acumula em ordem. |
+| SELECT `GroupBy` | Colunas `...string` | `SelectBuilder`; acumula em ordem. |
+| SELECT `Paginate` | Offset e limite `int64` | `SelectBuilder` com paginação. |
+| SELECT `Join`, `InnerJoin`, `LeftJoin`, `RightJoin`, `FullJoin` | `TableRef`, condição `Predicate` produzida por `On` | `SelectBuilder` com JOIN. |
+| INSERT `Columns` | `...string` | `InsertBuilder`; acumula em ordem. |
+| INSERT `Values` | `...any` | `InsertBuilder`; acrescenta uma linha. |
+| UPDATE `Set` | Coluna `string`, valor `any` | `UpdateBuilder`; substitui valor da mesma coluna. |
+| UPDATE/DELETE `Where` | `...Predicate` | Respectivo builder; acumula por AND. |
+| INSERT/UPDATE/DELETE `Returning` | Colunas `...string` | Respectivo builder; acumula em ordem. |
+
+O catálogo descreve os tipos de entrada e composição sem impor nomes novos aos tipos concretos de expressão/ordenação. `Column(...).As(...)` deve continuar aceito por `Columns`, mantendo o contrato de expressão.
