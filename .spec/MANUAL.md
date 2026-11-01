@@ -246,6 +246,7 @@ defer db.Close() // exige transações encerradas; não fecha pool
 ```go
 // Open e Wrap: encerrar todas as transações Krios antes de Close.
 // Se houver transação ativa, Close retorna ErrActiveTransactions e mantém a instância aberta.
+// Uma chamada Begin aguardando pool/driver também impede Close.
 if err := db.Close(); err != nil {
     return err
 }
@@ -253,7 +254,52 @@ if err := db.Close(); err != nil {
 
 ## Transação e contexto
 
-Todos os builders e comandos usam `tx`.
+Exemplo disponível no passo 4, sem comandos SQL:
+
+```go
+func emptyTransaction(ctx context.Context, db *krios.DB) error {
+    tx, err := db.Begin(ctx, nil)
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback() // após Commit, retorna sql.ErrTxDone
+    return tx.Commit() // para desfazer explicitamente: return tx.Rollback()
+}
+```
+
+```go
+// Begin: opções repassadas ao database/sql; nil usa os padrões do driver.
+// Contexto nulo → ErrInvalidConfig, antes de validar o banco.
+// Banco nulo/não inicializado/fechado → ErrClosed.
+// Tx nula/não inicializada/encerrada → sql.ErrTxDone.
+// Falha de Commit → tenta Rollback; retorna a causa original com %w.
+// A limpeza pode retornar ErrTxDone se database/sql já finalizou a transação.
+// Finalização, inclusive com erro, libera o registro uma única vez.
+// Config.Timeout cobre a inicialização do banco, não a transação.
+```
+
+Cancelamento:
+
+```go
+func cancelTransaction(ctx context.Context, db *krios.DB) error {
+    txCtx, cancel := context.WithCancel(ctx)
+    defer cancel()
+    tx, err := db.Begin(txCtx, nil)
+    if err != nil {
+        return err
+    }
+    cancel() // Krios trata rollback e libera o registro automaticamente.
+    // Rollback explícito também trata a finalização sem esperar pelo callback.
+    if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+        return err
+    }
+    return nil
+}
+// Sem Rollback explícito, Close pode retornar ErrActiveTransactions
+// até Krios tratar o cancelamento. ErrTxDone não garante limpeza concluída no driver.
+```
+
+Todos os builders e comandos usam `tx`; serão implementados nos passos posteriores:
 
 ```go
 func createUser(ctx context.Context, db *krios.DB) error {

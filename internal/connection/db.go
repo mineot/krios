@@ -16,7 +16,7 @@ type DB struct {
 	info               dialect.Info
 	owned              bool
 	closed             bool
-	activeTransactions int // Integrated with transaction lifecycle in step 4.
+	activeTransactions int // Includes pending BeginTx calls until failure or finalization.
 }
 
 func initialize(ctx context.Context, pool *sql.DB, kind dialect.Dialect, owned bool) (*DB, error) {

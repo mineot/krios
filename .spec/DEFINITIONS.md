@@ -107,9 +107,13 @@ defer db.Close()
 
 `DB` pode ser compartilhado entre goroutines. Novas operações em uma instância fechada retornam `ErrClosed`.
 
+`Begin` reserva o registro antes de aguardar o pool/driver; durante essa abertura, `Close` também retorna `ErrActiveTransactions`. Falha na abertura libera a reserva. Transações encerradas liberam seu registro uma única vez.
+
 ## Contexto
 
 O contexto controla cancelamento e prazos; a transação controla atomicidade. `Begin(ctx, opts) (*Tx, error)` recebe `*sql.TxOptions`; `nil` utiliza as opções padrão de `database/sql`.
+
+As opções são encaminhadas sem alteração ao `BeginTx`. Contexto nulo retorna `ErrInvalidConfig`, antes de validar o banco; banco nulo, não inicializado ou fechado retorna `ErrClosed`. `Commit/Rollback` em `Tx` nula ou não inicializada retorna `sql.ErrTxDone`.
 
 ```go
 tx, err := db.Begin(ctx, nil)
@@ -139,7 +143,11 @@ return tx.Commit()
 
 O contexto de `Begin` define a vida da transação. Cada execução recebe um contexto para cancelamento/prazo local. A API inicial não permite uso concorrente de uma mesma `Tx`.
 
+`Config.Timeout` não se aplica à transação. Cancelamento do contexto de `Begin` aciona o encerramento e a liberação automática do registro, mesmo sem chamada posterior a `Commit/Rollback`. Esse tratamento é assíncrono: `Close` ainda pode retornar `ErrActiveTransactions` enquanto Krios trata a finalização. Se `database/sql` já iniciou o rollback, Krios aceita `sql.ErrTxDone` como estado terminal; isso não garante que a limpeza interna do driver já terminou.
+
 Após falha, o chamador deve abandonar a unidade de trabalho e executar rollback. Após `Commit` ou `Rollback`, novas execuções retornam `sql.ErrTxDone`; o erro do rollback adiado após commit é esperado.
+
+Falha de `Commit` provoca tentativa de rollback de limpeza; retorna o erro original do commit, encapsulado com `%w`, independentemente do resultado da limpeza. `database/sql` pode já ter encerrado a transação, impedindo outro rollback no driver. Falha de `Rollback` também preserva sua causa. Após tratar qualquer finalização, Krios encerra o wrapper e libera seu registro; chamadas posteriores retornam `sql.ErrTxDone`. Não há repetição de commit. No cancelamento, o erro nativo observado pode ser de contexto ou `sql.ErrTxDone`.
 
 Builders pertencem à transação que os criou. Seus métodos copiam as estruturas internas modificadas, preservando versões anteriores. Todos oferecem `Build() (string, []any, error)` para gerar SQL e argumentos sem executar.
 
@@ -498,7 +506,10 @@ Os métodos aceitam `args ...any`; valores são enviados separadamente do texto 
 | Configuração inválida, incluindo timeout negativo | `ErrInvalidConfig` na inicialização. |
 | Detecção automática falha ou versão não pode ser interpretada | `ErrVersionDetection`, preservando a causa; nenhuma instância utilizável. |
 | Versão inferior à mínima | `ErrUnsupported` na inicialização. |
-| Fechar instância com transações Krios ativas | `ErrActiveTransactions`; instância permanece aberta. |
+| Contexto nulo em `Begin` | `ErrInvalidConfig`, antes da validação do banco. |
+| `Begin` em banco nulo/não inicializado/fechado | `ErrClosed`. |
+| `Commit/Rollback` em transação nula/não inicializada | `sql.ErrTxDone`. |
+| Fechar instância com transações Krios ativas ou aberturas pendentes | `ErrActiveTransactions`; instância permanece aberta. |
 | Operação em `DB` fechado / execução em `Tx` encerrada | `ErrClosed` / `sql.ErrTxDone`. |
 | UPDATE/DELETE sem WHERE ou com condição constante verdadeira | `ErrMissingWhere` na validação do builder. |
 | Grupo/predicado vazio ou inválido, coluna vazia, quantidade de valores inválida | `ErrInvalidQuery` em `Build` ou antes da execução. |
