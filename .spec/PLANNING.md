@@ -13,11 +13,12 @@
 - **9. Implementar SELECT avançado:** JOINs, subconsultas, `Exists`, agregações, `GroupBy`, `Having`, paginação, contagem, `First` e `Last`.
 - **10. Implementar escritas:** INSERT, UPDATE, DELETE, proteção de WHERE, `sql.Result` e `Returning` conforme suporte.
 - **11. Implementar migrações:** manifesto, arquivos, versões, checksums, histórico, Up/Down, exclusividade, modo atômico e controle de estado `dirty` no modo não atômico.
-- **12. Validar a integração:** testar cada etapa e consolidar cenários nos três bancos, incluindo cancelamento, rollback, concorrência, falhas e `go test -race`.
-- **13. Consolidar a documentação:** conferir os exemplos contra a implementação, atualizar o manual e registrar compatibilidade e limitações; README reservado ao passo específico.
-- **14. Criar testes unitários:** passo exclusivo para planejar e criar a suíte unitária, incluindo configuração, expressões, compilação SQL, builders, validações e regras de migração.
-- **15. Documentar o README:** aguardar a definição do conteúdo pelo utilizador nesse passo. Ignorar o arquivo e seu conteúdo por enquanto.
-- **16. Preparar a distribuição pelo GitHub:** planejar com o utilizador o módulo Go, repositório, licença, versionamento e preparação da biblioteca para consumo externo. Publicação, tags e releases dependem de autorização explícita.
+- **12. Reorganizar os arquivos da raiz:** aguardar as orientações do utilizador no momento de executar este passo. A estrutura e as alterações serão definidas e planejadas nessa etapa, antes da implementação.
+- **13. Validar a integração:** testar cada etapa e consolidar cenários nos três bancos, incluindo cancelamento, rollback, concorrência, falhas e `go test -race`.
+- **14. Consolidar a documentação:** conferir os exemplos contra a implementação, atualizar o manual e registrar compatibilidade e limitações; README reservado ao passo específico.
+- **15. Criar testes unitários:** passo exclusivo para planejar e criar a suíte unitária, incluindo configuração, expressões, compilação SQL, builders, validações e regras de migração.
+- **16. Documentar o README:** aguardar a definição do conteúdo pelo utilizador nesse passo. Ignorar o arquivo e seu conteúdo por enquanto.
+- **17. Preparar a distribuição pelo GitHub:** planejar com o utilizador o módulo Go, repositório, licença, versionamento e preparação da biblioteca para consumo externo. Publicação, tags e releases dependem de autorização explícita.
 
 ## Planejamento do passo 1
 
@@ -37,7 +38,7 @@
 - **Validações:** formatação Go, identificação do módulo/pacote, compilação, análise estática, dependências e diferenças de texto; sem criação de testes.
 - **Dúvidas pendentes:** nenhuma; respostas registradas em `002.md`.
 - **Situação:** passo 2 concluído em 30/10/2026, após autorização do utilizador.
-- **Resultado:** `go.mod` e `doc.go` criados; módulo `github.com/mineot/krios`, Go 1.26+, pacote público `krios` e importação atualizada no manual. Pacotes `internal/` serão definidos posteriormente; módulo de integração reservado ao passo 12.
+- **Resultado:** `go.mod` e `doc.go` criados; módulo `github.com/mineot/krios`, Go 1.26+, pacote público `krios` e importação atualizada no manual. Pacotes `internal/` serão definidos posteriormente; módulo de integração reservado ao passo 13.
 - **Validações realizadas:** `gofmt`, resolução do módulo/pacote, ausência de dependências externas, `go build ./...`, `go vet ./...` e `git diff --check`, com sucesso em Go 1.26.8. Nenhum teste criado ou executado.
 - **Continuidade:** passo 3 registrado na seção seguinte; demais passos dependem de planejamento e autorização próprios.
 
@@ -88,5 +89,5 @@
 - **Resultado:** tipos opacos, wrappers, construtores/modificadores imutáveis, validação interna e análise de constantes implementados; definições e manual atualizados. Sem compilação SQL ou builders nesta etapa.
 - **Validações realizadas:** formatação dos arquivos do passo, pacotes/módulos, `go build ./...`, `go vet ./...`, inspeção da API por `go doc`, revisão de código/documentação e `git diff --check`, com sucesso em Go 1.26.8; sem dependências externas.
 - **Observação de formatação:** a checagem global manteve os espaços preexistentes de `begin.go` e `internal/connection/begin.go`; arquivos preservados.
-- **Limites:** sem testes nesta etapa; validadores internos ainda não são chamados por uma API pública de compilação. Valores em `any` mantêm referências, conforme Q06. Execução/integração e suíte unitária permanecem nos passos 12 e 14.
-- **Continuidade:** passos 7 a 16 não iniciados; dependem de planejamento e autorização próprios.
+- **Limites:** sem testes nesta etapa; validadores internos ainda não são chamados por uma API pública de compilação. Valores em `any` mantêm referências, conforme Q06. Execução/integração e suíte unitária permanecem nos passos 13 e 15.
+- **Continuidade:** passos 7 a 17 não iniciados; dependem de planejamento e autorização próprios.
