@@ -6,7 +6,7 @@
 - **2. Estruturar o projeto:** definir módulo Go, organização dos pacotes e separação dos drivers usados nos testes de integração. Estrutura inicial concluída em 30/10/2026; decisões e validações em [002.md](002.md).
 - **3. Implementar conexão:** configuração, `Open`, `Wrap`, `Close`, propriedade do pool e timeout de abertura. Implementação concluída em 30/10/2026; decisões, resultados e limites da validação em [003.md](003.md).
 - **4. Implementar transações:** `Begin`, `Commit`, `Rollback`, contextos e ciclo de vida de `DB`/`Tx`. Implementação concluída em 01/11/2026; decisões, resultados e validações em [004.md](004.md).
-- **5. Implementar SQL direto e arquivos:** `Query`, `Exec`, `QueryFile` e `ExecFile`, com parâmetros e `fs.FS`/`embed.FS`.
+- **5. Implementar SQL direto e arquivos:** `Query`, `Exec`, `QueryFile` e `ExecFile`, com parâmetros e `fs.FS`/`embed.FS`. Implementação concluída em 01/11/2026; decisões, resultados e validações em [005.md](005.md).
 - **6. Implementar expressões:** tabelas, colunas, `As`, valores, operadores, agrupamentos e validações da AST.
 - **7. Implementar dialetos e compilação:** placeholders, escape de identificadores, capacidades e `Build` nos três bancos.
 - **8. Implementar SELECT básico:** projeção, aliases, schemas, `Distinct`, WHERE, ordenação e execução com `sql.Rows`.
@@ -63,4 +63,17 @@
 - **Resultado:** wrappers `DB.Begin`, `Tx.Commit` e `Tx.Rollback`, pacote interno de transações, reserva/liberação única do contador, cancelamento automático e preservação dos erros implementados; definições e manual atualizados.
 - **Validações realizadas:** formatação, listagem de pacotes/módulos, `go build ./...`, `go vet ./...`, revisão dos caminhos de finalização/locks e `git diff --check`, com sucesso em Go 1.26.8. Sem dependências externas.
 - **Limites:** sem testes ou bancos reais nesta etapa. `sql.ErrTxDone` informa encerramento lógico nativo, sem garantir limpeza física concluída no driver; detalhes em `004.md`. Comportamento real e concorrência serão verificados nas etapas de testes.
-- **Continuidade:** passos 5 a 16 não iniciados; dependem de planejamento e autorização próprios.
+- **Continuidade:** passo 5 registrado na seção seguinte; demais passos dependem de planejamento e autorização próprios.
+
+## Planejamento do passo 5
+
+- **Escopo:** SQL parametrizado via `Tx.Query/Exec` e arquivos via `Tx.QueryFile/ExecFile`, usando `fs.FS`/`embed.FS`; detalhes em [005.md](005.md).
+- **Alterações previstas:** wrappers públicos, execução/leitura/validações em `internal/transaction`, exposição de `ErrInvalidQuery`, definições, manual e registros do plano, após aprovação.
+- **Validações:** formatação, pacotes/módulos, compilação, análise estática e revisão de erros, arquivos, cancelamento, finalização e propriedade de `Rows`. Testes de execução/concorrência permanecem nas etapas próprias.
+- **Dúvidas pendentes:** nenhuma; decisões e respostas preservadas em `005.md`; `QUESTIONS.md` limpo.
+- **Situação:** passo 5 concluído em 01/11/2026, após aprovação das respostas e autorização explícita.
+- **Resultado:** quatro métodos públicos e internos, `ErrInvalidQuery`, validações e leitura síncrona de arquivos implementados; SQL/argumentos e causas preservados; definições e manual atualizados.
+- **Validações realizadas:** formatação dos arquivos do passo, listagem de pacotes/módulos, `go build ./...`, `go vet ./...`, revisão de código/documentação e `git diff --check`, com sucesso em Go 1.26.8; sem dependências externas.
+- **Observação de formatação:** `gofmt -l .` apontou espaços preexistentes em linhas vazias de `begin.go` e `internal/connection/begin.go`; arquivos preservados, fora do escopo do passo.
+- **Limites:** sem testes ou bancos reais. Leitura de `fs.FS` é síncrona e não pode ser interrompida pelo contexto; execução e concorrência serão verificadas nas etapas de testes.
+- **Continuidade:** passos 6 a 16 não iniciados; dependem de planejamento e autorização próprios.

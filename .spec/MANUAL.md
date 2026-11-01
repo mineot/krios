@@ -299,7 +299,7 @@ func cancelTransaction(ctx context.Context, db *krios.DB) error {
 // até Krios tratar o cancelamento. ErrTxDone não garante limpeza concluída no driver.
 ```
 
-Todos os builders e comandos usam `tx`; serão implementados nos passos posteriores:
+Todos os builders e comandos usam `tx`; builders serão implementados nos passos posteriores:
 
 ```go
 func createUser(ctx context.Context, db *krios.DB) error {
@@ -711,6 +711,20 @@ fmt.Println(affected)
 
 SQL PostgreSQL; para MySQL/SQLite, substituir os placeholders por `?` em ordem.
 
+```go
+// Query/Exec/QueryFile/ExecFile: prioridade das validações
+// 1. ctx == nil → ErrInvalidQuery
+// 2. Tx nula/não inicializada/encerrada → sql.ErrTxDone
+// 3. ctx cancelado/expirado → causa do contexto
+// 4. SQL vazio/somente espaços ou arquivo inválido → ErrInvalidQuery
+// Texto não vazio e argumentos seguem intactos; comentários/sintaxe ficam com o driver.
+// Erro de comando: fazer Rollback; Krios não repete nem finaliza automaticamente.
+// Contexto local segue sem combinação com o de Begin; Timeout não se aplica.
+// Controle transacional: DB.Begin e Tx.Commit/Rollback.
+// BEGIN/COMMIT/ROLLBACK por SQL ficam fora do contrato; não há parser/bloqueio.
+// Efeitos de commit implícito são responsabilidade da aplicação.
+```
+
 ```sql
 SELECT id, name FROM users WHERE active = $1 ORDER BY id;
 INSERT INTO users (name, active) VALUES ($1, $2);
@@ -719,16 +733,29 @@ DELETE FROM orders WHERE user_id = $1;
 ```
 
 ```go
-rows, err := tx.Query(ctx,
-    "SELECT id, name FROM users WHERE active = $1 ORDER BY id", true)
-if err != nil {
-    return err
+func activeUsers(ctx context.Context, db *krios.DB) ([]User, error) {
+    tx, err := db.Begin(ctx, nil)
+    if err != nil {
+        return nil, err
+    }
+    defer tx.Rollback()
+
+    commandCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+    defer cancel()
+    rows, err := tx.Query(commandCtx,
+        "SELECT id, name FROM users WHERE active = $1 ORDER BY id", true)
+    if err != nil {
+        return nil, err
+    }
+    users, err := readUsers(rows) // helper acima: Next/Scan, Err e Close
+    if err != nil {
+        return nil, err
+    }
+    if err := tx.Commit(); err != nil {
+        return nil, err
+    }
+    return users, nil
 }
-users, err := readUsers(rows)
-if err != nil {
-    return err
-}
-fmt.Println(users)
 ```
 
 ```go
@@ -772,6 +799,18 @@ if _, err := tx.Exec(ctx,
 
 Exemplos PostgreSQL. Em MySQL/SQLite, usar os mesmos arquivos adaptados para `?`.
 
+```go
+// fs.FS utilizável; files == nil → ErrInvalidQuery.
+// Caminho deve satisfazer fs.ValidPath; "." é rejeitado.
+// Sem normalização, extensão obrigatória, cache ou limite próprio de tamanho.
+// Leitura síncrona via fs.ReadFile: cancelamento não interrompe leitura bloqueada.
+// Após sucesso, revalidar contexto/transação antes de executar.
+// Erro de leitura prevalece sobre cancelamento simultâneo; descartar conteúdo parcial.
+// Causas preservadas: errors.Is(err, fs.ErrNotExist); errors.As(err, &pathErr).
+// Ponteiros nulos dentro de fs.FS não recebem reflexão/recuperação de panic.
+// fs.ValidPath não garante confinamento contra links simbólicos externos.
+```
+
 ```sql
 -- queries/users.sql
 SELECT id, name
@@ -807,6 +846,30 @@ import "embed"
 
 //go:embed queries/*.sql
 var queryFiles embed.FS
+```
+
+```go
+func renameUser(ctx context.Context, db *krios.DB, files fs.FS, id int64, name string) (int64, error) {
+    tx, err := db.Begin(ctx, nil)
+    if err != nil {
+        return 0, err
+    }
+    defer tx.Rollback()
+
+    result, err := tx.ExecFile(ctx, files, "queries/update_user.sql", name, id)
+    if err != nil {
+        return 0, err
+    }
+    affected, err := result.RowsAffected()
+    if err != nil {
+        return 0, err
+    }
+    if err := tx.Commit(); err != nil {
+        return 0, err
+    }
+    return affected, nil
+}
+// Chamar com queryFiles; importar "io/fs" para o parâmetro files.
 ```
 
 ```go

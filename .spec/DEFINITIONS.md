@@ -435,6 +435,16 @@ var queryFiles embed.FS
 
 SQL direto e arquivos usam placeholders nativos: `$1`, `$2`, ... no PostgreSQL; `?` no MySQL/SQLite. Builders geram esses placeholders automaticamente, com numeração compartilhada entre consulta e subconsultas no PostgreSQL. Arquivos e SQL direto não são reescritos.
 
+`Query`, `Exec`, `QueryFile` e `ExecFile` validam nesta ordem: contexto nulo (`ErrInvalidQuery`), transação nula/não inicializada/encerrada no Krios (`sql.ErrTxDone`), contexto do comando cancelado/expirado (sua causa) e argumentos específicos. Texto vazio ou somente espaços retorna `ErrInvalidQuery`; a verificação não modifica o texto enviado. Comentários, sintaxe e quantidade de placeholders ficam a cargo do driver. Disputas posteriores com finalização/cancelamento preservam o erro nativo observado.
+
+Arquivos exigem `files != nil`, `fs.ValidPath(path)` e `path != "."`; falha retorna `ErrInvalidQuery`. Não normalizar caminhos, converter separadores ou exigir extensão. A implementação concreta de `fs.FS` deve ser utilizável; não haverá reflexão para detectar ponteiros nulos nem recuperação de panics. Caminhos válidos não garantem confinamento contra links simbólicos de filesystems externos.
+
+Ler com `fs.ReadFile`, sincronamente a cada chamada, sem cache ou limite próprio de tamanho. Verificar contexto/estado antes da leitura e, em sucesso, novamente antes da execução. O contexto não interrompe leitura bloqueada. Erro de leitura prevalece sobre cancelamento simultâneo, preserva sua causa com `%w` e descarta conteúdo parcial; inclui `fs.ErrNotExist` e `*fs.PathError`. Conteúdo válido segue integralmente para `Query/Exec`, inclusive sua validação de SQL vazio.
+
+O contexto do comando é encaminhado sem combinação com o contexto de `Begin`. A execução não mantém mutex Krios durante I/O ou a vida de `Rows`; `database/sql` coordena a finalização nativa. Erro de comando não provoca rollback, repetição ou liberação do registro pelo Krios: o chamador deve fazer rollback. Cancelamento de `Begin` mantém o encerramento automático; cancelamento local não garante que a transação permaneça utilizável nem interrupção imediata do driver.
+
+Controlar transações por `DB.Begin` e `Tx.Commit/Rollback`. `BEGIN`, `COMMIT`, `ROLLBACK` e equivalentes enviados por SQL direto/arquivo estão fora do contrato suportado; não haverá parser nem bloqueio textual. Instruções com commit implícito permanecem sob responsabilidade do utilizador.
+
 ### Select
 
 ```go
@@ -509,6 +519,9 @@ Os métodos aceitam `args ...any`; valores são enviados separadamente do texto 
 | Contexto nulo em `Begin` | `ErrInvalidConfig`, antes da validação do banco. |
 | `Begin` em banco nulo/não inicializado/fechado | `ErrClosed`. |
 | `Commit/Rollback` em transação nula/não inicializada | `sql.ErrTxDone`. |
+| Contexto nulo em `Query/Exec/QueryFile/ExecFile` | `ErrInvalidQuery`, antes da validação da transação. |
+| SQL vazio/somente espaços, filesystem nulo ou caminho inválido | `ErrInvalidQuery`, após validar contexto e transação na ordem descrita acima. |
+| Falha de leitura de arquivo SQL | Preservar causa com `%w`; não executar conteúdo parcial. |
 | Fechar instância com transações Krios ativas ou aberturas pendentes | `ErrActiveTransactions`; instância permanece aberta. |
 | Operação em `DB` fechado / execução em `Tx` encerrada | `ErrClosed` / `sql.ErrTxDone`. |
 | UPDATE/DELETE sem WHERE ou com condição constante verdadeira | `ErrMissingWhere` na validação do builder. |
