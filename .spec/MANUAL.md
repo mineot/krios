@@ -367,7 +367,73 @@ func readUsers(rows *sql.Rows) ([]User, error) {
 }
 ```
 
+## Expressões
+
+Construção disponível no passo 6, sem banco ou builder:
+
+```go
+func expressionExamples() {
+    table := krios.Table("users").InSchema("public")
+    aliasedTable := table.As("u") // table permanece sem alias
+    name := krios.Column("u.name")
+    projectedName := name.As("user_name")
+    fallback := krios.Value(nil).As("fallback")
+    quantity := krios.Count("*").As("quantity")
+    amount := krios.Sum("total").As("amount")
+
+    filter := krios.Where(
+        krios.Eq("u.active", true),
+        krios.Or(krios.In("u.id", 1, 2), krios.IsNull("u.deleted_at")),
+    )
+    joinCondition := krios.On(krios.EqExpr(krios.Column("u.id"), krios.Column("o.user_id")))
+    aggregateFilter := krios.GtExpr(krios.Sum("total"), krios.Value(100))
+    ordering := krios.Asc("u.name").NullsLast()
+
+    _, _, _, _ = aliasedTable, projectedName, fallback, quantity
+    _, _, _, _, _ = amount, filter, joinCondition, aggregateFilter, ordering
+}
+// Expr, Predicate, TableRef e OrderTerm: tipos distintos, estado privado.
+// Construir não valida publicamente nem gera SQL. Builders/Build virão depois.
+// Exists/NotExists serão implementados com subconsultas no passo 9.
+```
+
+```go
+// Validadores internos → ErrInvalidQuery; observação pública nos futuros builders.
+// Valores zero dos quatro tipos são inválidos; Value(nil) é válido.
+// Última configuração prevalece, preservando versões anteriores:
+name := krios.Column("name").As("").As("user_name") // alias corrigido
+ordering := krios.Asc("name").NullsFirst().NullsLast() // NULLs por último
+_, _ = name, ordering
+
+// Inválidos na validação:
+// Table("public.users")        → usar Table("users").InSchema("public")
+// Column(""), Column("u..id")   → nome/componente vazio
+// Column("id").As("")          → alias explicitamente vazio
+// EqExpr(Column("id").As("x"), Value(1)) → alias fora da projeção
+// Count("u.*"), Sum("*"), Asc("*")      → curinga fora da posição permitida
+// Column("u.*").As("x")                 → curinga não admite alias
+// And(), Or(), Where(), On()            → grupo vazio
+// Nomes: rejeitar NUL, UTF-8 inválido e componentes somente espaços.
+// Preservar os demais caracteres; Column("name DESC") é nome literal.
+// Column("*"), Column("u.*"): somente projeção; Count("*") admite alias.
+```
+
+```go
+values := []any{1, 2}
+ids := krios.In("id", values...)
+values[0] = 99 // não altera o slice copiado para ids
+_ = ids
+
+// Cópia superficial: []byte, ponteiros e driver.Valuer internos continuam referenciados.
+// Não modificar valores referenciados entre construção e fim da execução.
+// Não há avaliação de valores, conversão de NULL ou deep copy.
+// Análise interna: In vazio = falso; NotIn vazio = verdadeiro; propagar por AND/OR.
+// Manter grupos, ordem e erros de ramos dominados; Unknown não significa SQL NULL.
+```
+
 ## Select
+
+API de builders planejada para os próximos passos:
 
 ```go
 query := tx.Select(krios.Table("users")).

@@ -151,6 +151,27 @@ Falha de `Commit` provoca tentativa de rollback de limpeza; retorna o erro origi
 
 Builders pertencem à transação que os criou. Seus métodos copiam as estruturas internas modificadas, preservando versões anteriores. Todos oferecem `Build() (string, []any, error)` para gerar SQL e argumentos sem executar.
 
+## Expressões e validação estrutural
+
+`Expr`, `Predicate`, `TableRef` e `OrderTerm` são structs opacas, com estado privado. `Expr` representa coluna, agregação ou parâmetro; `Predicate` representa condição/grupo. Não são intercambiáveis. Valores zero são inválidos; `Value(nil)` é um parâmetro válido. Nós independentes podem ser reutilizados; seu vínculo com a transação ocorre nos builders.
+
+Construtores não retornam erro nem executam SQL. Validadores internos examinam o estado final, retornam o primeiro erro estrutural na ordem dos operandos e preservam `ErrInvalidQuery`. Erros serão observados publicamente pelos futuros builders/compilação; não existe `Validate/Error/Build` público nos nós. Construção e validação interna estão disponíveis no passo 6; geração SQL pertence ao passo 7, builders aos passos seguintes e `Exists/NotExists` ao passo 9.
+
+Modificadores retornam cópias: `Expr.As`, `TableRef.As/InSchema` e `OrderTerm.NullsFirst/NullsLast`. A última configuração prevalece. Alias/schema omitido é válido; explícito vazio é inválido, mas uma chamada posterior válida corrige essa configuração. `Column("").As("id")` continua inválido. `Value(v).As("alias")` é permitido em projeção.
+
+Slices variádicos de predicados e valores são copiados, preservando ordem e grupos. Valores guardados em `any` não recebem deep copy: ponteiros, mapas, slices, `[]byte` e `driver.Valuer` mantêm as referências fornecidas. A aplicação não deve modificá-los entre a construção e o fim da execução. Não avaliar `driver.Valuer`, converter valores ou imprimir parâmetros nos erros da AST.
+
+### Identificadores, curingas e aliases
+
+- Tabela, schema e alias: um componente sem ponto; usar `Table("users").InSchema("public")`, não `Table("public.users")`.
+- Colunas: qualificação por `.`, sem componentes vazios e sem limite próprio de quantidade. Não há representação de ponto literal dentro de um componente.
+- Rejeitar vazio, componente somente espaços, NUL, UTF-8 inválido e `*` fora das posições abaixo. Preservar caixa, Unicode, espaços e caracteres de citação; não interpretar aspas como escape prévio, remover espaços ou reconhecer SQL.
+- `Column("name DESC")` é um identificador literal, não ordenação. Escape por componente ocorrerá na compilação; existência e limites dos nomes dependem do banco.
+- `Column("*")` e `Column("u.*")`: somente projeção, curinga no último componente e sem alias. Predicados e ordenação não admitem curingas.
+- `Count("*")` é válido e admite alias em projeção; `Count("u.*")` e demais agregações com curinga são inválidos.
+- Aliases de expressão pertencem à projeção; expressão com alias como operando de `EqExpr` ou outra variante `*Expr` é inválida, sem remoção silenciosa.
+- Agregações em WHERE/HAVING e suporte à posição de NULLs dependem das validações futuras de builders/dialetos.
+
 ## Cláusula Where
 
 ```go
@@ -168,6 +189,8 @@ query := tx.Select(krios.Table("users")).Where(where)
 `Where` agrupa predicados com AND implícito e retorna um predicado reutilizável. Chamadas sucessivas de `.Where(...)` também são combinadas por AND. Grupos explícitos preservam seus parênteses.
 
 SELECT pode omitir WHERE. UPDATE e DELETE exigem uma condição não vazia e rejeitam predicados constantes verdadeiros após simplificação da AST, incluindo `NotIn` vazio. Não haverá opção de atualização/exclusão global nos builders iniciais; SQL direto permite essa operação explicitamente.
+
+A análise de constantes preserva a AST e classifica separadamente `AlwaysTrue`, `AlwaysFalse` ou `Unknown` (não demonstrado, sem representar SQL NULL). Propaga apenas as constantes de `In/NotIn` vazios por AND/OR; não deduz tautologias de outras comparações. AND com algum falso é falso; OR com algum verdadeiro é verdadeiro; sem elemento decisivo, todos os filhos devem ser constantes para obter resultado constante. Grupos vazios permanecem inválidos e desconhecidos. Validar também colunas de listas vazias e ramos dominados por constantes. Classificação e erro estrutural permanecem independentes para a futura prioridade de `ErrMissingWhere` nos builders de escrita.
 
 ## Operadores
 
@@ -613,7 +636,7 @@ Cada builder de escrita oferece `Build() (string, []any, error)`, `Exec(ctx cont
 | `Table` | Nome `string` | `TableRef`; aceita `As(alias string)` e `InSchema(schema string)`, retornando `TableRef`. |
 | `Column` | Nome `string` | Expressão `Expr` com `As(alias string)`, retornando expressão com alias. |
 | `Count`, `Avg`, `Sum`, `Min`, `Max` | Coluna `string`; `Count` também aceita `"*"` | Expressão de agregação com `As(alias string)`. |
-| `Value` | `any` | Expressão de parâmetro. |
+| `Value` | `any` | `Expr` de parâmetro; aceita `As` em projeção. |
 | `Eq`, `Ne`, `Lt`, `Lte`, `Gt`, `Gte` | Coluna `string`, valor `any` | `Predicate`. |
 | Variantes `EqExpr`, `NeExpr`, `LtExpr`, `LteExpr`, `GtExpr`, `GteExpr` | Duas expressões `Expr` | `Predicate`. |
 | `In`, `NotIn` | Coluna `string`, valores `...any` | `Predicate`. |
@@ -622,7 +645,7 @@ Cada builder de escrita oferece `Build() (string, []any, error)`, `Exec(ctx cont
 | `IsNull`, `IsNotNull` | Coluna `string` | `Predicate`. |
 | `Exists`, `NotExists` | `SelectBuilder` | `Predicate` de subconsulta. |
 | `And`, `Or`, `Where`, `On` | `...Predicate` | `Predicate` agrupado; WHERE/ON usam AND. |
-| `Asc`, `Desc` | Coluna `string` | Termo de ordenação; `NullsFirst()` e `NullsLast()` retornam o termo configurado. |
+| `Asc`, `Desc` | Coluna `string` | `OrderTerm`; `NullsFirst()` e `NullsLast()` retornam uma cópia configurada. |
 | SELECT `Distinct`, `All` | Sem argumentos | `SelectBuilder`. |
 | SELECT `Columns` | `...Expr` | `SelectBuilder`; substitui projeção. |
 | SELECT `Where`, `Having` | `...Predicate` | `SelectBuilder`; acumula por AND. |
@@ -636,4 +659,4 @@ Cada builder de escrita oferece `Build() (string, []any, error)`, `Exec(ctx cont
 | UPDATE/DELETE `Where` | `...Predicate` | Respectivo builder; acumula por AND. |
 | INSERT/UPDATE/DELETE `Returning` | Colunas `...string` | Respectivo builder; acumula em ordem. |
 
-O catálogo descreve os tipos de entrada e composição sem impor nomes novos aos tipos concretos de expressão/ordenação. `Column(...).As(...)` deve continuar aceito por `Columns`, mantendo o contrato de expressão.
+Os tipos de expressão/ordenação são `Expr`, `Predicate`, `TableRef` e `OrderTerm`, com estado privado. `Column(...).As(...)` mantém o tipo `Expr` para composição com o futuro `Columns`.
