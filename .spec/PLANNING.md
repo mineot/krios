@@ -7,7 +7,7 @@
 - **3. Implementar conexão:** configuração, `Open`, `Wrap`, `Close`, propriedade do pool e timeout de abertura. Implementação concluída em 30/10/2026; decisões, resultados e limites da validação em [003.md](003.md).
 - **4. Implementar transações:** `Begin`, `Commit`, `Rollback`, contextos e ciclo de vida de `DB`/`Tx`. Implementação concluída em 01/11/2026; decisões, resultados e validações em [004.md](004.md).
 - **5. Implementar SQL direto e arquivos:** `Query`, `Exec`, `QueryFile` e `ExecFile`, com parâmetros e `fs.FS`/`embed.FS`. Implementação concluída em 01/11/2026; decisões, resultados e validações em [005.md](005.md).
-- **6. Implementar expressões:** tabelas, colunas, `As`, valores, operadores, agrupamentos e validações da AST.
+- **6. Implementar expressões:** tabelas, colunas, `As`, valores, operadores, agrupamentos e validações da AST. Planejamento em [006.md](006.md), aguardando decisões e autorização para implementar.
 - **7. Implementar dialetos e compilação:** placeholders, escape de identificadores, capacidades e `Build` nos três bancos.
 - **8. Implementar SELECT básico:** projeção, aliases, schemas, `Distinct`, WHERE, ordenação e execução com `sql.Rows`.
 - **9. Implementar SELECT avançado:** JOINs, subconsultas, `Exists`, agregações, `GroupBy`, `Having`, paginação, contagem, `First` e `Last`.
@@ -76,4 +76,12 @@
 - **Validações realizadas:** formatação dos arquivos do passo, listagem de pacotes/módulos, `go build ./...`, `go vet ./...`, revisão de código/documentação e `git diff --check`, com sucesso em Go 1.26.8; sem dependências externas.
 - **Observação de formatação:** `gofmt -l .` apontou espaços preexistentes em linhas vazias de `begin.go` e `internal/connection/begin.go`; arquivos preservados, fora do escopo do passo.
 - **Limites:** sem testes ou bancos reais. Leitura de `fs.FS` é síncrona e não pode ser interrompida pelo contexto; execução e concorrência serão verificadas nas etapas de testes.
-- **Continuidade:** passos 6 a 16 não iniciados; dependem de planejamento e autorização próprios.
+- **Continuidade:** passo 6 registrado na seção seguinte; demais passos dependem de planejamento e autorização próprios.
+
+## Planejamento do passo 6
+
+- **Escopo:** AST de tabelas, expressões, predicados e termos de ordenação, modificadores imutáveis, validação estrutural/contextual e análise de constantes; detalhes e delimitação em [006.md](006.md).
+- **Alterações previstas:** wrappers/aliases públicos e pacote `internal/expression`, definições, manual e registros do plano, após aprovação. Sem geração ou execução de SQL nesta etapa.
+- **Validações:** formatação, pacotes/módulos, compilação, análise estática e revisão de contratos, imutabilidade, identificadores, grupos, aliases, curingas e constantes. Testes permanecem nas etapas próprias.
+- **Dúvidas pendentes:** `006-Q01` a `006-Q07`, em [QUESTIONS.md](QUESTIONS.md): tipos/organização, delimitação, validação, identificadores, curingas/aliases, valores e análise booleana.
+- **Situação:** planejamento apresentado para revisão; nenhuma implementação do passo 6 iniciada. Passos 7 a 16 não iniciados.
