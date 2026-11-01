@@ -155,7 +155,7 @@ Builders pertencem à transação que os criou. Seus métodos copiam as estrutur
 
 `Expr`, `Predicate`, `TableRef` e `OrderTerm` são structs opacas, com estado privado. `Expr` representa coluna, agregação ou parâmetro; `Predicate` representa condição/grupo. Não são intercambiáveis. Valores zero são inválidos; `Value(nil)` é um parâmetro válido. Nós independentes podem ser reutilizados; seu vínculo com a transação ocorre nos builders.
 
-Construtores não retornam erro nem executam SQL. Validadores internos examinam o estado final, retornam o primeiro erro estrutural na ordem dos operandos e preservam `ErrInvalidQuery`. Erros serão observados publicamente pelos futuros builders/compilação; não existe `Validate/Error/Build` público nos nós. Construção e validação interna estão disponíveis no passo 6; geração SQL pertence ao passo 7, builders aos passos seguintes e `Exists/NotExists` ao passo 9.
+Construtores não retornam erro nem executam SQL. Validadores internos examinam o estado final, retornam o primeiro erro estrutural na ordem dos operandos e preservam `ErrInvalidQuery`. Erros serão observados publicamente pelos futuros builders; não existe `Validate/Error/Build` público nos nós. Construção e validação estão disponíveis desde o passo 6, e compilação interna de fragmentos desde o passo 7. `Build` público será implementado junto aos builders nos passos 8 a 10; `Exists/NotExists` pertence ao passo 9.
 
 Modificadores retornam cópias: `Expr.As`, `TableRef.As/InSchema` e `OrderTerm.NullsFirst/NullsLast`. A última configuração prevalece. Alias/schema omitido é válido; explícito vazio é inválido, mas uma chamada posterior válida corrige essa configuração. `Column("").As("id")` continua inválido. `Value(v).As("alias")` é permitido em projeção.
 
@@ -170,7 +170,21 @@ Slices variádicos de predicados e valores são copiados, preservando ordem e gr
 - `Column("*")` e `Column("u.*")`: somente projeção, curinga no último componente e sem alias. Predicados e ordenação não admitem curingas.
 - `Count("*")` é válido e admite alias em projeção; `Count("u.*")` e demais agregações com curinga são inválidos.
 - Aliases de expressão pertencem à projeção; expressão com alias como operando de `EqExpr` ou outra variante `*Expr` é inválida, sem remoção silenciosa.
-- Agregações em WHERE/HAVING e suporte à posição de NULLs dependem das validações futuras de builders/dialetos.
+- Agregações em WHERE/HAVING dependem das validações futuras de builders. A compilação de posição explícita de NULLs já verifica a capacidade do snapshot detectado.
+
+### Compilação interna
+
+- Usar um acumulador por compilação, compartilhando SQL e argumentos entre fragmentos. Sem estado global, conexão adicional, cache ou alteração da AST.
+- Validar dialeto/versão na criação: dialeto desconhecido → `ErrInvalidConfig`; versão abaixo da mínima → `ErrUnsupported`. Consumir capacidades do snapshot detectado, sem recalculá-las.
+- Validar a estrutura inteira de cada fragmento antes de renderizar; depois verificar sua capacidade. A primeira falha interrompe emissões e faz o resultado retornar `"", nil, err`, sem conteúdo parcial; outra tentativa exige novo acumulador.
+- Delimitar cada componente com aspas duplas em PostgreSQL/SQLite e crases em MySQL; duplicar o delimitador interno. Pontos de qualificação e curingas válidos permanecem fora dos delimitadores; aliases usam `AS`.
+- Gerar palavras-chave/funções maiúsculas, espaços simples entre tokens, `, ` entre itens e nenhum `;` final. Preservar caracteres dos identificadores, sem normalização.
+- Emitir parênteses para cada grupo explícito, inclusive com um filho. `Where/On` geram somente o grupo; cláusulas completas pertencem aos builders.
+- `In` vazio gera `1 = 0`; `NotIn` vazio gera `1 = 1`, sem parâmetros e após validar a coluna. Não eliminar outros ramos nem seus argumentos.
+- Acrescentar um argumento por ocorrência, da esquerda para a direita, sem deduplicar/converter valores. PostgreSQL numera continuamente no mesmo acumulador; uma compilação nova reinicia em `$1`. MySQL/SQLite usam `?`.
+- Retornar `args == nil` sem parâmetros; caso contrário, copiar superficialmente o slice. Referências dos valores são preservadas, sem limite próprio de quantidade de parâmetros.
+- Ordenação sempre explicita `ASC/DESC`; posição de NULLs só aparece se configurada e requer `ExplicitNullOrder`. Falta de suporte retorna `ErrUnsupported`, sem emulação. `FullJoin/Returning` serão integrados nos passos 9/10.
+- Este mecanismo não modifica SQL direto/arquivos, não executa consultas e não expõe novas funções ou métodos na raiz.
 
 ## Cláusula Where
 

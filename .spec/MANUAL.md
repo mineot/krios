@@ -998,6 +998,45 @@ if _, err := tx.ExecFile(ctx, queryFiles,
 
 ## Gerar SQL sem executar
 
+No passo 7, a compilação é interna. `Build` público será disponibilizado com os builders nos passos 8 a 10.
+
+```go
+// Nós já disponíveis; não existe Compile/Build público para eles.
+table := krios.Table("users").InSchema("app").As("u")
+filter := krios.Where(krios.Eq("u.active", true), krios.In("u.id", 10, 20))
+_, _ = table, filter
+// Argumentos do filtro: []any{true, 10, 20}, separados do SQL.
+```
+
+Fragmentos produzidos pelo mecanismo interno:
+
+```sql
+-- PostgreSQL
+"app"."users" AS "u"
+("u"."active" = $1 AND "u"."id" IN ($2, $3))
+-- MySQL
+`app`.`users` AS `u`
+(`u`.`active` = ? AND `u`.`id` IN (?, ?))
+-- SQLite
+"app"."users" AS "u"
+("u"."active" = ? AND "u"."id" IN (?, ?))
+```
+
+```go
+// Identificadores sempre delimitados por componente; duplicar delimitadores internos.
+// Grupos preservados entre parênteses, mesmo com um filho; Where/On não emitem cláusulas.
+// In vazio → 1 = 0; NotIn vazio → 1 = 1; validar coluna e preservar demais ramos.
+// Cada ocorrência de valor ocupa um parâmetro; sem deduplicação/conversão.
+// Mesmo acumulador: numeração contínua; nova compilação: reiniciar em $1.
+// Sem parâmetros: args == nil; com parâmetros: cópia superficial do slice.
+// NullsFirst/NullsLast exige capacidade detectada; MySQL → ErrUnsupported.
+// Validar estrutura antes da capacidade do fragmento; preservar o primeiro erro.
+// Falha → "", nil, err; não retornar SQL/argumentos parciais.
+// Sintaxe gerada sem ponto e vírgula final; SQL direto permanece intacto.
+```
+
+Exemplo de uso planejado para o builder SELECT:
+
 ```go
 sqlText, args, err := tx.Select(krios.Table("users")).
     Columns(krios.Column("id"), krios.Column("name")).
@@ -1012,17 +1051,17 @@ if err != nil {
 
 ```sql
 -- PostgreSQL: argumento $1 = "John", enviado separadamente.
-SELECT "id", "name" FROM "users" WHERE "name" = $1;
+SELECT "id", "name" FROM "users" WHERE "name" = $1
 ```
 
 ```sql
 -- MySQL: argumento ? = "John", enviado separadamente.
-SELECT `id`, `name` FROM `users` WHERE `name` = ?;
+SELECT `id`, `name` FROM `users` WHERE `name` = ?
 ```
 
 ```sql
 -- SQLite: argumento ? = "John", enviado separadamente.
-SELECT "id", "name" FROM "users" WHERE "name" = ?;
+SELECT "id", "name" FROM "users" WHERE "name" = ?
 ```
 
 ## Erros

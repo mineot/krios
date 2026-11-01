@@ -14,6 +14,12 @@ type Info struct {
 	Capabilities Capabilities
 }
 
+// ValidateInfo checks the dialect and minimum version without detecting or
+// recalculating capabilities. Info must come from the initialization snapshot.
+func ValidateInfo(info Info) error {
+	return validateVersion(info.Dialect, info.Version)
+}
+
 func capabilities(kind Dialect, version Version) Capabilities {
 	switch kind {
 	case Postgres:

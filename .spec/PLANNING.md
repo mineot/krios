@@ -8,7 +8,7 @@
 - **4. Implementar transações:** `Begin`, `Commit`, `Rollback`, contextos e ciclo de vida de `DB`/`Tx`. Implementação concluída em 01/11/2026; decisões, resultados e validações em [004.md](004.md).
 - **5. Implementar SQL direto e arquivos:** `Query`, `Exec`, `QueryFile` e `ExecFile`, com parâmetros e `fs.FS`/`embed.FS`. Implementação concluída em 01/11/2026; decisões, resultados e validações em [005.md](005.md).
 - **6. Implementar expressões:** tabelas, colunas, `As`, valores, operadores, agrupamentos e validações da AST. Implementação concluída em 01/11/2026; decisões, resultados e validações em [006.md](006.md).
-- **7. Implementar dialetos e compilação:** placeholders, escape de identificadores, capacidades e base de `Build` nos três bancos. Planejamento em [007.md](007.md); escopo da compilação interna e entrega do `Build` público sujeitos à decisão `007-Q01`.
+- **7. Implementar dialetos e compilação:** placeholders, escape de identificadores, capacidades e base de `Build` nos três bancos. Compilação interna concluída em 01/11/2026; decisões e validações em [007.md](007.md). `Build` público reservado aos builders.
 - **8. Implementar SELECT básico:** projeção, aliases, schemas, `Distinct`, WHERE, ordenação e execução com `sql.Rows`.
 - **9. Implementar SELECT avançado:** JOINs, subconsultas, `Exists`, agregações, `GroupBy`, `Having`, paginação, contagem, `First` e `Last`.
 - **10. Implementar escritas:** INSERT, UPDATE, DELETE, proteção de WHERE, `sql.Result` e `Returning` conforme suporte.
@@ -94,8 +94,13 @@
 
 ## Planejamento do passo 7
 
-- **Escopo proposto:** compilação interna dos nós existentes da AST, escape/placeholder por dialeto, composição de argumentos e capacidades; delimitação de `Build` em [007.md](007.md).
+- **Escopo aprovado:** compilação interna dos nós existentes da AST, escape/placeholder por dialeto, composição de argumentos e capacidades; delimitação de `Build` em [007.md](007.md).
 - **Alterações previstas:** funções de dialeto, pacote `internal/compiler`, renderizadores em `internal/expression`, definições, manual e registros do plano, após aprovação.
 - **Validações:** formatação, pacotes/módulos, compilação, análise estática e revisão de escape, parâmetros, grupos, capacidades, erros e preservação da AST; testes nas etapas próprias.
-- **Dúvidas pendentes:** `007-Q01` a `007-Q06`, em [QUESTIONS.md](QUESTIONS.md): escopo de `Build`, organização, formato SQL, argumentos, capacidades e resultados de erro.
-- **Situação:** planejamento apresentado para revisão; nenhuma implementação do passo 7 iniciada. Passos 8 a 17 não iniciados.
+- **Dúvidas pendentes:** nenhuma; decisões e respostas preservadas em `007.md`; `QUESTIONS.md` limpo.
+- **Situação:** passo 7 concluído em 01/11/2026, após aprovação das respostas e autorização explícita.
+- **Resultado:** escape/placeholders nos três dialetos, writer compartilhável entre fragmentos, renderizadores da AST, validação de capacidades e resultado sem conteúdo parcial em erro; definições e manual atualizados.
+- **Validações realizadas:** formatação dos arquivos do passo, pacotes/módulos, `go build ./...`, `go vet ./...`, inspeção da API por `go doc`, revisão de código/documentação e `git diff --check`, com sucesso em Go 1.26.8; sem dependências externas.
+- **Observação de formatação:** permanecem os espaços preexistentes de `begin.go` e `internal/connection/begin.go` apontados pela checagem global; arquivos preservados.
+- **Limites:** sem testes ou execução em bancos. Compilação disponível somente internamente; `Build` público será entregue com os builders nos passos 8 a 10. Integração e suíte unitária permanecem nos passos 13 e 15.
+- **Continuidade:** passos 8 a 17 não iniciados; dependem de planejamento e autorização próprios.

@@ -1,5 +1,5 @@
-// Package expression constructs and validates immutable SQL expression trees.
-// It does not compile SQL, evaluate parameter values or execute queries.
+// Package expression constructs, validates and compiles immutable SQL expression trees.
+// It does not evaluate parameter values or execute queries.
 package expression
 
 // Expr is an opaque scalar or projection expression. Its zero value is invalid.
