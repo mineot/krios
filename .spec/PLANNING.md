@@ -8,7 +8,7 @@
 - **4. Implementar transações:** `Begin`, `Commit`, `Rollback`, contextos e ciclo de vida de `DB`/`Tx`. Implementação concluída em 01/11/2026; decisões, resultados e validações em [004.md](004.md).
 - **5. Implementar SQL direto e arquivos:** `Query`, `Exec`, `QueryFile` e `ExecFile`, com parâmetros e `fs.FS`/`embed.FS`. Implementação concluída em 01/11/2026; decisões, resultados e validações em [005.md](005.md).
 - **6. Implementar expressões:** tabelas, colunas, `As`, valores, operadores, agrupamentos e validações da AST. Implementação concluída em 01/11/2026; decisões, resultados e validações em [006.md](006.md).
-- **7. Implementar dialetos e compilação:** placeholders, escape de identificadores, capacidades e `Build` nos três bancos.
+- **7. Implementar dialetos e compilação:** placeholders, escape de identificadores, capacidades e base de `Build` nos três bancos. Planejamento em [007.md](007.md); escopo da compilação interna e entrega do `Build` público sujeitos à decisão `007-Q01`.
 - **8. Implementar SELECT básico:** projeção, aliases, schemas, `Distinct`, WHERE, ordenação e execução com `sql.Rows`.
 - **9. Implementar SELECT avançado:** JOINs, subconsultas, `Exists`, agregações, `GroupBy`, `Having`, paginação, contagem, `First` e `Last`.
 - **10. Implementar escritas:** INSERT, UPDATE, DELETE, proteção de WHERE, `sql.Result` e `Returning` conforme suporte.
@@ -90,4 +90,12 @@
 - **Validações realizadas:** formatação dos arquivos do passo, pacotes/módulos, `go build ./...`, `go vet ./...`, inspeção da API por `go doc`, revisão de código/documentação e `git diff --check`, com sucesso em Go 1.26.8; sem dependências externas.
 - **Observação de formatação:** a checagem global manteve os espaços preexistentes de `begin.go` e `internal/connection/begin.go`; arquivos preservados.
 - **Limites:** sem testes nesta etapa; validadores internos ainda não são chamados por uma API pública de compilação. Valores em `any` mantêm referências, conforme Q06. Execução/integração e suíte unitária permanecem nos passos 13 e 15.
-- **Continuidade:** passos 7 a 17 não iniciados; dependem de planejamento e autorização próprios.
+- **Continuidade:** passo 7 registrado na seção seguinte; demais passos dependem de planejamento e autorização próprios.
+
+## Planejamento do passo 7
+
+- **Escopo proposto:** compilação interna dos nós existentes da AST, escape/placeholder por dialeto, composição de argumentos e capacidades; delimitação de `Build` em [007.md](007.md).
+- **Alterações previstas:** funções de dialeto, pacote `internal/compiler`, renderizadores em `internal/expression`, definições, manual e registros do plano, após aprovação.
+- **Validações:** formatação, pacotes/módulos, compilação, análise estática e revisão de escape, parâmetros, grupos, capacidades, erros e preservação da AST; testes nas etapas próprias.
+- **Dúvidas pendentes:** `007-Q01` a `007-Q06`, em [QUESTIONS.md](QUESTIONS.md): escopo de `Build`, organização, formato SQL, argumentos, capacidades e resultados de erro.
+- **Situação:** planejamento apresentado para revisão; nenhuma implementação do passo 7 iniciada. Passos 8 a 17 não iniciados.
