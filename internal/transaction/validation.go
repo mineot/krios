@@ -9,6 +9,13 @@ import (
 	"github.com/mineot/krios/internal/errs"
 )
 
+// CheckCommand checks context and transaction state without retaining a lock
+// or exposing the native handle. Query rechecks before execution.
+func (tx *Tx) CheckCommand(ctx context.Context) error {
+	_, err := tx.command(ctx)
+	return err
+}
+
 // command validates inputs in contract order and snapshots the native handle.
 // No Krios lock is retained during file/driver I/O or the lifetime of Rows.
 func (tx *Tx) command(ctx context.Context) (*sql.Tx, error) {

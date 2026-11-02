@@ -393,7 +393,7 @@ func expressionExamples() {
     _, _, _, _, _ = amount, filter, joinCondition, aggregateFilter, ordering
 }
 // Expr, Predicate, TableRef e OrderTerm: tipos distintos, estado privado.
-// Construir não valida publicamente nem gera SQL. Builders/Build virão depois.
+// Construir nós não gera SQL; validar/compilar com SelectBuilder.Build/Exec.
 // Exists/NotExists serão implementados com subconsultas no passo 9.
 ```
 
@@ -433,23 +433,45 @@ _ = ids
 
 ## Select
 
-API de builders planejada para os próximos passos:
+SELECT básico disponível no passo 8. Agregações e funcionalidades avançadas serão definidas no passo 9.
 
 ```go
-query := tx.Select(krios.Table("users")).
-    Columns(krios.Column("id"), krios.Column("name")).
-    Where(krios.Eq("active", true)).
-    OrderBy(krios.Asc("name"), krios.Asc("id"))
+func selectActiveUsers(ctx context.Context, db *krios.DB) ([]User, error) {
+    tx, err := db.Begin(ctx, nil)
+    if err != nil {
+        return nil, err
+    }
+    defer tx.Rollback()
 
-rows, err := query.Exec(ctx)
-if err != nil {
-    return err
+    query := tx.Select(krios.Table("users")).
+        Columns(krios.Column("id"), krios.Column("name")).
+        Where(krios.Eq("active", true)).
+        OrderBy(krios.Asc("name"), krios.Asc("id"))
+
+    rows, err := query.Exec(ctx)
+    if err != nil {
+        return nil, err
+    }
+    users, err := readUsers(rows) // helper: Next/Scan, Err e Close
+    if err != nil {
+        return nil, err
+    }
+    if err := tx.Commit(); err != nil {
+        return nil, err
+    }
+    return users, nil
 }
-users, err := readUsers(rows)
-if err != nil {
-    return err
-}
-fmt.Println(users)
+```
+
+```go
+// SelectBuilder: reatribuir ou encadear; versões anteriores permanecem independentes.
+// Sem Columns → *; sem Where → nenhuma restrição.
+// Columns()/Where() vazios → ErrInvalidQuery; OrderBy() vazio → sem efeito.
+// Distinct().All() → SELECT DISTINCT *; All não remove DISTINCT.
+// Build funciona após encerrar Tx originalmente inicializada; Exec não.
+// Tx nula/não inicializada ou builder zero → Build retorna "", nil, sql.ErrTxDone.
+// Exec: ctx nulo → ErrInvalidQuery; Tx encerrada → ErrTxDone; depois erro de ctx/Build.
+// API e validações específicas de agregações: pendentes para o passo 9.
 ```
 
 ```go
@@ -998,7 +1020,7 @@ if _, err := tx.ExecFile(ctx, queryFiles,
 
 ## Gerar SQL sem executar
 
-No passo 7, a compilação é interna. `Build` público será disponibilizado com os builders nos passos 8 a 10.
+`SelectBuilder.Build` está disponível no passo 8; compilação dos nós permanece interna. Builders de escrita pertencem ao passo 10.
 
 ```go
 // Nós já disponíveis; não existe Compile/Build público para eles.
@@ -1035,33 +1057,39 @@ Fragmentos produzidos pelo mecanismo interno:
 // Sintaxe gerada sem ponto e vírgula final; SQL direto permanece intacto.
 ```
 
-Exemplo de uso planejado para o builder SELECT:
+Exemplo de `Build`, incluindo compilação após rollback:
 
 ```go
-sqlText, args, err := tx.Select(krios.Table("users")).
-    Columns(krios.Column("id"), krios.Column("name")).
-    Where(krios.Eq("name", "John")).
-    Build()
-if err != nil {
-    return err
+func buildUserQuery(ctx context.Context, db *krios.DB) (string, []any, error) {
+    tx, err := db.Begin(ctx, nil)
+    if err != nil {
+        return "", nil, err
+    }
+    defer tx.Rollback()
+    query := tx.Select(krios.Table("users")).
+        Columns(krios.Column("id"), krios.Column("name")).
+        Where(krios.Eq("name", "John"))
+    if err := tx.Rollback(); err != nil {
+        return "", nil, err
+    }
+    return query.Build() // usa o snapshot; query.Exec(ctx) retornaria sql.ErrTxDone
 }
-// sqlText contém placeholders; args contém "John" separado.
-// Não registrar valores de args nem DSN em logs.
+// args contém "John" separado; não registrar valores nem DSN em logs.
 ```
 
 ```sql
 -- PostgreSQL: argumento $1 = "John", enviado separadamente.
-SELECT "id", "name" FROM "users" WHERE "name" = $1
+SELECT "id", "name" FROM "users" WHERE ("name" = $1)
 ```
 
 ```sql
 -- MySQL: argumento ? = "John", enviado separadamente.
-SELECT `id`, `name` FROM `users` WHERE `name` = ?
+SELECT `id`, `name` FROM `users` WHERE (`name` = ?)
 ```
 
 ```sql
 -- SQLite: argumento ? = "John", enviado separadamente.
-SELECT "id", "name" FROM "users" WHERE "name" = ?
+SELECT "id", "name" FROM "users" WHERE ("name" = ?)
 ```
 
 ## Erros

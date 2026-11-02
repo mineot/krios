@@ -1,11 +1,6 @@
 package expression
 
-import (
-	"fmt"
-
-	"github.com/mineot/krios/internal/compiler"
-	"github.com/mineot/krios/internal/errs"
-)
+import "github.com/mineot/krios/internal/compiler"
 
 // WriteOrder validates structure before checking support for explicit NULL order.
 func WriteOrder(w *compiler.Writer, order OrderTerm) {
@@ -18,8 +13,8 @@ func WriteOrder(w *compiler.Writer, order OrderTerm) {
 		return
 	}
 
-	if order.nulls != nullsDefault && !w.Info().Capabilities.ExplicitNullOrder {
-		w.Fail(fmt.Errorf("%w: explicit NULL ordering", errs.ErrUnsupported))
+	if err := ValidateOrderCapabilities(order, w.Info()); err != nil {
+		w.Fail(err)
 		return
 	}
 

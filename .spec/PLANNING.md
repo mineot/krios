@@ -9,8 +9,8 @@
 - **5. Implementar SQL direto e arquivos:** `Query`, `Exec`, `QueryFile` e `ExecFile`, com parâmetros e `fs.FS`/`embed.FS`. Implementação concluída em 01/11/2026; decisões, resultados e validações em [005.md](005.md).
 - **6. Implementar expressões:** tabelas, colunas, `As`, valores, operadores, agrupamentos e validações da AST. Implementação concluída em 01/11/2026; decisões, resultados e validações em [006.md](006.md).
 - **7. Implementar dialetos e compilação:** placeholders, escape de identificadores, capacidades e base de `Build` nos três bancos. Compilação interna concluída em 01/11/2026; decisões e validações em [007.md](007.md). `Build` público reservado aos builders.
-- **8. Implementar SELECT básico:** projeção, aliases, schemas, `Distinct`, WHERE, ordenação, `Build` e execução com `sql.Rows`. Planejamento em [008.md](008.md), aguardando decisões e autorização para implementar.
-- **9. Implementar SELECT avançado:** JOINs, subconsultas, `Exists`, agregações, `GroupBy`, `Having`, paginação, contagem, `First` e `Last`.
+- **8. Implementar SELECT básico:** projeção, aliases, schemas, `Distinct`, WHERE, ordenação, `Build` e execução com `sql.Rows`. SELECT básico concluído em 01/11/2026; decisões e validações em [008.md](008.md). Discussão de agregações adiada para o passo 9.
+- **9. Implementar SELECT avançado:** JOINs, subconsultas, `Exists`, agregações, `GroupBy`, `Having`, paginação, contagem, `First` e `Last`. Retomar a definição da API de agregações e suas validações, adiada pelo utilizador; registro em [009.md](009.md).
 - **10. Implementar escritas:** INSERT, UPDATE, DELETE, proteção de WHERE, `sql.Result` e `Returning` conforme suporte.
 - **11. Implementar migrações:** manifesto, arquivos, versões, checksums, histórico, Up/Down, exclusividade, modo atômico e controle de estado `dirty` no modo não atômico.
 - **12. Reorganizar os arquivos da raiz:** aguardar as orientações do utilizador no momento de executar este passo. A estrutura e as alterações serão definidas e planejadas nessa etapa, antes da implementação.
@@ -110,5 +110,9 @@
 - **Escopo:** `Tx.Select`, builder imutável, projeção/DISTINCT, WHERE, ordenação, `Build` público e `Exec` com `sql.Rows`; detalhes em [008.md](008.md).
 - **Alterações previstas:** wrappers públicos, pacote `internal/selectquery`, integração interna com transação/AST/compilador, definições, manual e registros do plano, após aprovação.
 - **Validações:** formatação, pacotes/módulos, compilação, análise estática e revisão de imutabilidade, SQL/argumentos, erros, capacidades, ciclos de vida e propriedade de linhas; testes nas etapas próprias.
-- **Dúvidas pendentes:** `008-Q01` a `008-Q06`, em [QUESTIONS.md](QUESTIONS.md): organização, ciclo de vida de Build, chamadas vazias, composição SQL, erros/execução e agregações.
-- **Situação:** planejamento apresentado para revisão; nenhuma implementação do passo 8 iniciada. Passos 9 a 17 não iniciados.
+- **Dúvidas pendentes deste passo:** nenhuma; Q01–Q05 aprovadas. Agregações e questões Q06–Q09 adiadas para o passo 9, com respostas preservadas em `QUESTIONS.md` e registro em `009.md`.
+- **Situação:** passo 8 concluído em 01/11/2026, após ajuste de escopo e autorização explícita.
+- **Resultado:** builder imutável, modificadores do SELECT básico, Build público e Exec com linhas nativas implementados; snapshot e validações integrados; definições/manual atualizados.
+- **Validações realizadas:** formatação dos arquivos do passo, pacotes/módulos, `go build ./...`, `go vet ./...`, `go doc SelectBuilder`, revisão de código/documentação e `git diff --check`, com sucesso em Go 1.26.8; sem dependências externas.
+- **Limites:** sem testes/bancos reais. Checagem global de formatação mantém os espaços preexistentes dos dois `begin.go`. API e políticas específicas de agregação permanecem no passo 9, com questões/respostas preservadas.
+- **Continuidade:** passos 9 a 17 não iniciados; `009.md` registra apenas a discussão adiada. Planejamento e autorização próprios continuam necessários.

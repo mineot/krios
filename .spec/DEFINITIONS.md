@@ -155,7 +155,7 @@ Builders pertencem à transação que os criou. Seus métodos copiam as estrutur
 
 `Expr`, `Predicate`, `TableRef` e `OrderTerm` são structs opacas, com estado privado. `Expr` representa coluna, agregação ou parâmetro; `Predicate` representa condição/grupo. Não são intercambiáveis. Valores zero são inválidos; `Value(nil)` é um parâmetro válido. Nós independentes podem ser reutilizados; seu vínculo com a transação ocorre nos builders.
 
-Construtores não retornam erro nem executam SQL. Validadores internos examinam o estado final, retornam o primeiro erro estrutural na ordem dos operandos e preservam `ErrInvalidQuery`. Erros serão observados publicamente pelos futuros builders; não existe `Validate/Error/Build` público nos nós. Construção e validação estão disponíveis desde o passo 6, e compilação interna de fragmentos desde o passo 7. `Build` público será implementado junto aos builders nos passos 8 a 10; `Exists/NotExists` pertence ao passo 9.
+Construtores não retornam erro nem executam SQL. Validadores internos examinam o estado final, retornam o primeiro erro estrutural na ordem dos operandos e preservam `ErrInvalidQuery`. Erros estruturais são observados em `SelectBuilder.Build/Exec` e serão integrados aos demais builders; não existe `Validate/Error/Build` público nos nós. Construção e validação estão disponíveis desde o passo 6, e compilação interna de fragmentos desde o passo 7. `SelectBuilder.Build` está disponível no passo 8; os builders de escrita permanecem no passo 10; `Exists/NotExists` pertence ao passo 9.
 
 Modificadores retornam cópias: `Expr.As`, `TableRef.As/InSchema` e `OrderTerm.NullsFirst/NullsLast`. A última configuração prevalece. Alias/schema omitido é válido; explícito vazio é inválido, mas uma chamada posterior válida corrige essa configuração. `Column("").As("id")` continua inválido. `Value(v).As("alias")` é permitido em projeção.
 
@@ -307,6 +307,19 @@ query = query.Where(
     ),
 )
 ```
+
+O SELECT básico está disponível com `Tx.Select`, `Distinct`, `All`, `Columns`, `Where`, `OrderBy`, `Build` e `Exec`. A definição da API e das validações específicas de agregações foi adiada pelo utilizador para o passo 9; exemplos avançados abaixo permanecem sujeitos a essa revisão. Não foram adicionados atalhos nem restrições temporárias de agregação neste passo; construtores e compilação genérica existentes permanecem inalterados.
+
+- Builder de valor com estado privado; modificadores copiam slices alterados/recebidos, sem mudar versões anteriores.
+- `Select` captura metadados de uma transação originalmente inicializada. `Select/Build` continuam permitidos depois de commit, rollback, cancelamento de `Begin` ou fechamento posterior de `DB`; não executam SQL nem garantem que `Exec` seja possível.
+- Builder zero ou criado de `Tx` nula/não inicializada: `Build` retorna `"", nil, sql.ErrTxDone`. Modificadores não corrigem vínculo inválido.
+- `Distinct` é idempotente; `All` seleciona `*` e preserva DISTINCT e demais cláusulas, sem representar `SELECT ALL`.
+- `Columns()` e `Where()` explícitos vazios são inválidos; `OrderBy()` vazio não altera a consulta. Omissão de projeção usa `*`; omissão de WHERE não acrescenta condição.
+- Cada chamada `Where` gera um grupo AND; várias chamadas recebem um AND externo preservando os grupos. Condições e termos de ordenação não são deduplicados.
+- `All/Columns` substituem a projeção, permitindo corrigir uma projeção inválida; grupos WHERE ou termos de ordenação inválidos acumulados não possuem limpeza nesta etapa.
+- `Build` valida vínculo/snapshot, estrutura completa (tabela → projeção → WHERE → ordenação) e depois capacidades; usa writer novo, FROM obrigatório e parâmetros na ordem da projeção antes do WHERE. Erro retorna `"", nil, err`.
+- `Exec` valida contexto nulo (`ErrInvalidQuery`), transação inválida/encerrada (`sql.ErrTxDone`) e erro do contexto, depois compila e delega a `Query`, que revalida estado/contexto. Nenhum mutex permanece retido durante compilação, consulta ou uso de linhas. Disputas posteriores preservam o erro nativo observado.
+- `Exec` retorna `*sql.Rows` sem consumir/fechar automaticamente, finalizar transação ou repetir comandos. O chamador consome, verifica erros e fecha as linhas antes de commit/rollback.
 
 `All` e `Columns` de SELECT substituem a projeção anterior. `OrderBy` e `GroupBy` acumulam itens, respeitando a ordem das chamadas; `Having` acumula por AND. `Returning`, nos builders de escrita, também acumula colunas na ordem informada. `Schema` representa schema no PostgreSQL, database no MySQL e banco anexado no SQLite. Identificadores qualificados são escapados por componente; `*` é aceito somente nas posições apropriadas.
 

@@ -1,6 +1,6 @@
-# Dúvidas — passo 008
+# Dúvidas — agregações adiadas para o passo 009
 
-Revisar [008.md](008.md), responder abaixo e autorizar explicitamente a implementação. Preservar respostas até resolver todas as questões e registrá-las no plano, conforme [AGENTS.md](../AGENTS.md).
+O utilizador autorizou o passo 8 com Q01–Q05 e adiou agregações para o passo 9. Q06–Q09 serão retomadas nessa etapa; não bloqueiam o SELECT básico. Preservar as respostas e não limpar enquanto houver questões futuras pendentes, conforme [AGENTS.md](../AGENTS.md).
 
 ## 008-Q01 — Organização do builder
 
@@ -42,4 +42,50 @@ Revisar [008.md](008.md), responder abaixo e autorizar explicitamente a implemen
 - **Contexto:** `Count/Sum/...` já existem como expressões, embora GroupBy/Having estejam no passo 9.
 - **Pergunta:** aprova aceitar agregações válidas na projeção desde agora (por exemplo, `Columns(Count("*"))`) e rejeitá-las em WHERE com `ErrInvalidQuery`, inclusive em grupos aninhados? Não será inferido GROUP BY nem validada a existência de nomes ou toda combinação entre colunas/agregações; demais regras do banco serão verificadas na execução.
 - **Resposta do utilizador:** aprovado parcialmente, não gostei disso `Columns(Count("*"))`, eu acho que devemos simplificar, tipo `krios.Count("*")`, seria tipo um extensão de `Columns`, o mesmo vale para os outros `Max`, `Min` e etc...
-- **Situação:** respondido.
+- **Situação:** discussão adiada para o passo 9 por orientação do utilizador; resposta preservada.
+
+## 008-Q07 — Forma de acrescentar agregações à consulta
+
+- **Contexto:** `krios.Count("*")` já existe e retorna `Expr`, assim como `Max/Min/Sum/Avg`. A expressão isolada não identifica a consulta que deve recebê-la. Precisamos definir a composição desejada sem `Columns(...)`.
+- **Pergunta:** qual forma deseja adotar? Escolha uma alternativa ou escreva um exemplo completo do encadeamento desejado.
+
+```go
+// A — método de projeção para receber as expressões existentes.
+q := tx.Select(krios.Table("users")).
+    Aggregate(krios.Count("*").As("total"), krios.Max("age").As("max_age"))
+
+// B — métodos de agregação diretamente no builder.
+q := tx.Select(krios.Table("users")).Count("*").Max("age")
+```
+
+- **Impacto de B:** já está previsto `query.Count(ctx) (int64, error)` no passo 9 para executar a contagem dos resultados. Go não permite os dois métodos `Count` com assinaturas diferentes no mesmo tipo. Se preferir B, indique o novo nome da contagem executável (por exemplo, `CountRows(ctx)`) e como deseja informar aliases das agregações.
+- **Resposta do utilizador:**
+- **Situação:** adiada para o planejamento do passo 9; não bloqueia o passo 8.
+
+## 008-Q08 — Acumular ou substituir a projeção
+
+- **Contexto:** os novos métodos precisam interagir com a projeção padrão `*` e com `Columns/All`, já definidos como substituição da projeção.
+- **Pergunta:** aprova que os novos métodos acrescentem agregações à projeção explícita, removendo apenas o `*` implícito quando forem a primeira configuração? Chamadas posteriores a `Columns/All` substituiriam toda a projeção, inclusive agregações anteriores. Caso prefira substituição também nos novos métodos, informe.
+
+```go
+// Exemplos usando A, caso escolhida em Q07:
+tx.Select(krios.Table("users")).Aggregate(krios.Count("*"))
+// Projeção: COUNT(*)
+
+tx.Select(krios.Table("users")).Columns(krios.Column("active")).
+    Aggregate(krios.Count("*"))
+// Projeção: active, COUNT(*) — validade da combinação depende das regras do banco.
+
+tx.Select(krios.Table("users")).Aggregate(krios.Count("*")).All()
+// Projeção: *
+```
+
+- **Resposta do utilizador:**
+- **Situação:** adiada para o planejamento do passo 9; não bloqueia o passo 8.
+
+## 008-Q09 — Compatibilidade e validação de WHERE
+
+- **Contexto:** `Columns(...Expr)` foi definido para aceitar expressões, incluindo agregações, e isso aparece nos exemplos anteriores. Sua resposta pode indicar preferência por um atalho ou intenção de restringir essa API.
+- **Pergunta:** a nova forma será um atalho, mantendo `Columns(krios.Count("*"))` válido, ou deseja proibir agregações em `Columns`? Confirme também se permanece aprovada a rejeição de agregações em WHERE com `ErrInvalidQuery`, inclusive em grupos aninhados, conforme a outra parte de Q06.
+- **Resposta do utilizador:**
+- **Situação:** adiada para o planejamento do passo 9; não bloqueia o passo 8.
