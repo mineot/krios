@@ -9,7 +9,7 @@
 - **5. Implementar SQL direto e arquivos:** `Query`, `Exec`, `QueryFile` e `ExecFile`, com parâmetros e `fs.FS`/`embed.FS`. Implementação concluída em 01/11/2026; decisões, resultados e validações em [005.md](005.md).
 - **6. Implementar expressões:** tabelas, colunas, `As`, valores, operadores, agrupamentos e validações da AST. Implementação concluída em 01/11/2026; decisões, resultados e validações em [006.md](006.md).
 - **7. Implementar dialetos e compilação:** placeholders, escape de identificadores, capacidades e base de `Build` nos três bancos. Compilação interna concluída em 01/11/2026; decisões e validações em [007.md](007.md). `Build` público reservado aos builders.
-- **8. Implementar SELECT básico:** projeção, aliases, schemas, `Distinct`, WHERE, ordenação e execução com `sql.Rows`.
+- **8. Implementar SELECT básico:** projeção, aliases, schemas, `Distinct`, WHERE, ordenação, `Build` e execução com `sql.Rows`. Planejamento em [008.md](008.md), aguardando decisões e autorização para implementar.
 - **9. Implementar SELECT avançado:** JOINs, subconsultas, `Exists`, agregações, `GroupBy`, `Having`, paginação, contagem, `First` e `Last`.
 - **10. Implementar escritas:** INSERT, UPDATE, DELETE, proteção de WHERE, `sql.Result` e `Returning` conforme suporte.
 - **11. Implementar migrações:** manifesto, arquivos, versões, checksums, histórico, Up/Down, exclusividade, modo atômico e controle de estado `dirty` no modo não atômico.
@@ -103,4 +103,12 @@
 - **Validações realizadas:** formatação dos arquivos do passo, pacotes/módulos, `go build ./...`, `go vet ./...`, inspeção da API por `go doc`, revisão de código/documentação e `git diff --check`, com sucesso em Go 1.26.8; sem dependências externas.
 - **Observação de formatação:** permanecem os espaços preexistentes de `begin.go` e `internal/connection/begin.go` apontados pela checagem global; arquivos preservados.
 - **Limites:** sem testes ou execução em bancos. Compilação disponível somente internamente; `Build` público será entregue com os builders nos passos 8 a 10. Integração e suíte unitária permanecem nos passos 13 e 15.
-- **Continuidade:** passos 8 a 17 não iniciados; dependem de planejamento e autorização próprios.
+- **Continuidade:** passo 8 registrado na seção seguinte; demais passos dependem de planejamento e autorização próprios.
+
+## Planejamento do passo 8
+
+- **Escopo:** `Tx.Select`, builder imutável, projeção/DISTINCT, WHERE, ordenação, `Build` público e `Exec` com `sql.Rows`; detalhes em [008.md](008.md).
+- **Alterações previstas:** wrappers públicos, pacote `internal/selectquery`, integração interna com transação/AST/compilador, definições, manual e registros do plano, após aprovação.
+- **Validações:** formatação, pacotes/módulos, compilação, análise estática e revisão de imutabilidade, SQL/argumentos, erros, capacidades, ciclos de vida e propriedade de linhas; testes nas etapas próprias.
+- **Dúvidas pendentes:** `008-Q01` a `008-Q06`, em [QUESTIONS.md](QUESTIONS.md): organização, ciclo de vida de Build, chamadas vazias, composição SQL, erros/execução e agregações.
+- **Situação:** planejamento apresentado para revisão; nenhuma implementação do passo 8 iniciada. Passos 9 a 17 não iniciados.
