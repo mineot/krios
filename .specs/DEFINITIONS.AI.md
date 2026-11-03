@@ -614,9 +614,21 @@ O utilizador deve informar o dialeto de cada conjunto de migrations. Essa identi
 
 Nos exemplos desta seção, `sqliteConfig` e `sqliteClient` são os definidos em Identificação do Dialeto, com um pool SQLite fornecido pela aplicação. O construtor de conjuntos mantém o dialeto como metadado; o pool padrão, o dialeto de execução e o contexto ficam em `Config`. A eventual transação é fornecida diretamente a `RunMigrationsTx`.
 
-**Definição aprovada — R47:** `Append` e `AppendFiles` devem receber explicitamente a versão numérica da migration. Nos exemplos, a versão é o primeiro argumento, seguida do nome: `create_users` é a versão 1 e `alter_users` é a versão 2. O par de scripts de subida e descida pertence à mesma versão. A versão não é inferida da posição na lista nem do nome dos arquivos.
+**Definição aprovada — R47–R48:** `Append` e `AppendFiles` devem receber explicitamente a versão numérica e a ordem de execução da migration. Uma mesma versão pode agrupar várias migrations. Cada cadastro representa um par de scripts de subida e descida, associado à mesma versão e ordem. Esses valores não são inferidos da posição na lista nem do nome dos arquivos.
 
-O cadastro inline fica no formato `Append(version, name, up, down)`; o cadastro por arquivos, `AppendFiles(version, name, files, upFile, downFile)`. A representação numérica em Go, a validação e a forma de retornar erros de cadastro ainda precisam ser definidas. Os exemplos representam a API documentada, não uma implementação já disponível.
+O cadastro inline fica no formato `Append(version, order, name, up, down)`; o cadastro por arquivos, `AppendFiles(version, order, name, files, upFile, downFile)`. A versão é o primeiro argumento, a ordem é o segundo e o nome é o terceiro. Os tipos numéricos em Go, os limites dos valores e a forma de retornar erros de cadastro ainda precisam ser definidos. Os exemplos representam a API documentada, não uma implementação já disponível.
+
+**Regras aprovadas de ordenação:**
+
+- No UP, executar as versões em ordem crescente e, dentro de cada versão, as migrations em ordem crescente de `order`.
+- No DOWN, executar as versões em ordem decrescente e, dentro de cada versão, as migrations em ordem decrescente de `order`.
+- A versão tem prioridade sobre a ordem: ordenar primeiro por `version` e depois por `order`. A posição das chamadas de cadastro não determina a sequência de execução.
+- A ordem pode se repetir em versões diferentes. Dentro da mesma versão e do mesmo histórico, ordens duplicadas devem gerar erro antes da execução de qualquer script do plano, inclusive quando vêm de listas distintas que compõem esse histórico. A validação deve considerar em conjunto os cadastros inline e por arquivos.
+- São permitidos intervalos entre ordens, como `10`, `20` e `30`; não é necessário usar números consecutivos. Essa regra não define a política para lacunas entre versões.
+- Executar DOWN somente para migrations efetivamente aplicadas e pertencentes às versões que precisam ser desfeitas para atingir o alvo. As migrations da versão alvo permanecem aplicadas.
+- Não alterar a ordem nem renumerar a versão de migrations já aplicadas.
+
+Nos exemplos abaixo, `create_users` e `create_roles` pertencem à versão 1, com ordens 10 e 20. `alter_users` pertence à versão 2, com ordem 10. A repetição da ordem 10 é válida porque ocorre em versões diferentes.
 
 ```go
 // Este exemplo contém SQL específico de SQLite.
@@ -625,6 +637,7 @@ migrations := krios.NewMigrations(sqliteConfig.Dialect)
 
 migrations.Append(
     1,
+    10,
     "create_users",
     `
         CREATE TABLE users (
@@ -638,9 +651,24 @@ migrations.Append(
     `,
 )
 
+// Outra migration da mesma versão, executada depois de create_users.
+migrations.Append(
+    1,
+    20,
+    "create_roles",
+    `
+        CREATE TABLE roles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            name TEXT NOT NULL
+        )
+    `,
+    "DROP TABLE roles",
+)
+
 // Exemplo de alteração posterior: adicionar um índice à tabela users.
 migrations.Append(
     2,
+    10,
     "alter_users",
     "CREATE INDEX idx_users_email ON users(email)",
     "DROP INDEX idx_users_email",
@@ -663,9 +691,10 @@ var migrationFiles embed.FS
 migrations := krios.NewMigrations(sqliteConfig.Dialect)
 
 // A fonte de arquivos proposta continua sendo fs.FS.
-// Cada par de arquivos é registrado com sua versão explícita.
+// Cada par de arquivos é registrado com versão e ordem explícitas.
 migrations.AppendFiles(
     1,
+    10,
     "create_users",
     migrationFiles,
     "migrations/sqlite/create_users.up.sql",
@@ -673,7 +702,17 @@ migrations.AppendFiles(
 )
 
 migrations.AppendFiles(
+    1,
+    20,
+    "create_roles",
+    migrationFiles,
+    "migrations/sqlite/create_roles.up.sql",
+    "migrations/sqlite/create_roles.down.sql",
+)
+
+migrations.AppendFiles(
     2,
+    10,
     "alter_users",
     migrationFiles,
     "migrations/sqlite/alter_users.up.sql",
@@ -681,16 +720,17 @@ migrations.AppendFiles(
 )
 ```
 
-> **Correções e proposta — R04 e R56:** Go não possui argumentos nomeados em chamadas nem sobrecarga de funções por assinatura. Por isso, foram removidos `up:`, `down:` e `EmdedFiles:` das chamadas. `Append` e `AppendFiles` distinguem as duas formas de cadastro, ambas com versão explícita. A proposta de receber a fonte de arquivos como `fs.FS` permanece; `embed.FS` atende a essa interface. O consumidor embute os arquivos; o Krios os lê conforme o contrato aprovado.
+> **Correções e proposta — R04 e R56:** Go não possui argumentos nomeados em chamadas nem sobrecarga de funções por assinatura. Por isso, foram removidos `up:`, `down:` e `EmdedFiles:` das chamadas. `Append` e `AppendFiles` distinguem as duas formas de cadastro, ambas com versão e ordem explícitas. A proposta de receber a fonte de arquivos como `fs.FS` permanece; `embed.FS` atende a essa interface. O consumidor embute os arquivos; o Krios os lê conforme o contrato aprovado.
 
 Então, chamar no início da aplicação:
 
 ```go
 // Execução normal: contexto e pool configurados no cliente.
-// Proposta preservada: interpretar o número como versão alvo.
+// O número informado representa a versão alvo.
 // 1 é o estado desejado; a versão já aplicada deve ser lida do banco.
 // sqliteClient recebe pool, dialeto e contexto através de sqliteConfig.
-// As versões 1 e 2 foram informadas explicitamente no cadastro acima.
+// Versão 1: create_users (ordem 10) e create_roles (ordem 20).
+// Versão 2: alter_users (ordem 10).
 err := sqliteClient.RunMigrations(1, migrations)
 
 if err != nil {
@@ -698,7 +738,9 @@ if err != nil {
 }
 ```
 
-Pela interpretação proposta de versão alvo, em um banco sem migrations aplicadas, o alvo 1 executa apenas `create_users`; o alvo 2 executa primeiro `create_users` e depois `alter_users`. Se a versão 1 já estiver aplicada, avançar ao alvo 2 executa apenas `alter_users`. A versão informada em cada cadastro identifica a migration; o número passado a `RunMigrations` indica o estado desejado do banco.
+Em um banco sem migrations aplicadas, o alvo 1 executa `create_users` e depois `create_roles`; o alvo 2 executa `create_users`, `create_roles` e depois `alter_users`. Se a versão 1 já estiver integralmente aplicada, avançar ao alvo 2 executa apenas `alter_users`. Voltar da versão 2 para a versão 1 executa somente o DOWN de `alter_users`, preservando as duas migrations da versão 1, conforme a política de autorização de downgrade ainda pendente.
+
+Se uma descida incluir também a versão 1, dentro dela o DOWN de `create_roles` deve ocorrer antes do DOWN de `create_users`, desde que essas migrations tenham sido aplicadas. A versão agrupa migrations, a ordem define sua sequência dentro do grupo e o número passado a `RunMigrations` indica a versão alvo do banco. A ordenação não garante, por si só, atomicidade nem recuperação automática em caso de falha parcial.
 
 Alternativamente, para um plano de migrations compatível com execução transacional, a aplicação cria e fornece a transação. Este exemplo substitui a chamada normal anterior:
 
@@ -718,7 +760,7 @@ if err := sqliteClient.RunMigrationsTx(tx, 1, migrations); err != nil {
 return tx.Commit()
 ```
 
-Deve ser possível fornecer várias listas, conforme a intenção original. **Decisão pendente — R48:** definir se elas representam partes de uma sequência, módulos independentes ou alternativas para dialetos diferentes. A assinatura variádica, seleção, ordenação e resolução de conflitos dependem dessa decisão; o `...` isolado do exemplo original não era sintaxe Go válida.
+Deve ser possível fornecer várias listas, conforme a intenção original. **Decisão pendente — R48:** definir se elas representam partes de um mesmo histórico, módulos independentes ou alternativas para dialetos diferentes. A assinatura variádica, a seleção de listas e a separação dos históricos dependem dessa decisão; o `...` isolado do exemplo original não era sintaxe Go válida. Para listas selecionadas que compõem o mesmo histórico, já se aplicam a ordenação por versão e ordem e a rejeição de ordens duplicadas dentro de uma versão.
 
 O Krios deve gerenciar uma tabela chamada `migrations`, consultar o histórico aplicado e executar os passos necessários para atingir a versão alvo, respeitando as políticas aprovadas de subida, descida e recuperação.
 
@@ -730,7 +772,8 @@ O Krios deve gerenciar uma tabela chamada `migrations`, consultar o histórico a
 
 **Anotações necessárias para fechar o contrato das migrations:**
 
-- **Identidade e ordem — R47–R48:** a versão numérica é informada explicitamente em `Append` e `AppendFiles` e identifica o par de scripts de subida/descida. Não renumerar migrations já aplicadas ao inserir itens na lista. Definir o tipo numérico, versões e nomes duplicados, lacunas, versão zero, alvo inexistente e regras de ordenação para cadastros fora de ordem e descidas. Definir dependências, unicidade de versões e namespaces se houver vários conjuntos.
+- **Identidade e ordem — R47–R48:** versão e ordem são explícitas em `Append` e `AppendFiles`; várias migrations podem compartilhar uma versão. A ordenação crescente no UP, decrescente no DOWN e a unicidade da ordem dentro de cada versão e histórico estão definidas acima. Permanecem pendentes os tipos e limites numéricos, nomes duplicados, lacunas entre versões, versão zero, alvo inexistente, identificação dos registros no histórico, dependências e namespaces entre conjuntos.
+- **Novos scripts em versões já aplicadas — R47 e R53:** definir a política para adicionar uma migration a uma versão já aplicada, inclusive quando houver versões posteriores aplicadas. Permitir várias migrations por versão e intervalos entre ordens não autoriza automaticamente essa inclusão tardia. A implementação não deve presumir que basta comparar a maior versão do banco para identificar scripts novos nessa situação.
 - **Descida — R49:** aprovar a política de downgrade, configuração/autorização necessária, migrations irreversíveis e comportamento quando o banco estiver em versão superior à da aplicação. A intenção original de suportar `down` permanece, mas sua execução automática precisa desse contrato.
 - **Concorrência — R50:** impedir que várias instâncias apliquem simultaneamente a mesma migration. Definir coordenação pelo banco ou garantia operacional de executor único, cobrindo leitura, decisão, execução e registro. Mutex local não coordena processos. Prever timeout, perda de conexão e afinidade de sessão quando houver lock de sessão.
 - **Atomicidade — R51:** não prometer rollback transacional uniforme para DDL. MySQL possui comandos com commit implícito; PostgreSQL possui operações com restrições próprias, como `CREATE INDEX CONCURRENTLY`. Definir a política por banco e por tipo de migration, incluindo operações não transacionais.
@@ -738,7 +781,7 @@ O Krios deve gerenciar uma tabela chamada `migrations`, consultar o histórico a
 - **Integridade — R53:** avaliar checksum e imutabilidade dos scripts já aplicados. Definir reação a conteúdo alterado, histórico desconhecido e arquivos removidos. Checksum detecta mudança de script, não toda alteração manual de schema.
 - **Tabela de controle — R54:** aprovar colunas, chaves, schema, identificação de conjunto e evolução da tabela `migrations`. Definir como detectar colisão com tabela preexistente da aplicação; não assumir propriedade apenas pelo nome.
 - **Múltiplos comandos — R55:** definir suporte a um comando, lista estruturada ou script completo por migration. Não separar SQL apenas por ponto e vírgula, pois strings e corpos de funções/triggers podem contê-lo. Compatibilidade e opções do driver precisam ser documentadas; não ativar opções no executor do consumidor silenciosamente.
-- **Arquivos — R56:** definir caminhos, leitura, validação antecipada, arquivos ausentes, prioridade entre conteúdo inline e arquivo e retorno de erros de cadastro. A versão vem do argumento de `AppendFiles`, não da ordem alfabética ou de um prefixo no nome dos arquivos.
+- **Arquivos — R56:** definir caminhos, leitura, validação antecipada, arquivos ausentes, prioridade entre conteúdo inline e arquivo e retorno de erros de cadastro. Versão e ordem vêm dos argumentos de `AppendFiles`, não da ordem alfabética ou de um prefixo no nome dos arquivos.
 - **Contexto, permissões e diagnóstico — R10 e R57:** propagar `Config.Context` a todas as operações de banco realizadas durante a execução das migrations, documentar permissões necessárias e identificar nome/versão, direção e etapa em falhas, preservando o erro original. Definir cancelamento, interrupção do processo e inspeção prévia do que será executado. Logs não devem expor credenciais ou valores sensíveis por padrão.
 
 > **Anotação final — R64:** esta versão corrige os exemplos e torna explícitas as limitações e escolhas antes implícitas. As propostas e decisões pendentes precisam ser revisadas pelo desenvolvedor antes de se tornarem tarefas de implementação. O planejamento e as perguntas formais continuarão em `PLANNING.md`, nos arquivos numerados e em `QUESTIONS.md`, conforme as regras do projeto.
