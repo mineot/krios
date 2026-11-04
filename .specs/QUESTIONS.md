@@ -7,7 +7,7 @@ Estado: perguntas abertas para o desenvolvedor. Nenhuma decisão de API ou imple
 ### Configuração e execução
 
 1. **API de configuração (linhas 15–38):** o campo `timeout` deve ser exportado como `Timeout`? Qual será a assinatura de `New` para retornar erros de configuração e de conexão?
-   
+
 - Resposta: Timeout foi ajustado, e foi corrigido sobre o erro, que deve retornar e ser tratado pelo utilizador.
 
 2. **Conexão (linhas 5–12):** a validação será feita na criação, antes de cada execução ou em outro momento? Quem será responsável por fechar o `*sql.DB` recebido? Quais drivers e versões mínimas de Go e dos bancos serão suportados?
@@ -16,15 +16,65 @@ Estado: perguntas abertas para o desenvolvedor. Nenhuma decisão de API ou imple
 
 3. **Contexto e timeout (linhas 19–20):** haverá contexto por operação? Como tratar timeout zero ou negativo, contexto cancelado e prazos já existentes? O timeout cobre ping, contagem da paginação, leitura de linhas e migrações? Como manter o contexto válido enquanto o consumidor lê `*sql.Rows`?
 
-- Resposta: FIXME quero sugestão da IA
+- Resposta: A sugestão da IA foi aprovado.
+
+**Resposta sugerida pela IA — pendente de aprovação:**
+
+- Usar `Config.Context` nas operações do cliente, sem contexto adicional nos argumentos de `Exec()` e `ExecTx(tx)`.
+- `Timeout` negativo gera erro de configuração em `New`; zero usa somente o prazo/cancelamento de `Config.Context`; positivo cria um contexto derivado por operação. Havendo prazo anterior no contexto original, prevalece o que vencer primeiro.
+- O timeout começa na execução, não na criação do builder. Cobre o ping em `New`, toda a execução de escritas e a chamada completa de migração, sem reiniciar a contagem por comando. Em SELECT paginado, contagem e consulta compartilham o mesmo prazo, que também abrange a leitura das linhas.
+- Contexto cancelado impede iniciar novos comandos e retorna erro. O cancelamento de `Config.Context` afeta também as próximas operações do mesmo cliente. Propagar o contexto às chamadas de `database/sql`.
+- Ao retornar `*sql.Rows`, não cancelar o contexto derivado na saída de `Exec`: ele precisa continuar válido enquanto o consumidor lê as linhas. Em falha anterior à entrega das linhas, cancelar imediatamente; nas operações sem linhas, liberar o contexto derivado ao término.
+- Como `*sql.Rows` é retornado diretamente, o Krios não intercepta `Rows.Close()` para liberar seu timer. A proposta mantém `Timeout` automático e aceita que, em sucesso, o timer possa permanecer até o prazo vencer, mesmo após o fechamento das linhas. Documentar esse comportamento.
+- Alternativa apresentada, não escolhida: a aplicação controlar integralmente o prazo pelo contexto e chamar `cancel()` após consumir as linhas, permitindo dispensar `Timeout` na configuração. A recomendação acima preserva a configuração atual, mas ainda depende de aprovação.
+
+Referência: [Cancelamento de operações no Go](https://go.dev/doc/database/cancel-operations).
 
 4. **Erros e retornos (linhas 10–12, 188–205 e 283–285):** quais serão as assinaturas completas, incluindo ponteiros, de `Exec`, `ExecTx`, `Migrate` e `MigrateTx`? Qual valor de `Page` será retornado sem paginação? Os erros do banco serão preservados para `errors.Is`/`errors.As`? O consumidor ficará responsável por `Rows.Close`, `Rows.Scan` e `Rows.Err`?
 
-- Resposta: FIXME quero sugestão da IA. Porem o valor de page quando não houver paginação deve ser nil, e sim, os erros do banco devem ser preservados e retornados para o utilizados, e sim, o consumidor ficará responsavel por tratar tudo referente ao `Rows`
+- Resposta: Porem o valor de page quando não houver paginação deve ser nil, e sim, os erros do banco devem ser preservados e retornados para o utilizados, e sim, o consumidor ficará responsavel por tratar tudo referente ao `Rows`. A sugestão da IA foi aprovada
+
+**Resposta sugerida pela IA — complemento pendente de aprovação:**
+
+As propostas abaixo preservam as respostas do desenvolvedor sobre `page == nil`, preservação dos erros e responsabilidade do consumidor por `Rows`. Os nomes dos tipos dos builders ainda poderão ser definidos; `Client` é o nome proposto para o tipo retornado por `New`.
+
+| Operação                | Assinatura sugerida                            |
+| ----------------------- | ---------------------------------------------- |
+| Criação                 | `New(config Config) (*Client, error)`          |
+| SELECT                  | `Exec() (*sql.Rows, *Page, error)`             |
+| SELECT em transação     | `ExecTx(tx *sql.Tx) (*sql.Rows, *Page, error)` |
+| INSERT, UPDATE e DELETE | `Exec() (sql.Result, error)`                   |
+| Escritas em transação   | `ExecTx(tx *sql.Tx) (sql.Result, error)`       |
+| Migração                | `Migrate() error`                              |
+| Migração em transação   | `MigrateTx(tx *sql.Tx) error`                  |
+
+- Falha em `New`: retornar cliente `nil` e erro.
+- SELECT bem-sucedido sem paginação: `(rows, nil, nil)`; com paginação: `(rows, page, nil)`.
+- Falha de validação, contagem ou abertura do SELECT: `(nil, nil, err)`, liberando recursos intermediários.
+- SELECT sem registros: retornar `Rows` normalmente; o primeiro `Next()` retorna `false`. O consumidor verifica `Rows.Err()` para distinguir fim dos resultados de falha na leitura.
+- Escrita com erro: `(nil, err)`.
+- Acrescentar contexto aos erros, quando útil, usando `%w`, por exemplo `fmt.Errorf("krios: executar select: %w", err)`, preservando a causa para `errors.Is` e `errors.As`.
+- Falhas posteriores à entrega das linhas são verificadas pelo consumidor em `Scan` e `Rows.Err()`; não alteram retroativamente o erro retornado por `Exec`. O consumidor também fecha `Rows`.
+
+Referência: [API de database/sql](https://pkg.go.dev/database/sql).
 
 5. **Transações (ocorrências de `ExecTx` e `MigrateTx`):** o argumento será `*sql.Tx`? Quem executará commit e rollback? Como tratar transação nula, encerrada ou incompatível com o cliente? Toda operação auxiliar de paginação ou migração utilizará a mesma transação?
 
-- Resposta: o usuario deve abrir um contexto, sql.Tx e ser responsavel por fechar e tratar o commit. FIXME demais problemas aceito sugestão da IA
+- Resposta: o usuario deve abrir um contexto, sql.Tx e ser responsavel por fechar e tratar o commit. Aprovado a sugestão da IA.
+
+**Resposta sugerida pela IA — complemento pendente de aprovação:**
+
+- A aplicação cria a transação com `db.BeginTx(...)` e fica responsável por `Commit` ou `Rollback`, incluindo o tratamento de seus erros. O argumento recebido por `ExecTx` e `MigrateTx` é `*sql.Tx`.
+- O Krios não confirma nem desfaz a transação recebida. Sucesso no método indica que a operação terminou, mas ainda depende do commit da aplicação.
+- Usar exclusivamente a transação fornecida, inclusive para contagem da paginação, consulta principal e leitura/escrita do histórico de migrações. Não usar o pool como alternativa em caso de erro.
+- Não armazenar a transação no cliente para chamadas futuras. Chamadas sem transação continuam usando o pool configurado.
+- `tx == nil`: retornar erro de argumento antes de executar SQL.
+- Transação encerrada: propagar o erro retornado por `database/sql`, normalmente `sql.ErrTxDone`, preservando sua identificação.
+- Contexto da operação cancelado: retornar o erro e não iniciar novos comandos.
+- A aplicação deve fornecer uma transação compatível com o banco e o dialeto do cliente. `*sql.Tx` não expõe publicamente seu pool de origem; não prometer validação geral de que pertence a `Config.Db`.
+- Manter válido o contexto passado a `BeginTx` até encerrar a transação. Seu cancelamento pode provocar rollback pelo próprio `database/sql`, independentemente do contexto usado em uma consulta. Prazo/cancelamento de uma operação e ciclo de vida da transação são responsabilidades distintas.
+
+Referências: [Execução de transações no Go](https://go.dev/doc/database/execute-transactions) e [API de sql.Tx](https://pkg.go.dev/database/sql#Tx).
 
 ### Critérios e construção das consultas
 
