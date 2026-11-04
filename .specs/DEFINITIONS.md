@@ -28,14 +28,16 @@ krios.DialectMySQL      = "mysql"
 
 ```go
 // Example
-client := krios.New(Config{
-    Db:         db,
-    DbVersion:  1,
-    Dialect:    krios.DialectSQLite3, // example
-    timeout:    5 * time.Second,
-    Context:    context.Background(),
-    Migrations: nil,
-})
+client, err := krios.New(
+    krios.Config{
+        Db:         db,
+        DbVersion:  1,
+        Dialect:    krios.DialectSQLite3, // example
+        timeout:    5 * time.Second,
+        Context:    context.Background(),
+        Migrations: nil,
+    },
+)
 ```
 
 ## Critérios
