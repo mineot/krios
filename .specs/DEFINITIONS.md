@@ -135,7 +135,8 @@ Os resultados de SELECT ainda precisam ser consumidos e fechados pela aplicaçã
 - Rejeitar `Connection == nil`, `Context == nil` e dialeto ausente/inválido. Não escolher contexto padrão implicitamente. A aplicação pode fornecer `Background`, contexto cancelável ou contexto com prazo.
 - Copiar a struct `Config` na criação, sem setters posteriores. A cópia mantém as referências do pool e do contexto: alterar a struct original não muda o cliente; fechar o pool ou cancelar o contexto continua afetando suas operações.
 - Não manter configuração global. Cada builder usa a configuração da sua instância. Validações locais precedem acesso ao banco; uma chamada transacional nunca consulta o pool para validar sua execução.
-- **Detalhamento pendente:** definir se haverá verificação de comunicação/detecção de versão na criação e como verificar compatibilidade real entre dialeto e banco. Validar campos não comprova disponibilidade do banco; nenhuma política de `PingContext` automático foi aprovada.
+- Depois de validar os campos, `New` executa `Connection.PingContext(Config.Context)`. Falha de comunicação, cancelamento ou prazo excedido retorna cliente nulo e erro, preservando a causa. O Krios não fecha o pool fornecido quando a criação falha. O ping verifica a comunicação naquele momento, sem garantir disponibilidade futura.
+- Não consultar nem detectar automaticamente a versão do banco. A aplicação responde pela compatibilidade entre banco, versão e dialeto informado; o ping não certifica essa compatibilidade. Incompatibilidades observadas pelo driver/banco são retornadas ao utilizador.
 
 
 ### Identificação do Dialeto
@@ -184,7 +185,7 @@ if err != nil {
 }
 ```
 
-> **Definição aprovada:** dialeto ausente/inválido gera erro de configuração em `New`. Recursos sem suporte geram erro de incompatibilidade, sem emulação ou mudança silenciosa de semântica. O dialeto é fornecido pelo utilizador e não muda ao receber uma transação. As capacidades dependem também da versão do banco; a estratégia de verificação dessa versão ainda exige detalhamento.
+> **Definição aprovada:** dialeto ausente/inválido gera erro de configuração em `New`. Recursos sem suporte geram erro de incompatibilidade, sem emulação ou mudança silenciosa de semântica. O dialeto é fornecido pelo utilizador e não muda ao receber uma transação. Recursos conhecidos como ausentes no dialeto são rejeitados pelo Krios. Não detectar a versão do banco: incompatibilidades específicas de versão podem surgir na execução e seus erros são propagados, sem emulação.
 
 ### Query Builder
 
@@ -424,9 +425,22 @@ Catálogo dos demais operadores, como alternativas independentes. Não adicionar
 >
 > **Definições aprovadas:** listas vazias ou nulas em `IN`/`NOT IN` geram erro, sem gerar condição constante nem remover filtros. Valores continuam parametrizados; `[]byte` representa valor binário e não deve ser confundido automaticamente com uma lista. As referências de origem e as subconsultas obedecem às regras de escopo acima.
 >
-> **Definição aprovada:** `Eq("campo", nil)` e demais comparações de valor com nulo retornam erro; exigir `IsNull`/`IsNotNull`, sem normalização silenciosa. Nulos permanecem aceitos como valores de escrita.
->
-> **Detalhamento pendente:** fechar os tipos de coleções aceitos por `IN`/`NOT IN`, sua expansão e o tratamento de elementos nulos dentro de listas não vazias. Não confundir lista nula com elemento nulo nem inferir que a rejeição de listas vazias resolve essas escolhas. Não remover elementos nulos silenciosamente.
+> **Definição aprovada:** `Eq("campo", nil)` e demais comparações escalares de valor com nulo retornam erro; exigir `IsNull`/`IsNotNull`, sem normalização silenciosa. Nulos permanecem aceitos em escritas e, como exceção específica, dentro de listas não vazias de `IN`/`NOT IN`.
+
+**Coleções em `IN` e `NOT IN`:**
+
+- Aceitar slices e arrays como listas, expandindo cada elemento em um parâmetro, na ordem recebida. Rejeitar listas vazias/nulas; não transformar essas entradas em condições constantes nem remover filtros.
+- Aceitar elementos `nil` dentro de listas não vazias e enviá-los como SQL NULL. Preservar a semântica de `IN`/`NOT IN` do banco, sem remover NULLs nem converter a expressão em `IsNull`/`IsNotNull` automaticamente.
+- A aplicação responde pela compatibilidade dos valores com a coluna. Não exigir listas homogêneas por iniciativa do Krios; propagar erros de conversão de `database/sql`, do driver ou do banco. Aceitar `any` não garante que qualquer objeto Go seja representável como parâmetro.
+- `[]byte` continua sendo valor binário, não uma lista a expandir automaticamente. Para uma lista de valores binários, usar uma coleção de elementos binários, como `[][]byte`.
+
+```go
+// Exemplos alternativos; cada elemento vira um parâmetro.
+// criteriaFrom.Append(krios.In("id", []int{1, 2}))
+// criteriaFrom.Append(krios.In("id", [2]int{1, 2}))
+// criteriaFrom.Append(krios.NotIn("id", []any{1, nil}))
+// No último caso, preservar os argumentos [1, nil] e a semântica SQL de NULL.
+```
 
 #### Operadores Lógicos
 
@@ -603,7 +617,8 @@ rows, page, err := selectQuery.NextPage() // Usa o pool.
 - Refazer a contagem em cada chamada, pois os dados podem mudar; uma revisão de builder não detecta mudanças externas no banco. As regras de consistência entre contagem e seleção continuam aplicáveis.
 - `NextPage()`/`PreviousPage()` usam o pool. `NextPageTx(tx)`/`PreviousPageTx(tx)` usam somente a transação fornecida nessa chamada, sem reter ou reutilizar implicitamente a anterior. Todas usam `Config.Context`.
 - A aplicação deve fechar as linhas anteriores antes de navegar. Navegações independentes em goroutines usam clones; mudanças concorrentes no builder não podem ser confundidas com a revisão que terminou de executar.
-- **Detalhamento pendente:** formalizar a cópia do estado de navegação em `Clone` e o comportamento nos limites quando a nova contagem divergir da anterior. Preservar as regras aprovadas de não ajustar uma página solicitada silenciosamente e de não avançar a posição em falha.
+- `Clone()` preserva a consulta, a página configurada e o tamanho, mas não herda a condição de execução concluída da origem. O clone precisa de seu próprio `Exec`/`ExecTx` paginado antes de usar os auxiliares de navegação. Não copiar resultados abertos, transações ou metadados de contagem como se fossem uma execução do clone.
+- A aplicação responde por atualizar a consulta quando necessário. Alterações nos dados podem produzir páginas vazias sem erro SQL. Manter a página solicitada, sem ajustar automaticamente para a nova última página; somente erros efetivamente ocorridos são propagados. A nova contagem atualiza os metadados, respeitando as garantias de consistência já descritas.
 
 #### Insert
 
@@ -689,11 +704,15 @@ Nos exemplos desta seção, `sqliteConfig` e `sqliteClient` são os definidos em
 
 **Definição aprovada:** `Append` e `AppendFiles` devem receber explicitamente a versão numérica e a ordem de execução da migration. Uma mesma versão pode agrupar várias migrations. Cada cadastro representa um par de scripts de subida e descida, associado à mesma versão e ordem. Esses valores não são inferidos da posição na lista nem do nome dos arquivos.
 
-O cadastro inline é `Append(version, order, name, up, down) error`; por arquivos, `AppendFiles(version, order, name, files, upFile, downFile) error`. Versão e ordem são `int64`, positivos, nessa sequência, seguidos do nome; a fonte de arquivos é `fs.FS`. Ambos retornam erro de cadastro. Erros também invalidam o conjunto para execução, evitando executar uma lista incompleta caso o consumidor ignore o retorno.
+O cadastro inline é `Append(version, order, name, mode, up, down) error`; por arquivos, `AppendFiles(version, order, name, mode, files, upFile, downFile) error`. Versão e ordem são `int64`, positivos, nessa sequência, seguidos do nome e do modo explícito de execução; a fonte de arquivos é `fs.FS`. Ambos retornam erro de cadastro. Erros também invalidam o conjunto para execução, evitando executar uma lista incompleta caso o consumidor ignore o retorno.
+
+**Modo de execução declarado:** cada cadastro informa se a migration exige execução transacional ou fora de transação. O autor responde pela compatibilidade dos scripts com o modo declarado. O Krios valida o modo e sua combinação com o executor antes de iniciar os scripts do plano; não certifica a sintaxe nem a compatibilidade transacional de SQL arbitrário.
+
+O argumento `mode` foi acrescentado após `name` em `Append` e `AppendFiles`. Nos exemplos abaixo, `transactionalMode` representa o valor do modo transacional, aplicável aos scripts SQLite apresentados. Os nomes Go do tipo e das constantes serão formalizados junto aos demais tipos públicos; o modo é obrigatório, sem inferência a partir do texto SQL.
 
 **Tipos, limites e alvo:** versão e ordem começam em 1 e podem ter lacunas, dentro do limite de `int64`. Nomes devem ser únicos no histórico. A versão alvo também é `int64`: alvo negativo gera erro; alvo 0 desfaz todas as migrations aplicadas; alvo positivo precisa estar cadastrado. A escolha do alvo não dispensa validação do histórico e do plano completo antes de qualquer script.
 
-Os exemplos representam a API documentada, não uma implementação já disponível. Os nomes dos tipos públicos de conjuntos e o modo de corrigir/recriar um conjunto invalidado ainda serão formalizados.
+Os exemplos representam a API documentada, não uma implementação já disponível. Os nomes dos tipos públicos de conjuntos e modos de execução, assim como o modo de corrigir/recriar um conjunto invalidado, ainda serão formalizados.
 
 **Regras aprovadas de ordenação:**
 
@@ -716,6 +735,7 @@ if err := migrations.Append(
     1,
     10,
     "create_users",
+    transactionalMode,
     `
         CREATE TABLE users (
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -735,6 +755,7 @@ if err := migrations.Append(
     1,
     20,
     "create_roles",
+    transactionalMode,
     `
         CREATE TABLE roles (
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -751,6 +772,7 @@ if err := migrations.Append(
     2,
     10,
     "alter_users",
+    transactionalMode,
     "CREATE INDEX idx_users_email ON users(email)",
     "DROP INDEX idx_users_email",
 ); err != nil {
@@ -774,11 +796,12 @@ var migrationFiles embed.FS
 migrations := krios.NewMigrations(sqliteConfig.Dialect)
 
 // A fonte de arquivos é fs.FS, conforme aprovado.
-// Cada par de arquivos é registrado com versão e ordem explícitas.
+// Cada par de arquivos é registrado com versão, ordem e modo explícitos.
 if err := migrations.AppendFiles(
     1,
     10,
     "create_users",
+    transactionalMode,
     migrationFiles,
     "migrations/sqlite/create_users.up.sql",
     "migrations/sqlite/create_users.down.sql",
@@ -790,6 +813,7 @@ if err := migrations.AppendFiles(
     1,
     20,
     "create_roles",
+    transactionalMode,
     migrationFiles,
     "migrations/sqlite/create_roles.up.sql",
     "migrations/sqlite/create_roles.down.sql",
@@ -801,6 +825,7 @@ if err := migrations.AppendFiles(
     2,
     10,
     "alter_users",
+    transactionalMode,
     migrationFiles,
     "migrations/sqlite/alter_users.up.sql",
     "migrations/sqlite/alter_users.down.sql",
@@ -809,7 +834,7 @@ if err := migrations.AppendFiles(
 }
 ```
 
-> **Definição aprovada:** `Append` e `AppendFiles` distinguem as duas formas de cadastro, com versão e ordem explícitas e retorno de erro. `AppendFiles` recebe `fs.FS`; `embed.FS` atende a essa interface. O consumidor embute os arquivos; o Krios os lê. Não há argumentos nomeados nem sobrecarga de funções por assinatura na API Go.
+> **Definição aprovada:** `Append` e `AppendFiles` distinguem as duas formas de cadastro, com versão, ordem e modo explícitos e retorno de erro. `AppendFiles` recebe `fs.FS`; `embed.FS` atende a essa interface. O consumidor embute os arquivos; o Krios os lê. Não há argumentos nomeados nem sobrecarga de funções por assinatura na API Go.
 
 Então, chamar no início da aplicação:
 
@@ -829,7 +854,7 @@ Em um banco sem migrations aplicadas, o alvo 1 executa `create_users` e depois `
 
 Se uma descida incluir também a versão 1, dentro dela o DOWN de `create_roles` deve ocorrer antes do DOWN de `create_users`, desde que essas migrations tenham sido aplicadas. A versão agrupa migrations, a ordem define sua sequência dentro do grupo e o número passado a `RunMigrations` indica a versão alvo do banco. A ordenação não garante, por si só, atomicidade nem recuperação automática em caso de falha parcial.
 
-Alternativamente, para um plano de migrations compatível com execução transacional, a aplicação cria e fornece a transação. Este exemplo substitui a chamada normal anterior:
+Alternativamente, para um plano cujos passos estejam declarados como transacionais, a aplicação cria e fornece a transação. Este exemplo substitui a chamada normal anterior:
 
 ```go
 tx, err := sqliteDB.BeginTx(sqliteClient.Context(), nil)
@@ -855,13 +880,14 @@ O Krios deve gerenciar uma tabela chamada `migrations`, consultar o histórico a
 
 **Definição aprovada:** em `RunMigrationsTx(tx, ...)`, tanto os scripts compatíveis quanto a leitura/escrita do histórico devem usar a transação fornecida à chamada e o contexto de `Config.Context`. A aplicação continua responsável por `Commit`/`Rollback`; o sucesso do método não representa commit. Transação nula ou encerrada deve resultar em erro, sem fallback para o pool. O método não altera a configuração nem armazena a transação no cliente ou no conjunto de migrations. Em uma chamada posterior a `RunMigrations`, o executor padrão continua sendo o pool, com o mesmo contexto configurado.
 
-**Atomicidade:**
+**Atomicidade e seleção do executor:**
 
-- Em `RunMigrations`, usar transação por migration quando o banco e todos os comandos permitirem, incluindo a atualização do histórico. O Krios gerencia somente essas transações internas; migrations anteriores já concluídas permanecem aplicadas se uma posterior falhar. Não prometer atomicidade de uma versão inteira ou do plano completo nesse modo.
-- Fora dessas condições, executar com controle de falha parcial, sem prometer rollback. Scripts não podem iniciar, confirmar ou desfazer transações por conta própria.
-- Em `RunMigrationsTx`, usar exclusivamente a transação recebida. Aceitar somente planos cuja compatibilidade transacional esteja estabelecida e rejeitar incompatibilidade ou incerteza antes dos scripts. Não tentar contornar restrições usando o pool ou outra transação.
-- O sucesso de `RunMigrationsTx` depende do commit posterior da aplicação. DDL do MySQL com commit implícito fica excluído desse modo; operações não transacionais de outros bancos também devem ser rejeitadas. [Comandos com commit implícito no MySQL](https://dev.mysql.com/doc/refman/8.0/en/implicit-commit.html).
-- A classificação dos comandos e a forma de estabelecer compatibilidade de scripts completos ainda precisam ser detalhadas por dialeto; não presumir que qualquer SQL recebido é transacional.
+- Manter `RunMigrations` e `RunMigrationsTx`; não exigir `*sql.Tx` em todas as migrations. `context.Context` controla cancelamento/prazo e continua vindo de `Config`; `*sql.Tx` representa a transação fornecida à execução.
+- Em `RunMigrations`, cada migration declarada transacional usa uma transação interna, incluindo sua atualização do histórico. O Krios confirma essa transação em sucesso e tenta desfazê-la em falha. Migrations anteriores já concluídas permanecem aplicadas; não prometer atomicidade de uma versão inteira ou do plano completo.
+- Migrations declaradas para execução fora de transação usam o pool, sob a coordenação de exclusividade, com controle de falha parcial e sem promessa de rollback. Scripts não devem iniciar, confirmar ou desfazer transações por conta própria.
+- Em `RunMigrationsTx`, validar previamente que todos os passos a executar estão declarados como transacionais; rejeitar planos com passos fora de transação antes de executar qualquer script. Usar exclusivamente a transação recebida, sem fallback ou transação auxiliar. A aplicação faz `Commit`/`Rollback`; o Krios não encerra a transação recebida.
+- O modo é uma declaração do autor, não uma prova de que o SQL pode ser revertido. Não prometer detectar antecipadamente toda incompatibilidade de um script arbitrário. Erros de execução são propagados e o utilizador responde pela correção dos scripts e pela recuperação necessária.
+- DDL do MySQL com commit implícito deve ser declarado para execução fora de transação. Passar esses comandos por `*sql.Tx` não garante rollback. Operações não transacionais de outros bancos também exigem o modo correspondente. [Comandos com commit implícito no MySQL](https://dev.mysql.com/doc/refman/8.0/en/implicit-commit.html).
 
 > **Notas técnicas:** versão alvo e estado aplicado são conceitos distintos. Os scripts precisam ser compatíveis com o banco. Um DOWN descreve a reversão de schema prevista pelo autor, mas não garante restauração de dados: por exemplo, desfazer uma tabela com `DROP TABLE` elimina seu conteúdo. A execução segue a política explícita de alvo abaixo.
 
@@ -872,9 +898,9 @@ O Krios deve gerenciar uma tabela chamada `migrations`, consultar o histórico a
 - Alvo maior exige UP; alvo menor exige DOWN. Alvo igual ao estado integralmente aplicado valida o histórico e não executa scripts. Estado incompleto ou incerto segue as regras de recuperação abaixo, sem ser confundido com uma versão concluída.
 - Não exigir segunda autorização para downgrade. Antes de executar qualquer DOWN, verificar se todos os passos necessários existem e estão definidos como reversíveis. Ausência de passo ou de reversão bloqueia o plano antes do primeiro script.
 - Banco mais novo que a aplicação só pode descer quando os scripts correspondentes estiverem disponíveis. Histórico desconhecido bloqueia a execução; não ignorar versões desconhecidas para prosseguir.
-- Guardar checksums SHA-256 dos conteúdos UP e DOWN. Conteúdo alterado, migration desconhecida ou arquivo necessário removido gera erro e bloqueia a execução. Não atualizar checksums automaticamente para ocultar divergências; correções usam uma nova versão. Checksum verifica scripts, não mudanças manuais no schema.
+- Guardar checksums SHA-256 dos conteúdos UP e DOWN. Conteúdo cadastrado divergente do checksum, migration desconhecida ou arquivo necessário ausente na leitura do cadastro gera erro e bloqueia a execução. Não atualizar checksums automaticamente para ocultar divergências; correções usam uma nova versão. Checksum verifica scripts, não mudanças manuais no schema.
 
-**Execução exclusiva:** não permitir migrations concorrentes sobre o mesmo histórico. A exclusividade deve cobrir leitura do histórico, decisão, execução e registro; no modo com transação externa, considerar também o encerramento pela aplicação. O requisito de executor único está aprovado; a escolha entre coordenação pelo banco e garantia operacional da aplicação permanece pendente. O mecanismo, timeout, perda de conexão e eventual afinidade de sessão permanecem como detalhamento pendente; um mutex local não coordena processos diferentes.
+**Execução exclusiva:** o Krios deve impedir execuções concorrentes sobre o mesmo histórico, inclusive entre instâncias/processos; não delegar essa garantia exclusivamente à aplicação. A proteção cobre leitura do histórico, decisão, execução e registro. No modo com transação externa, precisa considerar o período até `Commit`/`Rollback`, além do retorno do método. Permanecem pendentes o mecanismo por banco, espera versus erro imediato, timeout, perda de conexão e eventual afinidade de sessão; um mutex local é insuficiente para coordenar processos diferentes.
 
 **Falhas e recuperação:**
 
@@ -882,7 +908,7 @@ O Krios deve gerenciar uma tabela chamada `migrations`, consultar o histórico a
 - Estado pendente/falho bloqueia novas migrations até reparo manual. Não repetir automaticamente uma migration parcial. Se o SQL concluir, mas a atualização do histórico falhar, tratar como estado incerto e exigir verificação/reparo antes de continuar.
 - Em execução transacional, o histórico acompanha commit/rollback. Não prometer que um registro de falha desfeito pelo rollback será preservado. Em `RunMigrationsTx`, não gravar diagnóstico ou histórico por outra conexão para escapar dessa regra.
 - Respeitar `Config.Context`, parar no primeiro erro/cancelamento e não iniciar o próximo script. Ao reiniciar após interrupção, verificar o histórico e bloquear estados incompletos/incertos.
-- Ainda será detalhado o procedimento de reparo manual, inclusive para versão parcialmente concluída, resultado incerto de commit e retomada após rollback confirmado. O procedimento não pode transformar erro em sucesso silenciosamente.
+- O utilizador responde pelo reparo do banco após falhas parciais/incertas e, quando fornecer `*sql.Tx`, por seu `Commit`/`Rollback`. O Krios não executa reparos ou compensações automáticas. Ainda será definido como regularizar explicitamente o histórico após o reparo, incluindo versões parciais, resultado incerto de commit e retomada após rollback confirmado; não desbloquear a execução nem registrar sucesso silenciosamente.
 
 **Tabela de controle:** usar `migrations` no schema/database padrão da conexão, com identificação do formato Krios e validação da estrutura antes de reutilizá-la. Registrar versão, ordem, nome, checksums UP/DOWN, estado, direção e horários; chave por `(versão, ordem)` e nome único. Tabela incompatível ou formato desconhecido gera erro; não assumir propriedade somente pelo nome nem alterar automaticamente uma tabela da aplicação. A evolução do formato da tabela tem versionamento próprio. Os nomes/tipos SQL das colunas, a identificação do formato e a representação de registros revertidos serão detalhados antes da implementação.
 
@@ -890,8 +916,11 @@ O Krios deve gerenciar uma tabela chamada `migrations`, consultar o histórico a
 
 - Uma migration aceita vários comandos; um único UP pode, por exemplo, criar mais de uma tabela. Isso não altera as regras de atomicidade, interrupção no primeiro erro e recuperação.
 - Não separar scripts apenas por ponto e vírgula: strings e corpos de funções/triggers podem contê-lo. A estratégia de execução e os requisitos dos drivers para múltiplos comandos precisam ser especificados e testados; não modificar silenciosamente opções da conexão fornecida pela aplicação.
-- `AppendFiles` recebe `fs.FS` e os caminhos UP/DOWN, enquanto `Append` recebe os conteúdos inline. Ambos usam versão, ordem e nome explícitos e participam da mesma validação de duplicatas. Não inferir versão/ordem do nome do arquivo ou da posição do cadastro.
-- Formalizar os caminhos aceitos, momento da leitura, validação antecipada e comportamento de fonte/arquivo ausente. A aprovação de `fs.FS` não escolheu esses detalhes. Não estabelecer prioridade silenciosa entre cadastros inline e por arquivo com a mesma identidade.
+- `AppendFiles` recebe `fs.FS` e os caminhos UP/DOWN, enquanto `Append` recebe os conteúdos inline. Ambos usam versão, ordem, nome e modo explícitos e participam da mesma validação de duplicatas. Não inferir versão/ordem do nome do arquivo ou da posição do cadastro.
+- `AppendFiles` recebe caminhos relativos ao `fs.FS` fornecido e lê os arquivos UP/DOWN durante o cadastro. Caminho inválido, fonte ausente, arquivo ausente ou erro de acesso/leitura retorna erro de cadastro e impede a execução do conjunto, conforme a regra de cadastros inválidos.
+- Guardar os conteúdos lidos para geração dos checksums e execução; não reler silenciosamente os arquivos na execução. Em um novo cadastro, os arquivos são lidos novamente e os conteúdos precisam respeitar a integridade do histórico. Um arquivo removido depois de um cadastro bem-sucedido não altera o conteúdo já carregado nessa instância.
+- Não validar sintaxe SQL dos scripts no Krios. Erros de SQL são retornados pelo driver/banco; erros de leitura são retornados antes de qualquer execução. Permanecem as validações de cadastro, modo, duplicatas, histórico e checksums.
+- Não estabelecer prioridade entre cadastros inline e por arquivo com a mesma identidade: a duplicidade gera erro.
 
 **Inspeção e diagnóstico:** oferecer inspeção do plano que consulta o histórico sem executar scripts nem criar a tabela de controle. Documentar as permissões necessárias para o histórico e os scripts. Erros identificam versão, ordem, nome, direção e etapa, preservando a causa original. Não expor credenciais nem SQL sensível automaticamente. O nome/retorno da operação de inspeção e seus equivalentes com transação ainda serão formalizados; qualquer operação transacional deve respeitar o executor recebido.
 
@@ -899,10 +928,10 @@ O Krios deve gerenciar uma tabela chamada `migrations`, consultar o histórico a
 
 Os requisitos aprovados estão definidos nas seções correspondentes. Os seguintes aspectos ainda precisam ser especificados:
 
-- Verificação de comunicação e versão do banco, compatibilidade real com o dialeto e escolha/fixação dos drivers de teste.
+- Escolha/fixação dos drivers de teste e versões adicionais da matriz de integração.
 - Nomes e assinaturas dos tipos públicos de referências, associação de critérios a outra origem, operandos de `On`, correlação de subconsultas e categorias públicas de erro.
-- Coleções aceitas por `IN`/`NOT IN`, expansão e elementos nulos; tipo dos argumentos de paginação, cópia do estado de navegação e comportamento nos limites quando os dados mudarem.
-- Mecanismo de exclusividade das migrations, classificação transacional de scripts, execução de múltiplos comandos e requisitos de drivers.
-- Formato físico/evolução da tabela de controle, reversões, reparo de falhas e versões parciais; leitura/validação de arquivos, recuperação de conjuntos inválidos e assinatura de inspeção do plano.
+- Tipo dos argumentos de paginação; os comportamentos de clone, elementos nulos nas listas e páginas vazias já estão definidos acima.
+- Mecanismo de exclusividade das migrations por banco, espera versus erro imediato, timeout e ciclo de vida da proteção com transação externa; execução de múltiplos comandos e requisitos de drivers.
+- Tipos públicos dos conjuntos e modos declarados de execução; formato físico/evolução da tabela de controle, reversões e regularização do histórico após reparo manual; recuperação de conjuntos inválidos e assinatura de inspeção do plano.
 
 Esses pontos devem ser resolvidos na especificação das tarefas, sem reabrir as decisões já aprovadas nem presumir novas políticas. O planejamento e as perguntas formais continuam em `PLANNING.md`, nos arquivos numerados e em `QUESTIONS.md`, conforme as regras do projeto. Este documento especifica o contrato da biblioteca.
