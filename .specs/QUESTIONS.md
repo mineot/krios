@@ -80,64 +80,64 @@ Referências: [Execução de transações no Go](https://go.dev/doc/database/exe
 
 6. **Parâmetros (linhas 43–54 e 173):** confirmar que SQL e argumentos serão enviados separadamente ao driver, sem interpolação textual. Qual será a sintaxe por dialeto/driver e como ocorrerá a numeração conjunta em subconsultas, joins e unions?
 
-- Resposta:
+- Resposta: Aceito sugestão da IA.
 
 7. **Tipos (linhas 43–61):** o contrato inclui `nil`, floats, inteiros sem sinal dentro dos limites de conversão, ponteiros, tipos que implementam `driver.Valuer` e extensões dos drivers? Quais validações cabem ao Krios e quais serão delegadas ao driver/banco?
 
-- Resposta:
+- Resposta: Eu quero que toda a validação seja feita pelo driver, o krios é apenas um builder de queries, o driver já faz a validação necessaria, então ao executar, se algo estiver errado, deve retornar o erro do driver e/ou banco de dados.
 
 8. **IN/NOT IN (linha 53):** listas serão expandidas em um argumento por elemento? Qual comportamento para listas vazias, nulas, heterogêneas, com `NULL`, arrays e `[]byte`? Haverá suporte a subconsultas nesses predicados?
 
-- Resposta:
+- Resposta: deve aceitar apenas listas, novamente, o krios não valida nada, se o driver ou banco não aceitar, então deve estourar erro, retornando o que aconteceu, porem gostei da ideia de colocar uma subconsulta para carregar esses itens, vou implementar a estrategia nas definições, solicito a IA para validar a adição do subselect.
 
 9. **NULL e composição (linhas 67–89):** `Eq(campo, nil)` e `Ne(campo, nil)` serão traduzidos para `IS NULL`/`IS NOT NULL`? Como tratar `And()`/`Or()` vazios e critérios nulos? Os predicados existirão apenas no cliente ou também no pacote, como mostram os exemplos com `krios.Eq`?
 
-- Resposta:
+- Resposta: `Eq(campo, nil)` e outros devem tratar como se o valor fosse normal, como eu falei, o crieu passa para o driver, se retornar erro, reporta o erro, nesse caso, deve fazer isso `id = null`, o mesmo para todos, `And()` ou `Or()`, devem retornar erro, eu quero que seja apenas no cliente, por conta do dialeto.
 
 10. **Identificadores e expressões (linhas 98–144):** strings representam nomes de colunas/tabelas, expressões SQL ou ambos? Como representar comparação entre duas colunas no `ON` sem transformar a segunda coluna em valor textual? Como tratar nomes qualificados, curingas, funções, schemas, aliases e escape de identificadores por dialeto?
 
-- Resposta:
+- Resposta: Aceito sugestão da IA.
 
 11. **Estado do builder (linhas 97–185):** chamadas sucessivas de `Where`, `On`, `Columns`, `GroupBy` e `Set` acumulam ou substituem? A que elemento `As`, `Asc`, `Desc` e `Schema` se aplicam? Os builders e critérios são mutáveis, reutilizáveis e seguros para uso concorrente? Uma subconsulta é copiada ou mantida por referência?
 
-- Resposta:
+- Resposta:`Where`, `On`, `Columns`, `GroupBy` sempre acumulam e `Set` troca, se for colocado o mesmo, `As` colunas, table, joins, e tudo mais que pode-se colocar um alias em uma instrução sql, `Asc`, `Desc` apenas em `OrderBy`, e `Schema` em tabelas e joins, se o dialeto permitir
 
 12. **SELECT e subconsultas (linhas 110–159):** qual regra determina a seleção implícita de `*` ou `u.*` e sua remoção após adicionar colunas? `Count("*")` deve preservar `COUNT(*)`? `SubSelect` pretende gerar produto cartesiano? Como representar correlação e restringir o formato de subconsultas escalares?
 
-- Resposta:
+- Resposta: Aceito sugestão da IA.
 
 13. **UNION (linhas 148–159):** como `query1` participará da união, já que não é passado no exemplo? Qual será a assinatura de `Union`/`UnionAll`, e onde se aplicarão ordenação, paginação e parênteses?
 
-- Resposta:
+- Resposta: Falha minha de definição, sim `query1` participa do union `selectQuery := client.Union(query1, query2)`, cada query deve do union deve cudar da paginação ordenação e tal, porem isso pode falhar, por isso criei a função Wrapper, para absorver esse tipo de problema. Quero a opinião da IA.
 
 14. **JOIN e HAVING (linhas 127–144 e 163–164):** `Having` fará parte do escopo inicial? Como representar agregações nos critérios? Quais tipos de join serão incluídos e como tratar recursos indisponíveis na versão do banco?
 
-- Resposta:
+- Resposta: Aceito sugestão da IA.
 
 ### Paginação e escrita
 
 15. **Semântica da paginação (linhas 177–205):** os argumentos são página/tamanho ou offset/limite? Se forem página/tamanho, confirmar `offset = (pagina - 1) * tamanho`. Como tratar zero, valores fora do intervalo, resultado vazio e overflow? Qual diferença entre `LastPage` e `TotalPages`?
 
-- Resposta:
+- Resposta: é `offset/limite`. "Como tratar zero, valores fora do intervalo, resultado vazio e overflow?" aceito sugestão da IA. Deve existir apenas `LastPage`, foi um erro, vou remover `TotalPages`.
 
 16. **Contagem e navegação (linhas 182–205):** `TotalRows` contará as linhas do resultado completo, inclusive após `DISTINCT`, `GROUP BY`, `HAVING` e `UNION`? Quando recalcular a contagem? `Next`/`Prev` executam SQL ou apenas mudam o estado? Como funcionam antes da primeira execução? O que significa zerar a paginação? Qual consistência será prometida diante de alterações concorrentes dos dados e qual será a regra de ordenação?
 
-- Resposta:
+- Resposta: Aceito sugestão da IA.
 
 17. **Validações de escrita (linhas 208–240):** como tratar `Insert` sem valores, quantidade de valores diferente das colunas, `Update` sem `Set` e `Set` repetido para a mesma coluna? `Where()` vazio ou um grupo vazio satisfaz a exigência de filtro? Em que momento esses erros serão retornados?
 
-- Resposta:
+- Resposta: `Insert` sem valores retorna erro, quantidade de colunas diferentes de valores, tbem retornar erro, `Update` sem `Set` retorna erro, `Set` repetido substitui mantendo o ultimo valor, `Where()` vazio ou um grupo vazio retorna erro. E deve-se retornar o erro no momendo da execução.
 
 ### Arquivos SQL e migrações
 
 18. **Execução de arquivos (linhas 243–250):** qual retorno atende arquivos com SELECT, comandos sem linhas e múltiplos resultados? Arquivos podem conter vários comandos, funções, procedures e comandos de clientes como `DELIMITER`? Serão enviados inteiros ao driver ou interpretados pelo Krios? Como resolver caminhos relativos, passar parâmetros e reportar falhas parciais?
 
-- Resposta:
+- Resposta: Aceito sugestão da IA.
 
 19. **Versões e histórico (linhas 6, 17 e 253–277):** `DbVersion` é a versão desejada do schema? Como representar banco sem migrações e retorno à versão zero? Versões precisam ser contíguas? Como tratar versões duplicadas, alvo ausente, lista vazia e histórico divergente? Qual limite numérico será adotado, considerando `uint` e a coluna SQL? A tabela `migrations` guarda versão atual, migrações aplicadas ou histórico de eventos? Quais seus nomes de colunas, tipos, chave, schema e regra de data/fuso?
 
-- Resposta:
+- Resposta: `DBVersion` é a versão corrente do banco, versão zero retorna erro, a tabela `migrations` não existe, isso signifca que o banco não tem migração, ela deve ser criada, e aplicado a migração até concronizar com a versão informada. Versões duplicadas da erro, alvo ausente erro, lista vazia retorna erro, histórico divergente retorna erro. Limite numérico usar o mesmo do driver, se não houver, usar o `math.MaxUint64` (sempre positivo), troquei para uint64. `migrations` registrará tudo que foi feito, se tiver 3 versẽos, devem estar todas elas lá, com a data que foi aplicada, se for feito downgrade, deve-se remover o registro da versão removida. Colunas: `id`, `version`, `applied_at`. "Versões precisam ser contíguas?" se entendi bem, devem sim, mas não precisa segir uma order, só deve ser superior, exemplo, ode ter isso, versão 2, 6, 8, entende, o indicado é 1,2,3, porem devemos validar, se o usuário colocar assim, 2,8,6, deve executar 2,6,8, entende, devemos ordenar, se existir isso, 1,1,2,2, versões repetidas, deve dar erro.
 
 20. **Aplicação e recuperação de migrações (linhas 255–285):** confirmar ordem de `Up` e `Down` e qual versão identifica cada arquivo de descida. A atomicidade será por arquivo ou por conjunto? Como registrar falha parcial, retomar a execução e impedir duas instâncias de migrarem simultaneamente? Como lidar com DDL que causa commit implícito no MySQL e com uma tabela `migrations` já existente? Qual contrato de erro e de controle da transação para `MigrateTx`?
 
-- Resposta:
+- Resposta: Aceito sugestão da IA.

@@ -14,7 +14,7 @@
 ```go
 type Config struct {
     Db         *sql.DB
-    DbVersion  uint
+    DbVersion  uint64
     Dialect    Dialect
     timeout    time.Duration
     Context    context.Context
@@ -91,6 +91,12 @@ client.Or(client.And(...), ...) // (expr and expr) or expr
 client.And(client.Or(...), ...) // (expr or expr) and expr
 ```
 
+```go
+inSubSelect := client.Select().From("users").Distinct().Column("id")
+client.In("id", nil).SubSelect(inSubSelect)
+// SQL: SELECT DISTINCT id FROM users WHERE id IN (SELECT DISTINCT id FROM users)
+```
+
 ## Select
 
 - Lembrando, a descrição abaixo é apenas um exemplo, deve-se sempre respeitar o dialeto.
@@ -150,7 +156,7 @@ selectQuery := client.Select().From("users").As("u").Join(joinSelect)
 // Teremos tbem o UnionAll()
 query1 := client.Select().From("users")
 query2 := client.Select().From("users")
-selectQuery := client.Union(query2)
+selectQuery := client.Union(query1, query2)
 // SQL: SELECT * FROM users UNION SELECT * FROM users
 ```
 
@@ -198,7 +204,6 @@ rows, page, err := selectQuery.ExecTx(tx) // sql.Tx
 
 type Page struct {
     TotalRows       uint64
-    TotalPages      uint64
     RowsPerPage     uint64
     CurrentPage     uint64
     LastPage        uint64
@@ -261,7 +266,7 @@ result, err := fileQuery.ExecTx(tx) // sql.Tx
 
 ```go
 type Migration struct {
-    Version uint
+    Version uint64
     Up      string
     Down    string
 }
