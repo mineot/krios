@@ -7,9 +7,9 @@ Estado: perguntas abertas para o desenvolvedor. Nenhuma decisão de API ou imple
 ### Configuração e execução
 
 1. **API de configuração (linhas 15–38):** o campo `timeout` deve ser exportado como `Timeout`? Qual será a assinatura de `New` para retornar erros de configuração e de conexão?
-   - Resposta:
+   - Resposta: Timeout foi ajustado, e foi corrigido sobre o erro, que deve retornar e ser tratado pelo utilizador.
 2. **Conexão (linhas 5–12):** a validação será feita na criação, antes de cada execução ou em outro momento? Quem será responsável por fechar o `*sql.DB` recebido? Quais drivers e versões mínimas de Go e dos bancos serão suportados?
-   - Resposta:
+   - Resposta: A validação será feito no momento da criação, do `New`, 
 3. **Contexto e timeout (linhas 19–20):** haverá contexto por operação? Como tratar timeout zero ou negativo, contexto cancelado e prazos já existentes? O timeout cobre ping, contagem da paginação, leitura de linhas e migrações? Como manter o contexto válido enquanto o consumidor lê `*sql.Rows`?
    - Resposta:
 4. **Erros e retornos (linhas 10–12, 188–205 e 283–285):** quais serão as assinaturas completas, incluindo ponteiros, de `Exec`, `ExecTx`, `Migrate` e `MigrateTx`? Qual valor de `Page` será retornado sem paginação? Os erros do banco serão preservados para `errors.Is`/`errors.As`? O consumidor ficará responsável por `Rows.Close`, `Rows.Scan` e `Rows.Err`?

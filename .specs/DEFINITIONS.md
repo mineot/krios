@@ -33,7 +33,7 @@ client, err := krios.New(
         Db:         db,
         DbVersion:  1,
         Dialect:    krios.DialectSQLite3, // example
-        timeout:    5 * time.Second,
+        Timeout:    5 * time.Second,
         Context:    context.Background(),
         Migrations: nil,
     },
