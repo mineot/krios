@@ -99,9 +99,9 @@ A ordem numérica é a sequência sugerida de execução. As dependências indic
 
 O escopo das 13 tarefas está aprovado. A aprovação deste plano não substitui a aprovação do detalhamento de cada tarefa. A conclusão dependerá dos critérios aprovados no respectivo arquivo numerado.
 
-| Tarefa  | Situação                                                                           |
-| ------- | ---------------------------------------------------------------------------------- |
-| 001     | Detalhamento preparado em [001.md](001.md), aguardando aprovação para implementar. |
-| 002–013 | Escopo aprovado; aguardando preparação individual.                                 |
+| Tarefa  | Situação                                                              |
+| ------- | --------------------------------------------------------------------- |
+| 001     | Concluída e verificada em 2026-11-04. Resultados em [001.md](001.md). |
+| 002–013 | Escopo aprovado; aguardando preparação individual.                    |
 
 Nomes de tipos concretos, organização dos pacotes internos, assinaturas ainda não fixadas pelo contrato, ferramentas de teste e configuração dos ambientes serão definidos no detalhamento da tarefa correspondente. Mudanças de escopo ou de sequência serão submetidas ao desenvolvedor antes da execução.

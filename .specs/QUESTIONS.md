@@ -465,9 +465,9 @@ Não restam questões de decisão abertas nesta revisão. Detalhes das tarefas, 
 
 ## Tarefa 001 — Configuração e ciclo de vida do cliente
 
-**Estado: aguardando aprovação do detalhamento.**
+**Estado: implementação autorizada, concluída e verificada em 2026-11-04.**
 
-O escopo geral de `PLANNING.md` foi aprovado pelo desenvolvedor em 2026-11-04. A autorização desta etapa é preparar o desenvolvimento; a implementação ainda depende da aprovação do detalhamento.
+O escopo geral de `PLANNING.md` foi aprovado pelo desenvolvedor em 2026-11-04. Após a preparação e revisão, o desenvolvedor autorizou a implementação da tarefa 001.
 
 ### 001.1 — Organização e verificação da primeira implementação
 
@@ -476,6 +476,8 @@ O escopo geral de `PLANNING.md` foi aprovado pelo desenvolvedor em 2026-11-04. A
 **Pergunta:** Sim esta aprovdo
 
 **Resposta do desenvolvedor:** respondido.
+
+**Autorização de implementação:** “pode implementar 001”, recebida em 2026-11-04.
 
 ### 001.2 — Ajustes identificados na validação do detalhamento
 
@@ -491,4 +493,4 @@ Na validação de `001.md` contra o contrato e o plano aprovado, foram identific
 
 **Resposta do desenvolvedor:** “sim pode”. Aprovação para incorporar os três esclarecimentos, incluindo o limite da entrega do executor à interface e ao componente de contexto nesta tarefa.
 
-**Aplicação:** `001.md` atualizado com os esclarecimentos e os respectivos limites de verificação. A aprovação para iniciar a implementação, solicitada no item 001.1, permanece pendente.
+**Aplicação:** `001.md` atualizado com os esclarecimentos e os respectivos limites de verificação. Posteriormente, a implementação foi autorizada no item 001.1.
