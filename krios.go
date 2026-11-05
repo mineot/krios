@@ -3,6 +3,7 @@ package krios
 
 import (
 	"github.com/mineot/krios/internal/core"
+	"github.com/mineot/krios/internal/criteria"
 	"github.com/mineot/krios/internal/expressions"
 )
 
@@ -14,6 +15,9 @@ type Config = core.Config
 
 // Dialect identifies the SQL dialect used by a client.
 type Dialect = core.Dialect
+
+// Criterion describes a client-owned predicate or logical group.
+type Criterion = criteria.Criterion
 
 // Reference is an immutable identifier created by a client.
 type Reference = expressions.Reference

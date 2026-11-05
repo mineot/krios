@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/mineot/krios/internal/criteria"
 	"github.com/mineot/krios/internal/dialects"
 	"github.com/mineot/krios/internal/errs"
 	"github.com/mineot/krios/internal/expressions"
@@ -13,12 +14,13 @@ import (
 // Compiler owns the mutable state of one SQL command. Do not share an instance
 // between concurrent compilations. Operands can be reused by independent instances.
 type Compiler struct {
-	dialect dialects.Renderer
-	owner   *expressions.Identity
-	sql     strings.Builder
-	args    []any
-	err     error
-	active  map[*expressions.Expression]bool
+	dialect        dialects.Renderer
+	owner          *expressions.Identity
+	sql            strings.Builder
+	args           []any
+	err            error
+	active         map[*expressions.Expression]bool
+	activeCriteria map[*criteria.Criterion]bool
 }
 
 func New(dialect dialects.Dialect, owner *expressions.Identity) *Compiler {

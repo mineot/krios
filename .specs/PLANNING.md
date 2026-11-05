@@ -103,7 +103,7 @@ O escopo das 13 tarefas está aprovado. A aprovação deste plano não substitui
 | ------- | ---------------------------------------------------------------------------- |
 | 001     | Concluída e verificada em 2026-11-04. Resultados em [001.md](001.md).        |
 | 002     | Concluída e verificada em 2026-11-04. Resultados em [002.md](002.md).        |
-| 003     | Detalhamento aprovado em [003.md](003.md); pronta, aguardando autorização para iniciar. |
+| 003     | Detalhamento aprovado em [003.md](003.md); implementação em andamento. |
 | 004–013 | Escopo aprovado; aguardando preparação individual.                           |
 
 Nomes de tipos concretos, organização dos pacotes internos, assinaturas ainda não fixadas pelo contrato, ferramentas de teste e configuração dos ambientes serão definidos no detalhamento da tarefa correspondente. Mudanças de escopo ou de sequência serão submetidas ao desenvolvedor antes da execução.

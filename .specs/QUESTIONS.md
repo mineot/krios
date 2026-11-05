@@ -533,7 +533,7 @@ Após a revisão de `002.md` e o esclarecimento sobre os métodos delegadores de
 
 ## Tarefa 003 — Critérios e composição lógica
 
-**Estado: questões e detalhamento aprovados; aguardando autorização para iniciar a implementação.**
+**Estado: questões e detalhamento aprovados; implementação autorizada e em andamento.**
 
 O detalhamento está em [003.md](003.md). As propostas abaixo foram aprovadas e incorporadas ao detalhamento, preservando o contrato e a separação por responsabilidade. Nenhuma foi implementada.
 
@@ -568,4 +568,4 @@ O detalhamento está em [003.md](003.md). As propostas abaixo foram aprovadas e 
 
 **Registro:** respostas 003.1–003.3 incorporadas em `003.md` e planejamento atualizado. A tarefa está preparada; não há decisões pendentes nas questões aprovadas.
 
-**Autorização para iniciar a implementação:** aguardando manifestação explícita do desenvolvedor. Nenhuma alteração de código realizada nesta preparação.
+**Autorização para iniciar a implementação:** recebida após a preparação, com a resposta “pode implementar”, em 2026-11-04.
