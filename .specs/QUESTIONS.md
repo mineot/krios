@@ -530,3 +530,42 @@ O planejamento detalhado está em [002.md](002.md). As decisões abaixo compleme
 Após a revisão de `002.md` e o esclarecimento sobre os métodos delegadores de `Client` em `core`, o desenvolvedor respondeu: “não precisamos fazer os ajustes, se estiver tudo certo pode implementar”.
 
 **Decisão:** organização revisada aprovada, mantendo os dois arquivos delegadores em `core`, e implementação da tarefa 002 autorizada em 2026-11-04.
+
+## Tarefa 003 — Critérios e composição lógica
+
+**Estado: questões e detalhamento aprovados; aguardando autorização para iniciar a implementação.**
+
+O detalhamento está em [003.md](003.md). As propostas abaixo foram aprovadas e incorporadas ao detalhamento, preservando o contrato e a separação por responsabilidade. Nenhuma foi implementada.
+
+### 003.1 — API, pacotes e integração futura
+
+**Proposta:** expor `Criterion` com campos privados e métodos do cliente retornando `*Criterion`, conforme as assinaturas de `003.md`. Representar os critérios em `internal/criteria`, separados por comparação, NULL, listas, intervalos e grupos; compilar em `internal/compiler`; manter apenas delegadores em `core`. Adiar SubSelect para a tarefa 006, preservando `In(..., nil)` como ausência de fonte a validar na compilação, sem erro permanente de construção que impeça a associação futura.
+
+**Pergunta:** aprova a API, a organização e os limites da tarefa descritos em `003.md`?
+
+**Resposta do desenvolvedor:** aprovado.
+
+### 003.2 — Expressões em posições de valor
+
+**Proposta:** nas comparações e nos limites de Between/NotBetween, interpretar `*Reference` e `*Expression` como operandos SQL explícitos, validando sua origem e rejeitando ponteiros nulos desses tipos. Parametrizar os demais valores sem conversão. Em listas IN/NOT IN, cada elemento continuará sendo um argumento, sem interpretação de expressões, conforme a regra de um placeholder por elemento do contrato.
+
+**Pergunta:** aprova essa distinção entre operandos SQL explícitos nas comparações/intervalos e valores individuais das listas?
+
+**Resposta do desenvolvedor:** aprovado.
+
+### 003.3 — Armazenamento das listas e dos grupos
+
+**Proposta:** capturar a sequência de elementos de slices e arrays na construção de In/NotIn em um slice interno próprio, sem cópia profunda. Alterações posteriores das posições da lista original não modificarão o critério; valores que sejam ponteiros ou slices manterão suas referências. Nos grupos, copiar apenas o slice de filhos e preservar cada critério filho por referência.
+
+**Pergunta:** aprova essa cópia superficial da sequência de valores e do slice de filhos, mantendo as referências dos elementos?
+
+**Resposta do desenvolvedor:** aprovado.
+
+
+### 003.4 — Preparação e autorização de início
+
+**Orientação do desenvolvedor:** “aprovei as questões, pode prepara para implementar, aguarde autorização para iniciar a implementação”.
+
+**Registro:** respostas 003.1–003.3 incorporadas em `003.md` e planejamento atualizado. A tarefa está preparada; não há decisões pendentes nas questões aprovadas.
+
+**Autorização para iniciar a implementação:** aguardando manifestação explícita do desenvolvedor. Nenhuma alteração de código realizada nesta preparação.
