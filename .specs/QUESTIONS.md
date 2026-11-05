@@ -494,3 +494,33 @@ Na validação de `001.md` contra o contrato e o plano aprovado, foram identific
 **Resposta do desenvolvedor:** “sim pode”. Aprovação para incorporar os três esclarecimentos, incluindo o limite da entrega do executor à interface e ao componente de contexto nesta tarefa.
 
 **Aplicação:** `001.md` atualizado com os esclarecimentos e os respectivos limites de verificação. Posteriormente, a implementação foi autorizada no item 001.1.
+
+## Tarefa 002 — Dialetos, identificadores e expressões
+
+**Estado: detalhamento proposto; aguardando decisões e aprovação.**
+
+O planejamento detalhado está em [002.md](002.md). As propostas abaixo complementam o contrato sem alterar `DEFINITIONS.md`; nenhuma foi implementada.
+
+### 002.1 — API e organização da implementação
+
+**Proposta:** manter os componentes em `internal/core`, com arquivos para dialeto, referência, expressão e compilação. Expor `Reference` e `Expression` por aliases em `krios.go`. `Ref`/`RefParts` retornarão `*Reference`; os cinco agregadores `*Expr` receberão `any` e retornarão `*Expression`, aceitando strings, referências e expressões. Erros serão guardados para a compilação e para a execução dos futuros builders. Não haverá API pública de compilação nem execução SQL nesta tarefa.
+
+**Pergunta:** aprova essas assinaturas, a organização e os limites descritos no detalhamento?
+
+**Resposta do desenvolvedor:** aprovo as assinaturas, mas quero separar os pacotes, não acho que devam ficar em core, tudo referente aos dialetos, devem ficar em um pacote chamado `dialects`, e tbem quero separação por arquivos, o postresql vai ter o dele assim como os outros bancos, se for possivel, o mesmo para expressões, que devem ficar em um pacote chamado expressions, vamos colocar mais uma regra, eu quero arquivos e pacotes bem separados por responsabilidade.
+
+### 002.2 — Componentes inválidos e curingas
+
+**Proposta:** rejeitar componentes vazios, lista de componentes vazia e NUL; preservar espaços e nomes sem normalização. Em strings simples e `Ref`, reconhecer `*` como curinga apenas quando constituir o último componente inteiro. Em `RefParts`, todos os componentes serão literais, inclusive `*`, permitindo representar uma coluna com esse nome. O curinga simples permanecerá sem prefixo automático, e `CountExpr("*")` continuará produzindo `COUNT(*)`.
+
+**Pergunta:** aprova essa distinção entre `Ref("u.*")` e `RefParts("u", "*")` e as validações propostas?
+
+**Resposta do desenvolvedor:** aprovado.
+
+### 002.3 — Origem de referências e expressões
+
+**Proposta:** associar os operandos ao cliente criador e rejeitar seu uso por outro cliente, mesmo com o mesmo dialeto. O contrato já rejeita builders de clientes diferentes; esta proposta explicita a mesma restrição para referências e expressões.
+
+**Pergunta:** referências e expressões também devem ficar restritas ao cliente que as criou, conforme a proposta?
+
+**Resposta do desenvolvedor:** aprovado.
