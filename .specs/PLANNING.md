@@ -1,13 +1,13 @@
 # Plano de implementação do Krios
 
-**Estado: proposta para revisão do desenvolvedor.**
+**Estado: escopo e guia de implementação aprovados pelo desenvolvedor em 2026-11-04.**
 
 Este documento organiza o escopo das implementações e sua sequência sugerida. O contrato funcional está em [DEFINITIONS.md](DEFINITIONS.md), e as decisões da revisão estão em [QUESTIONS.md](QUESTIONS.md). Este plano não altera esses documentos nem autoriza o início da implementação.
 
 ## Forma de execução
 
 - Executar uma tarefa por vez, após aprovação do desenvolvedor.
-- Ao iniciar a preparação de uma tarefa, detalhá-la em `.specs/NNN.md`, usando sua numeração neste plano: tarefa 1 em `001.md`, tarefa 2 em `002.md` e assim por diante. Esses arquivos não serão criados nesta etapa.
+- Ao iniciar a preparação de uma tarefa, detalhá-la em `.specs/NNN.md`, usando sua numeração neste plano: tarefa 1 em `001.md`, tarefa 2 em `002.md` e assim por diante. Criar somente o detalhamento da tarefa em preparação.
 - O detalhamento deverá apresentar as decisões técnicas propostas, os limites da tarefa, os critérios de conclusão e as verificações necessárias. A implementação dependerá da aprovação desse detalhamento.
 - Registrar dúvidas e respostas em `QUESTIONS.md`, separadas por tarefa. Havendo dúvida que exija decisão, interromper a execução e aguardar a orientação do desenvolvedor.
 - Disponibilizar os recursos públicos por `krios.go` e manter novos arquivos de implementação e testes em `internal`, respeitando as regras de `AGENTS.md`.
@@ -97,6 +97,11 @@ Este documento organiza o escopo das implementações e sua sequência sugerida.
 
 A ordem numérica é a sequência sugerida de execução. As dependências indicam os recursos necessários a cada tarefa; não autorizam execução simultânea.
 
-Todos os itens começam como **propostos**. O andamento de cada tarefa será registrado aqui conforme sua aprovação, detalhamento, implementação e verificação. A conclusão dependerá dos critérios aprovados no respectivo arquivo numerado.
+O escopo das 13 tarefas está aprovado. A aprovação deste plano não substitui a aprovação do detalhamento de cada tarefa. A conclusão dependerá dos critérios aprovados no respectivo arquivo numerado.
+
+| Tarefa  | Situação                                                                           |
+| ------- | ---------------------------------------------------------------------------------- |
+| 001     | Detalhamento preparado em [001.md](001.md), aguardando aprovação para implementar. |
+| 002–013 | Escopo aprovado; aguardando preparação individual.                                 |
 
 Nomes de tipos concretos, organização dos pacotes internos, assinaturas ainda não fixadas pelo contrato, ferramentas de teste e configuração dos ambientes serão definidos no detalhamento da tarefa correspondente. Mudanças de escopo ou de sequência serão submetidas ao desenvolvedor antes da execução.

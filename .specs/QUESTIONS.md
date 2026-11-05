@@ -21,11 +21,11 @@ Erros de configuração ou conexão serão retornados ao utilizador. Quando a cr
 A conexão será validada em `New`, após a validação da configuração, por meio de `Db.PingContext` com o contexto e o timeout aplicáveis. O utilizador fornecerá o pool `*sql.DB` e será responsável por fechá-lo. O ping verifica a disponibilidade naquele momento, sem garantir execuções futuras.
 
 | Dependência | Versão mínima |
-|---|---|
-| Go | 1.26 |
-| PostgreSQL | 16 |
-| MySQL | 8.0 |
-| SQLite | 3.39 |
+| ----------- | ------------- |
+| Go          | 1.26          |
+| PostgreSQL  | 16            |
+| MySQL       | 8.0           |
+| SQLite      | 3.39          |
 
 A aplicação escolherá e registrará o driver. O Krios não detectará automaticamente a versão do banco. A compatibilidade entre banco, versão, driver e dialeto informado será responsabilidade do utilizador.
 
@@ -33,11 +33,11 @@ A aplicação escolherá e registrará o driver. O Krios não detectará automat
 
 Todas as operações usarão `Config.Context`. `Exec()` e `ExecTx(tx)` não receberão contexto adicional.
 
-| Valor de `Timeout` | Comportamento |
-|---|---|
-| Negativo | Erro de configuração em `New`. |
-| Zero | Usar somente o prazo e o cancelamento de `Config.Context`. |
-| Positivo | Criar um contexto derivado por operação; prevalece o prazo que vencer primeiro. |
+| Valor de `Timeout` | Comportamento                                                                   |
+| ------------------ | ------------------------------------------------------------------------------- |
+| Negativo           | Erro de configuração em `New`.                                                  |
+| Zero               | Usar somente o prazo e o cancelamento de `Config.Context`.                      |
+| Positivo           | Criar um contexto derivado por operação; prevalece o prazo que vencer primeiro. |
 
 O timeout começará na execução, não na criação do builder. Abrangerá o ping em `New`, toda a execução das escritas e a chamada completa de migração, sem reiniciar por comando. No SELECT paginado, contagem, consulta e leitura das linhas compartilharão o mesmo prazo.
 
@@ -51,15 +51,15 @@ Referência: [Cancelamento de operações no Go](https://go.dev/doc/database/can
 
 #### 4. Assinaturas, retornos e erros
 
-| Operação | Assinatura |
-|---|---|
-| Criação | `New(config Config) (*Client, error)` |
-| SELECT | `Exec() (*sql.Rows, *Page, error)` |
-| SELECT em transação | `ExecTx(tx *sql.Tx) (*sql.Rows, *Page, error)` |
-| INSERT, UPDATE e DELETE | `Exec() (sql.Result, error)` |
-| Escritas em transação | `ExecTx(tx *sql.Tx) (sql.Result, error)` |
-| Migração | `Migrate() error` |
-| Migração em transação | `MigrateTx(tx *sql.Tx) error` |
+| Operação                | Assinatura                                     |
+| ----------------------- | ---------------------------------------------- |
+| Criação                 | `New(config Config) (*Client, error)`          |
+| SELECT                  | `Exec() (*sql.Rows, *Page, error)`             |
+| SELECT em transação     | `ExecTx(tx *sql.Tx) (*sql.Rows, *Page, error)` |
+| INSERT, UPDATE e DELETE | `Exec() (sql.Result, error)`                   |
+| Escritas em transação   | `ExecTx(tx *sql.Tx) (sql.Result, error)`       |
+| Migração                | `Migrate() error`                              |
+| Migração em transação   | `MigrateTx(tx *sql.Tx) error`                  |
 
 - SELECT bem-sucedido sem paginação retornará `(rows, nil, nil)`; com paginação, `(rows, page, nil)`.
 - Falhas de validação, contagem ou abertura do SELECT retornarão `(nil, nil, err)`, com liberação dos recursos intermediários.
@@ -80,11 +80,11 @@ O Krios não confirmará nem desfará uma transação recebida. Sucesso em `Exec
 
 Todas as operações da chamada usarão exclusivamente a transação fornecida, incluindo contagem de paginação, consulta principal e histórico de migrações. Não haverá fallback para o pool nem armazenamento da transação no cliente para chamadas futuras.
 
-| Situação | Comportamento |
-|---|---|
-| `tx == nil` | Retornar erro de argumento antes de executar SQL. |
-| Transação encerrada | Propagar o erro de `database/sql`, normalmente `sql.ErrTxDone`. |
-| Contexto cancelado | Retornar o erro e não iniciar novos comandos. |
+| Situação                             | Comportamento                                                    |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| `tx == nil`                          | Retornar erro de argumento antes de executar SQL.                |
+| Transação encerrada                  | Propagar o erro de `database/sql`, normalmente `sql.ErrTxDone`.  |
+| Contexto cancelado                   | Retornar o erro e não iniciar novos comandos.                    |
 | Transação incompatível com o cliente | A aplicação responderá pela compatibilidade com banco e dialeto. |
 
 `*sql.Tx` não expõe publicamente seu pool de origem; o Krios não prometerá verificar se pertence a `Config.Db`. A aplicação manterá válido o contexto passado a `BeginTx` até encerrar a transação. O cancelamento desse contexto pode provocar rollback pelo próprio `database/sql`, independentemente do contexto de uma consulta.
@@ -97,11 +97,11 @@ Referências: [Transações no Go](https://go.dev/doc/database/execute-transacti
 
 SQL e argumentos serão gerados e enviados separadamente. Valores não serão interpolados no texto SQL, inclusive strings, datas e `nil`.
 
-| Dialeto | Placeholders |
-|---|---|
+| Dialeto    | Placeholders    |
+| ---------- | --------------- |
 | PostgreSQL | `$1`, `$2`, ... |
-| MySQL | `?` |
-| SQLite | `?` |
+| MySQL      | `?`             |
+| SQLite     | `?`             |
 
 A ordem dos argumentos será definida na montagem da consulta completa, conforme a aparição dos parâmetros no SQL. Listas, joins, subconsultas, unions e valores de escrita participarão da mesma sequência. Critérios não guardarão índices definitivos quando forem criados.
 
@@ -181,13 +181,13 @@ O escopo inicial não incluirá parser de expressões SQL nem função genérica
 
 Builders serão mutáveis e reutilizáveis sequencialmente. O mesmo builder não deverá ser construído ou executado concorrentemente; cada goroutine usará builders separados. O cliente não manterá contadores globais de parâmetros nem paginação compartilhada entre builders.
 
-| Método ou grupo | Comportamento |
-|---|---|
-| `Where`, `On`, `Having` | Acumular condições, combinadas por AND. |
-| `Columns`, `GroupBy`, `OrderBy` | Acumular itens na ordem recebida. |
-| `Set` repetido para a mesma coluna | Substituir o valor, preservando a posição original. |
-| `From`, `Into` repetidos | Substituir a tabela principal. |
-| `Join`, `SubSelect` como origem | Acumular origens. |
+| Método ou grupo                         | Comportamento                                       |
+| --------------------------------------- | --------------------------------------------------- |
+| `Where`, `On`, `Having`                 | Acumular condições, combinadas por AND.             |
+| `Columns`, `GroupBy`, `OrderBy`         | Acumular itens na ordem recebida.                   |
+| `Set` repetido para a mesma coluna      | Substituir o valor, preservando a posição original. |
+| `From`, `Into` repetidos                | Substituir a tabela principal.                      |
+| `Join`, `SubSelect` como origem         | Acumular origens.                                   |
 | `As`, `Asc`, `Desc`, `Schema` repetidos | Substituir a opção anterior no alvo correspondente. |
 
 `As` será aplicado a elementos que aceitam alias, como tabelas, colunas, joins e subconsultas. `Asc` e `Desc` serão aplicados somente a itens de `OrderBy`; `Schema`, a tabelas e joins, conforme o dialeto.
@@ -264,14 +264,14 @@ Offsets não múltiplos do limite serão aceitos. Nesses casos, `CurrentPage` id
 
 Para total `T`, offset `O` e limite `L > 0`:
 
-| Campo | Regra |
-|---|---|
-| `TotalRows` | `T` |
-| `RowsPerPage` | `L` |
-| `LastPage` | `T/L`, acrescido de 1 se `T%L != 0` |
-| `CurrentPage` | `O/L + 1` se `T > 0`; zero se `T == 0` |
-| `HasNextPage` | `O < T && L < T-O` |
-| `HasPreviousPage` | `O > 0` |
+| Campo             | Regra                                  |
+| ----------------- | -------------------------------------- |
+| `TotalRows`       | `T`                                    |
+| `RowsPerPage`     | `L`                                    |
+| `LastPage`        | `T/L`, acrescido de 1 se `T%L != 0`    |
+| `CurrentPage`     | `O/L + 1` se `T > 0`; zero se `T == 0` |
+| `HasNextPage`     | `O < T && L < T-O`                     |
+| `HasPreviousPage` | `O > 0`                                |
 
 `HasPreviousPage` indicará que é possível reduzir o offset, mesmo após remoção dos dados. Os indicadores refletirão a contagem da execução.
 
@@ -329,12 +329,12 @@ O `sql.Result` do driver será preservado, sem garantia universal de `LastInsert
 
 O builder de arquivo separará execução sem leitura de linhas e consulta de linhas:
 
-| Método | Retorno |
-|---|---|
-| `Exec(args ...any)` | `(sql.Result, error)` |
-| `ExecTx(tx *sql.Tx, args ...any)` | `(sql.Result, error)` |
-| `Query(args ...any)` | `(*sql.Rows, error)` |
-| `QueryTx(tx *sql.Tx, args ...any)` | `(*sql.Rows, error)` |
+| Método                             | Retorno               |
+| ---------------------------------- | --------------------- |
+| `Exec(args ...any)`                | `(sql.Result, error)` |
+| `ExecTx(tx *sql.Tx, args ...any)`  | `(sql.Result, error)` |
+| `Query(args ...any)`               | `(*sql.Rows, error)`  |
+| `QueryTx(tx *sql.Tx, args ...any)` | `(*sql.Rows, error)`  |
 
 O utilizador escolherá o método; o Krios não detectará SELECT pelo primeiro termo do arquivo. `Query` não produzirá `Page` nem paginação automática.
 
@@ -368,11 +368,11 @@ Versão zero será inválida como alvo e cadastro. Tabela inexistente ou vazia r
 
 A tabela registrará somente as versões atualmente aplicadas. Downgrade removerá o registro correspondente; não haverá auditoria permanente de aplicações e reversões. Tabela inexistente será criada. Estrutura existente incompatível produzirá erro, sem alteração automática para apropriação da tabela.
 
-| Coluna | PostgreSQL | MySQL | SQLite |
-|---|---|---|---|
-| `id` | `BIGINT PRIMARY KEY` | `BIGINT PRIMARY KEY` | `INTEGER PRIMARY KEY` |
-| `version` | `BIGINT NOT NULL UNIQUE` | `BIGINT NOT NULL UNIQUE` | `INTEGER NOT NULL UNIQUE` |
-| `applied_at` | `TIMESTAMPTZ NOT NULL` | `DATETIME(6) NOT NULL` | `TEXT NOT NULL` |
+| Coluna       | PostgreSQL               | MySQL                    | SQLite                    |
+| ------------ | ------------------------ | ------------------------ | ------------------------- |
+| `id`         | `BIGINT PRIMARY KEY`     | `BIGINT PRIMARY KEY`     | `INTEGER PRIMARY KEY`     |
+| `version`    | `BIGINT NOT NULL UNIQUE` | `BIGINT NOT NULL UNIQUE` | `INTEGER NOT NULL UNIQUE` |
+| `applied_at` | `TIMESTAMPTZ NOT NULL`   | `DATETIME(6) NOT NULL`   | `TEXT NOT NULL`           |
 
 `id` terá o mesmo valor de `version`, sem sequência separada nem dependência de `LastInsertId`. Uma versão removida e reaplicada receberá o mesmo id e nova data.
 
@@ -457,8 +457,38 @@ Os ajustes acordados são:
 - Substituir `krios.Eq` por `client.Eq` nos exemplos lógicos.
 - Corrigir o SELECT com alias para incluir `AS u` no FROM e alinhar os exemplos de WHERE às colunas e aliases efetivamente declarados.
 - Associar o predicado de subselect em IN a uma consulta externa.
-- Atualizar COUNT(*) e seleção implícita conforme o item 12.
+- Atualizar COUNT(\*) e seleção implícita conforme o item 12.
 - Substituir “sem limites” pela faixa de versões aprovada no item 19 e registrar os mínimos de Go e dos bancos.
 - Incorporar as assinaturas, regras, exemplos e limites aprovados nos itens 1–23.
 
 Não restam questões de decisão abertas nesta revisão. Detalhes das tarefas, implementação e validação técnica serão tratados no planejamento do projeto.
+
+## Tarefa 001 — Configuração e ciclo de vida do cliente
+
+**Estado: aguardando aprovação do detalhamento.**
+
+O escopo geral de `PLANNING.md` foi aprovado pelo desenvolvedor em 2026-11-04. A autorização desta etapa é preparar o desenvolvimento; a implementação ainda depende da aprovação do detalhamento.
+
+### 001.1 — Organização e verificação da primeira implementação
+
+**Proposta:** adotar o detalhamento de [001.md](001.md), com implementação em `internal/core`, exposição dos tipos por aliases em `krios.go`, `Dialect` definido sobre `string` e testes com driver controlado usando somente a biblioteca padrão. Reservar `Page` para a tarefa 004 e os recursos funcionais para suas tarefas previstas no plano.
+
+**Pergunta:** Sim esta aprovdo
+
+**Resposta do desenvolvedor:** respondido.
+
+### 001.2 — Ajustes identificados na validação do detalhamento
+
+**Estado: ajustes aprovados e incorporados em 2026-11-04.**
+
+Na validação de `001.md` contra o contrato e o plano aprovado, foram identificados três pontos para tornar a implementação e sua conclusão mais objetivas:
+
+1. **Contexto de operações com linhas:** explicitar que a biblioteca não interceptará `Rows.Close()` e que o timer poderá permanecer até o prazo vencer. A expressão “sem cancelá-lo antes do consumo” deve preservar a possibilidade de timeout ou cancelamento do contexto pai durante a leitura, conforme `DEFINITIONS.md`.
+2. **Limite da abstração de executor nesta tarefa:** confirmar se a entrega consiste apenas na interface compatível com pool/transação e no componente de contexto usado pelo ping, deixando seleção de executor e execução de SQL para as tarefas funcionais. Essa é a proposta da revisão; os critérios de conclusão deverão distinguir o que será verificado agora do que será verificado nessas tarefas futuras.
+3. **Mensagens de erro:** incluir expressamente a regra já aprovada de não acrescentar argumentos ou credenciais às mensagens produzidas pelo Krios, preservando as causas dos erros do driver. Acrescentar a verificação correspondente ao escopo de criação do cliente, sem prometer sanitização do conteúdo de erros originados no driver.
+
+**Pergunta:** podemos incorporar esses esclarecimentos ao detalhamento da tarefa 001, adotando o limite de entrega proposto no item 2?
+
+**Resposta do desenvolvedor:** “sim pode”. Aprovação para incorporar os três esclarecimentos, incluindo o limite da entrega do executor à interface e ao componente de contexto nesta tarefa.
+
+**Aplicação:** `001.md` atualizado com os esclarecimentos e os respectivos limites de verificação. A aprovação para iniciar a implementação, solicitada no item 001.1, permanece pendente.
