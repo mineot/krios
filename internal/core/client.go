@@ -3,25 +3,28 @@ package core
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"math"
 	"slices"
 	"time"
+
+	"github.com/mineot/krios/internal/dialects"
+	"github.com/mineot/krios/internal/errs"
+	"github.com/mineot/krios/internal/expressions"
 )
 
-type Dialect string
+type Dialect = dialects.Dialect
 
 const (
-	DialectSQLite3    Dialect = "sqlite3"
-	DialectPostgreSQL Dialect = "postgres"
-	DialectMySQL      Dialect = "mysql"
+	DialectSQLite3    = dialects.SQLite3
+	DialectPostgreSQL = dialects.PostgreSQL
+	DialectMySQL      = dialects.MySQL
 )
 
 var (
-	ErrInvalidConfig    = errors.New("krios: invalid configuration")
-	ErrInvalidQuery     = errors.New("krios: invalid query")
-	ErrInvalidMigration = errors.New("krios: invalid migration")
+	ErrInvalidConfig    = errs.ErrInvalidConfig
+	ErrInvalidQuery     = errs.ErrInvalidQuery
+	ErrInvalidMigration = errs.ErrInvalidMigration
 )
 
 type Config struct {
@@ -41,7 +44,8 @@ type Migration struct {
 }
 
 type Client struct {
-	config Config
+	config   Config
+	identity *expressions.Identity
 }
 
 func New(config Config) (*Client, error) {
@@ -50,7 +54,7 @@ func New(config Config) (*Client, error) {
 	}
 
 	config.Migrations = slices.Clone(config.Migrations)
-	client := &Client{config: config}
+	client := &Client{config: config, identity: expressions.NewIdentity()}
 	ctx, cancel := client.operationContext()
 
 	defer cancel()
@@ -70,14 +74,19 @@ func validateConfig(config Config) error {
 	switch {
 	case config.Db == nil:
 		return fmt.Errorf("%w: Db must not be nil", ErrInvalidConfig)
+
 	case config.Context == nil:
 		return fmt.Errorf("%w: Context must not be nil", ErrInvalidConfig)
+
 	case config.Dialect != DialectSQLite3 && config.Dialect != DialectPostgreSQL && config.Dialect != DialectMySQL:
 		return fmt.Errorf("%w: unsupported Dialect", ErrInvalidConfig)
+
 	case config.Timeout < 0:
 		return fmt.Errorf("%w: Timeout must not be negative", ErrInvalidConfig)
+
 	case config.DbVersion == 0 || config.DbVersion > math.MaxInt64:
 		return fmt.Errorf("%w: DbVersion must be between 1 and MaxInt64", ErrInvalidConfig)
+
 	default:
 		return nil
 	}

@@ -1,7 +1,10 @@
 // Package krios provides the client configuration for the Krios SQL library.
 package krios
 
-import "github.com/mineot/krios/internal/core"
+import (
+	"github.com/mineot/krios/internal/core"
+	"github.com/mineot/krios/internal/expressions"
+)
 
 // Client holds the application's database configuration.
 type Client = core.Client
@@ -11,6 +14,12 @@ type Config = core.Config
 
 // Dialect identifies the SQL dialect used by a client.
 type Dialect = core.Dialect
+
+// Reference is an immutable identifier created by a client.
+type Reference = expressions.Reference
+
+// Expression is an immutable aggregate created by a client.
+type Expression = expressions.Expression
 
 // Migration describes the SQL files for a schema version.
 type Migration = core.Migration

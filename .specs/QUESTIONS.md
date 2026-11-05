@@ -497,9 +497,9 @@ Na validação de `001.md` contra o contrato e o plano aprovado, foram identific
 
 ## Tarefa 002 — Dialetos, identificadores e expressões
 
-**Estado: detalhamento proposto; aguardando decisões e aprovação.**
+**Estado: decisões e organização revisada aprovadas; implementação concluída e verificada em 2026-11-04.**
 
-O planejamento detalhado está em [002.md](002.md). As propostas abaixo complementam o contrato sem alterar `DEFINITIONS.md`; nenhuma foi implementada.
+O planejamento detalhado está em [002.md](002.md). As decisões abaixo complementam o contrato sem alterar `DEFINITIONS.md`. A organização revisada está registrada em `002.md`.
 
 ### 002.1 — API e organização da implementação
 
@@ -524,3 +524,9 @@ O planejamento detalhado está em [002.md](002.md). As propostas abaixo compleme
 **Pergunta:** referências e expressões também devem ficar restritas ao cliente que as criou, conforme a proposta?
 
 **Resposta do desenvolvedor:** aprovado.
+
+### 002.4 — Aprovação da organização revisada e implementação
+
+Após a revisão de `002.md` e o esclarecimento sobre os métodos delegadores de `Client` em `core`, o desenvolvedor respondeu: “não precisamos fazer os ajustes, se estiver tudo certo pode implementar”.
+
+**Decisão:** organização revisada aprovada, mantendo os dois arquivos delegadores em `core`, e implementação da tarefa 002 autorizada em 2026-11-04.

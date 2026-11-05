@@ -48,3 +48,23 @@ func TestPublicAPI(t *testing.T) {
 		t.Fatal("dialect values changed")
 	}
 }
+
+func TestPublicOperands(t *testing.T) {
+	db := sql.OpenDB(connector{})
+	defer db.Close()
+	client, err := krios.New(krios.Config{Db: db, Context: context.Background(), DbVersion: 1, Dialect: krios.DialectPostgreSQL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ref *krios.Reference = client.Ref("u.id")
+	var literal *krios.Reference = client.RefParts("u", "name.with.dot")
+	aggregates := []*krios.Expression{client.CountExpr("*"), client.MaxExpr(ref), client.MinExpr(literal), client.AvgExpr("total"), client.SumExpr(client.MaxExpr("total"))}
+	if ref == nil || literal == nil {
+		t.Fatal("reference constructor returned nil")
+	}
+	for _, expr := range aggregates {
+		if expr == nil {
+			t.Fatal("aggregate constructor returned nil")
+		}
+	}
+}
