@@ -9,6 +9,8 @@ import (
 	"github.com/mineot/krios/internal/dialects"
 )
 
+type NewCLientFunc func(core.Config) (*Client, error)
+
 type Client struct {
 	config core.Config
 }
