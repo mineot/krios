@@ -1,21 +1,20 @@
-package clients
+package core
 
 import (
 	"context"
 	"fmt"
 	"math"
 
-	"github.com/mineot/krios/internal/core"
 	"github.com/mineot/krios/internal/dialects"
 )
 
-type NewClientFunc func(core.Config) (*Client, error)
+type NewClientFunc func(Config) (*Client, error)
 
 type Client struct {
-	config core.Config
+	config Config
 }
 
-func NewClient(config core.Config) (*Client, error) {
+func NewClient(config Config) (*Client, error) {
 	if config.Context == nil {
 		return nil, makeError("Context cannot be nil")
 	}
@@ -41,7 +40,7 @@ func NewClient(config core.Config) (*Client, error) {
 	}
 
 	cfg := config
-	cfg.Migrations = append([]core.Migration(nil), config.Migrations...)
+	cfg.Migrations = append([]Migration(nil), config.Migrations...)
 	pingCtx := cfg.Context
 
 	if cfg.Timeout > 0 {

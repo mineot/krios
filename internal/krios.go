@@ -1,13 +1,12 @@
 package krios
 
 import (
-	"github.com/mineot/krios/internal/clients"
 	"github.com/mineot/krios/internal/core"
 	"github.com/mineot/krios/internal/dialects"
 )
 
 type (
-	Client    = clients.Client
+	Client    = core.Client
 	Config    = core.Config
 	Dialect   = dialects.Dialect
 	Migration = core.Migration
@@ -20,5 +19,5 @@ const (
 )
 
 var (
-	NewClient clients.NewClientFunc = clients.NewClient
+	NewClient core.NewClientFunc = core.NewClient
 )
