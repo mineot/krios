@@ -1,38 +1,21 @@
 package dialects
 
 import (
-	"errors"
+	"fmt"
 	"strings"
 )
 
-// Quoter escapes identifiers and retains the first error.
-// Create a new Quoter to start again after an error.
-type Quoter struct {
-	// Dialect selects the identifier delimiter for subsequent calls.
-	Dialect Dialect
-	err     error
-}
-
-// Quotes renders one identifier component, or an empty string on error.
-func (q *Quoter) Quotes(val string) string {
-	if q.err != nil {
-		return ""
-	}
-
-	// Duplicate embedded delimiters so they remain part of the identifier.
-	switch q.Dialect {
+func (d *Dialect) Quotes(val string) (string, error) {
+	switch *d {
 	case SQLite, Postgres:
-		return `"` + strings.ReplaceAll(val, `"`, `""`) + `"`
+		return d.quoteConcat(`"`, `""`, val), nil
 	case Mysql:
-		return "`" + strings.ReplaceAll(val, "`", "``") + "`"
+		return d.quoteConcat("`", "``", val), nil
 	}
 
-	q.err = errors.New("krios: invalid dialect")
-
-	return ""
+	return "", fmt.Errorf(ErrInvalidDialect, *d)
 }
 
-// Err returns the first error encountered by Quotes.
-func (q *Quoter) Err() error {
-	return q.err
+func (d *Dialect) quoteConcat(quote, doubleQuote, val string) string {
+	return quote + strings.ReplaceAll(val, quote, doubleQuote) + quote
 }
