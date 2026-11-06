@@ -1,3 +1,4 @@
+// Package krios groups internal client and dialect entry points.
 package krios
 
 import (
@@ -7,18 +8,26 @@ import (
 )
 
 type (
+	// Dialect identifies a supported SQL syntax.
 	Dialect = dialects.Dialect
 )
 
 const (
-	SQLite   = dialects.SQLite
+	// SQLite selects SQLite syntax.
+	SQLite = dialects.SQLite
+	// Postgres selects PostgreSQL syntax.
 	Postgres = dialects.Postgres
-	Mysql    = dialects.Mysql
+	// Mysql selects MySQL syntax.
+	Mysql = dialects.Mysql
 )
 
 var (
-	Config    core.Config
+	// Config is a package-level configuration value.
+	Config core.Config
+	// Migration is a package-level migration value.
 	Migration core.Migration
-	Client    clients.Client
+	// Client is a package-level client value.
+	Client clients.Client
+	// NewClient initializes a client from the supplied configuration.
 	NewClient clients.NewCLientFunc = clients.NewClient
 )

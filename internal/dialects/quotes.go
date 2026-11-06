@@ -8,6 +8,7 @@ import (
 // Quoter escapes identifiers and retains the first error.
 // Create a new Quoter to start again after an error.
 type Quoter struct {
+	// Dialect selects the identifier delimiter for subsequent calls.
 	Dialect Dialect
 	err     error
 }
@@ -18,6 +19,7 @@ func (q *Quoter) Quotes(val string) string {
 		return ""
 	}
 
+	// Duplicate embedded delimiters so they remain part of the identifier.
 	switch q.Dialect {
 	case SQLite, Postgres:
 		return `"` + strings.ReplaceAll(val, `"`, `""`) + `"`

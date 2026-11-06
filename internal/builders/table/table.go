@@ -1,3 +1,4 @@
+// Package table builds SQL references to a single table.
 package table
 
 import (
@@ -7,8 +8,12 @@ import (
 	"github.com/mineot/krios/internal/dialects"
 )
 
+// Table stores unquoted identifiers and retains the first construction error.
+// Instances are mutable and must not be shared by concurrent builders.
 type Table struct {
-	Name    string
+	// Name is a table name whose dot-separated components are quoted individually.
+	Name string
+	// Dialect selects the syntax used when rendering identifiers.
 	Dialect dialects.Dialect
 	alias   string
 	schema  string
@@ -39,6 +44,7 @@ func (t *Table) Schema(schemaName string) *Table {
 	return t
 }
 
+// validate checks a nonempty identifier and the current dialect without clearing errors.
 func (t *Table) validate(name string) bool {
 	if t.err != nil {
 		return false
@@ -54,6 +60,7 @@ func (t *Table) validate(name string) bool {
 	return t.err == nil
 }
 
+// quote renders one component and transfers any quoting error to the table.
 func (t *Table) quote(name string) string {
 	if t.err != nil {
 		return ""
@@ -81,6 +88,7 @@ func (t *Table) Build() string {
 		}
 	}
 
+	// An explicit schema replaces any qualifier while preserving the table name.
 	if t.schema != "" {
 		parts = []string{t.schema, parts[len(parts)-1]}
 	}
