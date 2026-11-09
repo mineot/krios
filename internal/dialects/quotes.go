@@ -1,19 +1,18 @@
 package dialects
 
 import (
-	"fmt"
 	"strings"
 )
 
-func (d *Dialect) Quotes(val string) (string, error) {
+func (d *Dialect) Quotes(val string) string {
 	switch *d {
 	case SQLite, Postgres:
-		return d.quoteConcat(`"`, `""`, val), nil
+		return d.quoteConcat(`"`, `""`, val)
 	case Mysql:
-		return d.quoteConcat("`", "``", val), nil
+		return d.quoteConcat("`", "``", val)
 	}
 
-	return "", fmt.Errorf(ErrInvalidDialect, *d)
+	return val
 }
 
 func (d *Dialect) quoteConcat(quote, doubleQuote, val string) string {
