@@ -7,9 +7,13 @@ import (
 	"github.com/mineot/krios/internal/dialects"
 )
 
+func (s *Select) hasTables() bool {
+	return len(s.Tables) > 0
+}
+
 func (s *Select) getTables(d dialects.Dialect) string {
 	if s.hasTables() == false {
-		s.err = errors.New("Krios: table is required!")
+		s.appendError(errors.New("Krios: table is required!"))
 		return ""
 	}
 
@@ -19,7 +23,7 @@ func (s *Select) getTables(d dialects.Dialect) string {
 		t1 := tb.Build(d)
 
 		if tb.GetError() != nil {
-			s.err = tb.GetError()
+			s.appendError(tb.GetError())
 			return ""
 		}
 
@@ -27,8 +31,4 @@ func (s *Select) getTables(d dialects.Dialect) string {
 	}
 
 	return strings.Join(tables, ", ")
-}
-
-func (s *Select) hasTables() bool {
-	return len(s.Tables) > 0
 }

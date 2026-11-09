@@ -11,7 +11,9 @@ type (
 	Column    = builder.Column
 	Config    = core.Config
 	Dialect   = dialects.Dialect
+	GroupBy   = builder.GroupBy
 	Migration = core.Migration
+	OrderBy   = builder.OrderBy
 	Table     = builder.Table
 )
 
@@ -25,6 +27,9 @@ const (
 	Max   = builder.Max
 	Min   = builder.Min
 	Sum   = builder.Sum
+
+	Asc  = builder.Asc
+	Desc = builder.Desc
 )
 
 var (

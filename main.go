@@ -24,13 +24,30 @@ func main() {
 		Tables: []krios.Table{
 			{Name: "users", As: "u", Schema: "public"},
 		},
+		Orders: []krios.OrderBy{
+			{Name: "id", Table: "u"},
+			{Name: "id", Table: "u", Direction: krios.Asc},
+			{Name: "id", Table: "u", Direction: krios.Desc},
+		},
+		Groups: []krios.GroupBy{
+			{Name: "id", Table: "u"},
+		},
 	}
 
-	if b.GetError() != nil {
-		panic(b.GetError())
+	if b.HasErrors() {
+		for _, err := range b.GetErrors() {
+			fmt.Println(err)
+		}
+
+		return
 	}
 
 	fmt.Println("postgresql:", b.Build(krios.Postgres))
+	fmt.Println()
+
 	fmt.Println("mysql:", b.Build(krios.Mysql))
+	fmt.Println()
+
 	fmt.Println("sqlite3: ", b.Build(krios.SQLite))
+	fmt.Println()
 }

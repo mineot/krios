@@ -43,7 +43,7 @@ func (t *Table) hasSchema() bool {
 
 func (t *Table) Build(d dialects.Dialect) string {
 	if t.hasName() == false {
-		t.err = errors.New("Krios: table name is required!")
+		t.err = errors.New("Krios Table: table name is required!")
 		return ""
 	}
 

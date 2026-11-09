@@ -52,7 +52,7 @@ func (c *Column) hasAggregator() bool {
 
 func (c *Column) Build(d dialects.Dialect) string {
 	if c.hasName() == false {
-		c.err = errors.New("Krios: column name is required!")
+		c.err = errors.New("Krios Column: column name is required!")
 		return ""
 	}
 

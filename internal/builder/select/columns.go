@@ -17,7 +17,7 @@ func (s *Select) getColumns(d dialects.Dialect) string {
 		c1 := col.Build(d)
 
 		if col.GetError() != nil {
-			s.err = col.GetError()
+			s.appendError(col.GetError())
 			return ""
 		}
 
