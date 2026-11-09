@@ -13,9 +13,9 @@ type (
 )
 
 const (
-	MysqlDialect    = dialects.Mysql
-	PostgresDialect = dialects.Postgres
-	SQLiteDialect   = dialects.SQLite
+	MysqlDialect    = dialects.MysqlDialect
+	PostgresDialect = dialects.PostgresDialect
+	SQLiteDialect   = dialects.SQLiteDialect
 )
 
 var (

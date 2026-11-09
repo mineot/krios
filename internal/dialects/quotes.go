@@ -6,9 +6,9 @@ import (
 
 func (d *Dialect) Quotes(val string) string {
 	switch *d {
-	case SQLite, Postgres:
+	case SQLiteDialect, PostgresDialect:
 		return d.quoteConcat(`"`, `""`, val)
-	case Mysql:
+	case MysqlDialect:
 		return d.quoteConcat("`", "``", val)
 	}
 

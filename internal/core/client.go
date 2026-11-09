@@ -59,7 +59,7 @@ func NewClient(config Config) (*Client, error) {
 
 func checkDialect(dialect dialects.Dialect) error {
 	switch dialect {
-	case dialects.SQLite, dialects.Postgres, dialects.Mysql:
+	case dialects.SQLiteDialect, dialects.PostgresDialect, dialects.MysqlDialect:
 		return nil
 	default:
 		return makeError(fmt.Sprintf("Unsupported dialect %q", dialect))
