@@ -16,15 +16,15 @@ type (
 )
 
 const (
-	MysqlDialect    = dialects.MysqlDialect
-	PostgresDialect = dialects.PostgresDialect
-	SQLiteDialect   = dialects.SQLiteDialect
+	Mysql    = dialects.Mysql
+	Postgres = dialects.Postgres
+	SQLite   = dialects.SQLite
 
-	AvgAggregator   = builder.CountAggregator
-	CountAggregator = builder.CountAggregator
-	MaxAggregator   = builder.MaxAggregator
-	MinAggregator   = builder.MinAggregator
-	SumAggregator   = builder.AvgAggregator
+	Avg   = builder.Avg
+	Count = builder.Count
+	Max   = builder.Max
+	Min   = builder.Min
+	Sum   = builder.Sum
 )
 
 var (
