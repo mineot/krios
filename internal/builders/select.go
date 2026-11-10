@@ -2,25 +2,23 @@ package builders
 
 import (
 	"strings"
-
-	"github.com/mineot/krios/internal/core"
 )
 
-type Select struct {
+type SelectBuilder struct {
 	Columns  []string
 	GroupBy  []string
 	Having   []string
 	Joins    []string
 	OrderBy  []string
 	Paginate []string
-	Tables   []Table
+	Tables   []TableBuilder
 	Where    []string
 
-	config core.Config
+	config ConfigBuilder
 	errs   []error
 }
 
-func (s *Select) validate() bool {
+func (s *SelectBuilder) validate() bool {
 	for _, t := range s.Tables {
 		if t.Err() != nil {
 			s.errs = append(s.errs, t.Err())
@@ -30,11 +28,15 @@ func (s *Select) validate() bool {
 	return len(s.errs) == 0
 }
 
-func (s *Select) Errs() []error {
+func (s *SelectBuilder) SetConfig(config ConfigBuilder) {
+	s.config = config
+}
+
+func (s *SelectBuilder) Errs() []error {
 	return s.errs
 }
 
-func (s *Select) Build() string {
+func (s *SelectBuilder) Build() string {
 	if s.validate() == false {
 		return ""
 	}

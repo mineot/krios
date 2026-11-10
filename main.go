@@ -41,6 +41,6 @@ func main() {
 	fmt.Println(client)
 	fmt.Println()
 
-	s1 := krios.Select{}
-	fmt.Println(s1)
+	// s1 := krios.Select{}
+	// fmt.Println(s1)
 }
