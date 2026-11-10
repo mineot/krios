@@ -1,46 +1,31 @@
 package builders
 
-import (
-	"strings"
-)
+import "strings"
 
-type SelectBuilder struct {
+type Select struct {
 	Columns  []string
 	GroupBy  []string
 	Having   []string
 	Joins    []string
 	OrderBy  []string
 	Paginate []string
-	Tables   []TableBuilder
+	Tables   Tables
 	Where    []string
-
-	config ConfigBuilder
-	errs   []error
 }
 
-func (s *SelectBuilder) validate() bool {
-	for _, t := range s.Tables {
-		if t.Err() != nil {
-			s.errs = append(s.errs, t.Err())
-		}
+func (s *Select) Validate() error {
+	if err := s.Tables.Validate(); err != nil {
+		return err
 	}
 
-	return len(s.errs) == 0
+	return nil
 }
 
-func (s *SelectBuilder) SetConfig(config ConfigBuilder) {
-	s.config = config
-}
-
-func (s *SelectBuilder) Errs() []error {
-	return s.errs
-}
-
-func (s *SelectBuilder) Build() string {
-	if s.validate() == false {
-		return ""
-	}
-
+func (s *Select) Build() string {
 	w := strings.Builder{}
+	w.WriteString("SELECT ")
+	w.WriteString("*")
+	w.WriteString(" FROM ")
+	w.WriteString(s.Tables.Build())
 	return w.String()
 }

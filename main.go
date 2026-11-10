@@ -41,6 +41,13 @@ func main() {
 	fmt.Println(client)
 	fmt.Println()
 
-	// s1 := krios.Select{}
-	// fmt.Println(s1)
+	s1, _ := client.Select(
+		krios.Select{
+			Tables: []krios.Table{
+				{Name: "user", As: "u", Schema: "public"},
+			},
+		},
+	)
+
+	fmt.Println(s1.Build())
 }

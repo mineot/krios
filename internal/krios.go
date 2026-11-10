@@ -10,6 +10,8 @@ type (
 	Config    = core.Config
 	Dialect   = dialects.Dialect
 	Migration = core.Migration
+	Select    = core.Select
+	Table     = core.Table
 )
 
 const (
