@@ -43,6 +43,17 @@ func main() {
 
 	s1, _ := client.Select(
 		krios.Select{
+			// Columns: []krios.Column{
+			// 	// {Name: "id", As: "id", Table: "u"},
+			// 	// {Name: "name", As: "name", Table: "u"},
+			// 	// {Name: "email", As: "email", Table: "u"},
+			// 	// {Name: "val1", As: "sum1", Table: "u", Aggregate: krios.Sum},
+			// 	// {Name: "val2", As: "avg1", Table: "u", Aggregate: krios.Avg},
+			// 	// {Name: "val3", As: "min1", Table: "u", Aggregate: krios.Min},
+			// 	// {Name: "val4", As: "max1", Table: "u", Aggregate: krios.Max},
+			// 	// {Name: "val5", As: "count1", Table: "u", Aggregate: krios.Count},
+			// 	// {Name: "*", As: "total", Table: "u", Aggregate: krios.Count},
+			// },
 			Tables: []krios.Table{
 				{Name: "user", As: "u", Schema: "public"},
 			},

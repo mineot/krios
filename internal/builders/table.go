@@ -31,6 +31,10 @@ func (t *Table) buildAlias(w *strings.Builder) {
 }
 
 func (t *Table) Validate() error {
+	if t.Config == (Config{}) {
+		return errors.New("Krios - Table Builder: table config is required!")
+	}
+
 	if t.Name == "" {
 		return errors.New("Krios - Table Builder: table name is required!")
 	}

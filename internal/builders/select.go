@@ -3,7 +3,7 @@ package builders
 import "strings"
 
 type Select struct {
-	Columns  []string
+	Columns  Columns
 	GroupBy  []string
 	Having   []string
 	Joins    []string
@@ -24,7 +24,7 @@ func (s *Select) Validate() error {
 func (s *Select) Build() string {
 	w := strings.Builder{}
 	w.WriteString("SELECT ")
-	w.WriteString("*")
+	w.WriteString(s.Columns.Build())
 	w.WriteString(" FROM ")
 	w.WriteString(s.Tables.Build())
 	return w.String()

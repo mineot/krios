@@ -2,6 +2,13 @@ package core
 
 import "github.com/mineot/krios/internal/builders"
 
+type Column struct {
+	Aggregate builders.Aggregate
+	As        string
+	Name      string
+	Table     string
+}
+
 type Table struct {
 	As     string
 	Name   string
@@ -9,7 +16,7 @@ type Table struct {
 }
 
 type Select struct {
-	Columns  []string
+	Columns  []Column
 	GroupBy  []string
 	Having   []string
 	Joins    []string
@@ -26,6 +33,18 @@ func (c *Client) Select(s Select) (*builders.Select, error) {
 		DB:      c.Config.DB,
 		Dialect: c.Config.Dialect,
 		Context: c.Config.Context,
+	}
+
+	for _, cl := range s.Columns {
+		s1.Columns.Add(
+			builders.Column{
+				Aggregate: cl.Aggregate,
+				As:        cl.As,
+				Config:    config,
+				Name:      cl.Name,
+				Table:     cl.Table,
+			},
+		)
 	}
 
 	for _, tb := range s.Tables {
