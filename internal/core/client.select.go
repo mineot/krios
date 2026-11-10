@@ -2,6 +2,11 @@ package core
 
 import "github.com/mineot/krios/internal/builders"
 
+type Paginate struct {
+	Limit  uint16
+	Offset uint16
+}
+
 type OrderBy struct {
 	Column    string
 	Direction builders.Direction
@@ -32,7 +37,7 @@ type Select struct {
 	Having   []string
 	Joins    []string
 	OrderBy  []OrderBy
-	Paginate []string
+	Paginate Paginate
 	Tables   []Table
 	Where    []string
 }
@@ -88,6 +93,13 @@ func (c *Client) Select(s Select) (*builders.Select, error) {
 				Table:     or.Table,
 			},
 		)
+	}
+
+	if s.Paginate != (Paginate{}) {
+		s1.Paginate = builders.Paginate{
+			Limit:  s.Paginate.Limit,
+			Offset: s.Paginate.Offset,
+		}
 	}
 
 	if err := s1.Validate(); err != nil {

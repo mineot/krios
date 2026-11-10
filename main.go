@@ -66,6 +66,7 @@ func main() {
 				{Column: "name", Direction: krios.Asc},
 				{Column: "age", Table: "u", Direction: krios.Desc},
 			},
+			Paginate: krios.Paginate{Limit: 10, Offset: 0},
 		},
 	)
 

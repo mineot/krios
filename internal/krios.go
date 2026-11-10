@@ -14,6 +14,7 @@ type (
 	GroupBy   = core.GroupBy
 	Migration = core.Migration
 	OrderBy   = core.OrderBy
+	Paginate  = core.Paginate
 	Select    = core.Select
 	Table     = core.Table
 )

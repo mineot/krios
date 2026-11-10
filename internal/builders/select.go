@@ -8,7 +8,7 @@ type Select struct {
 	Having   []string
 	Joins    []string
 	OrderBy  OrderByList
-	Paginate []string
+	Paginate Paginate
 	Tables   Tables
 	Where    []string
 }
@@ -49,6 +49,10 @@ func (s *Select) Build() string {
 	if len(s.OrderBy) > 0 {
 		w.WriteString(" ORDER BY ")
 		w.WriteString(s.OrderBy.Build())
+	}
+
+	if s.Paginate.IsEmpty() == false {
+		w.WriteString(s.Paginate.Build())
 	}
 
 	return w.String()
