@@ -7,14 +7,26 @@ type Select struct {
 	GroupBy  GroupByList
 	Having   []string
 	Joins    []string
-	OrderBy  []string
+	OrderBy  OrderByList
 	Paginate []string
 	Tables   Tables
 	Where    []string
 }
 
 func (s *Select) Validate() error {
+	if err := s.Columns.Validate(); err != nil {
+		return err
+	}
+
 	if err := s.Tables.Validate(); err != nil {
+		return err
+	}
+
+	if err := s.GroupBy.Validate(); err != nil {
+		return err
+	}
+
+	if err := s.OrderBy.Validate(); err != nil {
 		return err
 	}
 
@@ -32,6 +44,11 @@ func (s *Select) Build() string {
 	if s.GroupBy.IsEmpty() == false {
 		w.WriteString(" GROUP BY ")
 		w.WriteString(s.GroupBy.Build())
+	}
+
+	if len(s.OrderBy) > 0 {
+		w.WriteString(" ORDER BY ")
+		w.WriteString(s.OrderBy.Build())
 	}
 
 	return w.String()

@@ -2,6 +2,12 @@ package core
 
 import "github.com/mineot/krios/internal/builders"
 
+type OrderBy struct {
+	Column    string
+	Direction builders.Direction
+	Table     string
+}
+
 type GroupBy struct {
 	Column string
 	Table  string
@@ -25,7 +31,7 @@ type Select struct {
 	GroupBy  []GroupBy
 	Having   []string
 	Joins    []string
-	OrderBy  []string
+	OrderBy  []OrderBy
 	Paginate []string
 	Tables   []Table
 	Where    []string
@@ -69,6 +75,17 @@ func (c *Client) Select(s Select) (*builders.Select, error) {
 				Column: gp.Column,
 				Config: config,
 				Table:  gp.Table,
+			},
+		)
+	}
+
+	for _, or := range s.OrderBy {
+		s1.OrderBy.Add(
+			builders.OrderBy{
+				Column:    or.Column,
+				Config:    config,
+				Direction: or.Direction,
+				Table:     or.Table,
 			},
 		)
 	}

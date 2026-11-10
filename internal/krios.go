@@ -13,6 +13,7 @@ type (
 	Dialect   = dialects.Dialect
 	GroupBy   = core.GroupBy
 	Migration = core.Migration
+	OrderBy   = core.OrderBy
 	Select    = core.Select
 	Table     = core.Table
 )
@@ -27,6 +28,9 @@ const (
 	Max   = builders.Max
 	Min   = builders.Min
 	Sum   = builders.Sum
+
+	Asc  = builders.Asc
+	Desc = builders.Desc
 )
 
 var (

@@ -61,6 +61,11 @@ func main() {
 				{Column: "id", Table: "u"},
 				{Column: "name"},
 			},
+			OrderBy: []krios.OrderBy{
+				{Column: "id", Table: "u"},
+				{Column: "name", Direction: krios.Asc},
+				{Column: "age", Table: "u", Direction: krios.Desc},
+			},
 		},
 	)
 

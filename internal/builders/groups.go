@@ -15,8 +15,8 @@ func (g *GroupByList) Add(gp GroupBy) {
 }
 
 func (g *GroupByList) Validate() error {
-	for _, tb := range *g {
-		if err := tb.Validate(); err != nil {
+	for _, gp := range *g {
+		if err := gp.Validate(); err != nil {
 			return err
 		}
 	}
