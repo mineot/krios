@@ -1,12 +1,19 @@
 package builders
 
+import (
+	"github.com/mineot/krios/internal/core"
+)
+
 type Select struct {
 	Columns  []string
-	Tables   []Table
-	Joins    []string
-	Where    []string
-	Having   []string
+	Config   core.Config
 	GroupBy  []string
+	Having   []string
+	Joins    []string
 	OrderBy  []string
 	Paginate []string
+	Tables   []Table
+	Where    []string
+
+	errors []error
 }

@@ -40,13 +40,4 @@ func main() {
 
 	fmt.Println(client)
 	fmt.Println()
-
-	t1 := krios.Table{
-		Config: client.Config,
-		Name:   "users",
-		As:     "u",
-		Schema: "public",
-	}
-
-	fmt.Println(t1.String(), t1.Err())
 }

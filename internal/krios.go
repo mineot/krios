@@ -11,6 +11,7 @@ type (
 	Config    = core.Config
 	Dialect   = dialects.Dialect
 	Migration = core.Migration
+	Select    = builders.Select
 	Table     = builders.Table
 )
 

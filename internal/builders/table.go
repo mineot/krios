@@ -47,14 +47,10 @@ func (t *Table) Err() error {
 	return t.err
 }
 
-func (t *Table) String() string {
-	if t.validate() == false {
-		return ""
+func (t *Table) Build(w *strings.Builder) {
+	if t.validate() {
+		t.buildSchema(w)
+		t.buildName(w)
+		t.buildAlias(w)
 	}
-
-	w := strings.Builder{}
-	t.buildSchema(&w)
-	t.buildName(&w)
-	t.buildAlias(&w)
-	return w.String()
 }
