@@ -11,7 +11,7 @@ import (
 type NewClientFunc func(Config) (*Client, error)
 
 type Client struct {
-	config Config
+	Config Config
 }
 
 func NewClient(config Config) (*Client, error) {
@@ -53,7 +53,7 @@ func NewClient(config Config) (*Client, error) {
 		return nil, makeError("Database ping failed")
 	}
 
-	return &Client{config: cfg}, nil
+	return &Client{Config: cfg}, nil
 
 }
 
