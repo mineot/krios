@@ -11,6 +11,7 @@ type (
 	Column    = core.Column
 	Config    = core.Config
 	Dialect   = dialects.Dialect
+	GroupBy   = core.GroupBy
 	Migration = core.Migration
 	Select    = core.Select
 	Table     = core.Table

@@ -57,6 +57,10 @@ func main() {
 			Tables: []krios.Table{
 				{Name: "user", As: "u", Schema: "public"},
 			},
+			GroupBy: []krios.GroupBy{
+				{Column: "id", Table: "u"},
+				{Column: "name"},
+			},
 		},
 	)
 

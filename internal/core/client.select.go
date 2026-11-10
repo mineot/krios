@@ -2,6 +2,11 @@ package core
 
 import "github.com/mineot/krios/internal/builders"
 
+type GroupBy struct {
+	Column string
+	Table  string
+}
+
 type Column struct {
 	Aggregate builders.Aggregate
 	As        string
@@ -17,7 +22,7 @@ type Table struct {
 
 type Select struct {
 	Columns  []Column
-	GroupBy  []string
+	GroupBy  []GroupBy
 	Having   []string
 	Joins    []string
 	OrderBy  []string
@@ -54,6 +59,16 @@ func (c *Client) Select(s Select) (*builders.Select, error) {
 				Config: config,
 				Name:   tb.Name,
 				Schema: tb.Schema,
+			},
+		)
+	}
+
+	for _, gp := range s.GroupBy {
+		s1.GroupBy.Add(
+			builders.GroupBy{
+				Column: gp.Column,
+				Config: config,
+				Table:  gp.Table,
 			},
 		)
 	}

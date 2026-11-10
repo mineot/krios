@@ -4,7 +4,7 @@ import "strings"
 
 type Select struct {
 	Columns  Columns
-	GroupBy  []string
+	GroupBy  GroupByList
 	Having   []string
 	Joins    []string
 	OrderBy  []string
@@ -23,9 +23,16 @@ func (s *Select) Validate() error {
 
 func (s *Select) Build() string {
 	w := strings.Builder{}
+
 	w.WriteString("SELECT ")
 	w.WriteString(s.Columns.Build())
 	w.WriteString(" FROM ")
 	w.WriteString(s.Tables.Build())
+
+	if s.GroupBy.IsEmpty() == false {
+		w.WriteString(" GROUP BY ")
+		w.WriteString(s.GroupBy.Build())
+	}
+
 	return w.String()
 }
