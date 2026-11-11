@@ -1,13 +1,13 @@
 # krios
 
-- A IA não deve alterar nada, nem criar arquivos, sem autorização do utilizador;
-- A ordenização do codigo, deve ser a mais separada possivel, para uma melhor visualização do utilizador. Verifique como ele escreve o codigo e faça da mesma forma;
+## Orientações para IA
 
-## Pendências de documentação
-
-- Documentar o significado do campo `Table.Schema` em cada banco, com exemplos de uso:
-  - PostgreSQL: identifica o schema que contém a tabela, como `public`;
-  - MySQL: identifica o banco de dados que contém a tabela;
-  - SQLite3: identifica o banco `main`, `temp` ou um banco anexado via `ATTACH DATABASE`;
-- Explicar que `public` não é um prefixo universal e precisa existir no destino conforme o significado acima;
-- Documentar que deixar `Schema` vazio omite o prefixo e usa as regras de resolução de tabelas de cada banco.
+- A IA não deve implementar nada sem autorização do desenvolvedor;
+- Tudo dever ser planejado e aprovado pelo desenvolvedor;
+- Se a tarefa longa, algo que leve mais de 1 minuto de implementação, deve-se planejar dividir a tarefa em subtarefas, para um uso correto do tokens;
+- A documentação do arquivo `AGENTS.MD`, em `./.specs` e o arquivo `README.MD` só podem ser feitas mediante orientação do desenvolvedor;
+- Nenhum arquivo deve ser alterado sem autorização do desenvolvedor;
+- A IA não deve tomar decisões, sem autorização do desenvolvedor;
+- A IA **deve** sugerir soluções da melhor forma possivel, usando as melhores praticas do mercado e dos melhores desenvolvedores do planeta;
+- Cada codigo deve ser o mais limpo possivel, a separação deve ser entre responsabilidade, tanto a nivel de arquivos quando de pacotes, eu prefiro ter muitos arquivos e varios pacotes, do que ter arquivos grandes demais;
+- Precisamos ter o maximo de reaproveitamento de código;
