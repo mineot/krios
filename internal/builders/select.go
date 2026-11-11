@@ -10,7 +10,7 @@ type Select struct {
 	OrderBy  OrderByList
 	Paginate Paginate
 	Tables   Tables
-	Where    []string
+	Where    Criterias
 }
 
 func (s *Select) Validate() error {
@@ -40,6 +40,11 @@ func (s *Select) Build() string {
 	w.WriteString(s.Columns.Build())
 	w.WriteString(" FROM ")
 	w.WriteString(s.Tables.Build())
+
+	if s.Where.IsEmpty() == false {
+		w.WriteString(" WHERE ")
+		w.WriteString(s.Where.Build())
+	}
 
 	if s.GroupBy.IsEmpty() == false {
 		w.WriteString(" GROUP BY ")

@@ -2,6 +2,14 @@ package core
 
 import "github.com/mineot/krios/internal/builders"
 
+type Criteria struct {
+	Column   string
+	Operator builders.Operator
+	Or       []Criteria
+	Table    string
+	Value    any
+}
+
 type Paginate struct {
 	Limit  uint16
 	Offset uint16
@@ -39,7 +47,7 @@ type Select struct {
 	OrderBy  []OrderBy
 	Paginate Paginate
 	Tables   []Table
-	Where    []string
+	Where    []Criteria
 }
 
 func (c *Client) Select(s Select) (*builders.Select, error) {
@@ -70,6 +78,19 @@ func (c *Client) Select(s Select) (*builders.Select, error) {
 				Config: config,
 				Name:   tb.Name,
 				Schema: tb.Schema,
+			},
+		)
+	}
+
+	for index, wh := range s.Where {
+		s1.Where.Add(
+			builders.Criteria{
+				Column:   wh.Column,
+				Config:   config,
+				Index:    index,
+				Operator: wh.Operator,
+				Table:    wh.Table,
+				Value:    wh.Value,
 			},
 		)
 	}
